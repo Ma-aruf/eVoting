@@ -38,6 +38,8 @@ class CandidateViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class MultiVoteView(APIView):
+
+
     """
     Endpoint for submitting all votes at once.
     """
