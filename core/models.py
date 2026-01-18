@@ -18,6 +18,8 @@ class Student(models.Model):
     full_name = models.CharField(max_length=100)
     class_name = models.CharField(max_length=50)
     has_voted = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=False)
+
 
     def __str__(self):
         return f"{self.full_name} - {self.student_id}"

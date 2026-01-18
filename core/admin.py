@@ -11,9 +11,16 @@ class ElectionAdmin(admin.ModelAdmin):
 
 @admin.register(Student)
 class StudentAdmin(admin.ModelAdmin):
-    list_display = ("student_id", "full_name", "class_name", "has_voted")
-    list_filter = ("class_name", "has_voted")
+    list_display = ("student_id", "full_name", "class_name", "has_voted", "is_active")
+    list_filter = ("class_name", "has_voted", "is_active")
     search_fields = ("student_id", "full_name")
+
+    # Only allow activator to change 'is_active'
+    def get_readonly_fields(self, request, obj=None):
+        if request.user.groups.filter(name='activator').exists():
+            # Activator can only toggle 'is_active', nothing else
+            return [f.name for f in self.model._meta.fields if f.name != "is_active"]
+        return super().get_readonly_fields(request, obj)
 
 
 @admin.register(Position)
