@@ -9,11 +9,37 @@ https://docs.djangoproject.com/en/5.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
-
+import os
 from pathlib import Path
+
+import dj_database_url
+from decouple import RepositoryEnv, Config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# --------------------------------------------------
+# Load .env if it exists (LOCAL ONLY)
+# --------------------------------------------------
+ENV_PATH = BASE_DIR / ".env"
+env = Config(RepositoryEnv(ENV_PATH)) if ENV_PATH.exists() else None
+
+def get_env(key, default=None, cast=None):
+    if key in os.environ:
+        value = os.environ.get(key)
+    elif env:
+        value = env(key, default=default)
+    else:
+        value = default
+
+    if cast and value is not None:
+        # Special handling for bool to properly convert string "true"/"false"
+        if cast == bool:
+            if isinstance(value, str):
+                return value.lower() in ('true', '1', 'yes', 'on')
+            return bool(value)
+        return cast(value)
+    return value
 
 
 # Quick-start development settings - unsuitable for production
@@ -25,7 +51,13 @@ SECRET_KEY = 'django-insecure-ecxq3j)fwr*5m5x8jto&@z-5257#4+*&hps42tgy(7li=f97p5
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = get_env(
+    "ALLOWED_HOSTS",
+    default=["localhost", "127.0.0.1"],
+    cast=list
+)
+
+
 
 
 # Application definition
@@ -75,10 +107,12 @@ WSGI_APPLICATION = 'evoting.wsgi.application'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+    "default": dj_database_url.config(
+        default=get_env(
+            "DATABASE_URL",
+            "postgres://postgres:postgres@localhost:5432/evkasec_db"
+        ),
+    )
 }
 
 
