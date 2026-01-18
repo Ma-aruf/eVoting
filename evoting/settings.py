@@ -51,11 +51,13 @@ SECRET_KEY = 'django-insecure-ecxq3j)fwr*5m5x8jto&@z-5257#4+*&hps42tgy(7li=f97p5
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = get_env(
-    "ALLOWED_HOSTS",
-    default=["localhost", "127.0.0.1"],
-    cast=list
-)
+# ALLOWED_HOSTS = get_env(
+#     "ALLOWED_HOSTS",
+#     default=["localhost", "127.0.0.1"],
+#     cast=list
+# )
+
+ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 
 
 
