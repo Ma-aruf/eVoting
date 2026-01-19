@@ -1,5 +1,6 @@
-import { FormEvent, useState } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
+import {type FormEvent, useState } from 'react';
+import { useAuth } from '../../hooks/useAuth';
+
 
 export default function LoginPage() {
   const { login } = useAuth();

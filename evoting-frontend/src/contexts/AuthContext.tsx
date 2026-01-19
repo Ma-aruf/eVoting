@@ -1,6 +1,6 @@
-// src/context/AuthContext.tsx
-import { createContext, type ReactNode, useContext, useEffect, useState } from 'react';
+import { createContext, type ReactNode, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import api from "../apiConfig.ts";
 
 // Mirror backend roles: superuser, staff, activator
 export type UserRole = 'superuser' | 'staff' | 'activator' | null;
@@ -17,42 +17,42 @@ const SESSION_KEY = 'kosa_admin_session';
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-    const [user, setUser] = useState<AuthState['user']>(null);
+    // lazy initializer reads localStorage synchronously once (avoids setState in effect)
+    const [user, setUser] = useState<AuthState['user']>(() => {
+        const stored = localStorage.getItem(SESSION_KEY);
+        if (!stored) return null;
+        try {
+            return JSON.parse(stored);
+        } catch {
+            localStorage.removeItem(SESSION_KEY);
+            return null;
+        }
+    });
+
+    const [isAuthenticated, setIsAuthenticated] = useState(() => {
+            return !!localStorage.getItem("access_token");
+        });
+
     const navigate = useNavigate();
 
-    useEffect(() => {
-        // Try to restore session from localStorage
-        const stored = localStorage.getItem(SESSION_KEY);
-        if (stored) {
-            try {
-                const parsed = JSON.parse(stored);
-                setUser(parsed);
-            } catch {
-                localStorage.removeItem('admin_session');
-            }
-        }
-    }, []);
-
     const login = async (username: string, password: string) => {
-        // TODO: Replace with real API call to /api/auth/login/ and read role from backend
-        // For now: mock based on username prefix to unblock UI work
-        let role: UserRole = null;
+        try {
+                const response = await api.post('/token/', {
+                    username,
+                    password,
+                });
 
-        if (username === 'superuser' && password === 'admin123') {
-            role = 'superuser';
-        } else if (username.startsWith('staff')) {
-            role = 'staff';
-        } else if (username.startsWith('activator')) {
-            role = 'activator';
-        }
+                const {access, refresh} = response.data;
 
-        if (!role) {
-            throw new Error('Invalid credentials');
-        }
-        const userData = { username, role };
-        localStorage.setItem(SESSION_KEY, JSON.stringify(userData));
-        setUser(userData);
-        navigate('/admin/dashboard');
+                localStorage.setItem('access_token', access);
+                localStorage.setItem('refresh_token', refresh);
+
+                setIsAuthenticated(true);
+                return true;
+            } catch (error) {
+                console.error("Login failed", error)
+                return false
+            }
     };
 
     const logout = () => {
@@ -62,16 +62,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     return (
-        <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, logout }}>
+        <AuthContext.Provider value={{ user, isAuthenticated, login, logout }}>
             {children}
         </AuthContext.Provider>
     );
 }
 
-export function useAuth() {
-    const context = useContext(AuthContext);
-    if (!context) {
-        throw new Error('useAuth must be used within AuthProvider');
-    }
-    return context;
-}
+// Keep only the component export in this file (move hook to separate file)
+export { AuthContext };
