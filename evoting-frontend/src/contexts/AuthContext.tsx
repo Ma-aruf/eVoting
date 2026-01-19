@@ -19,13 +19,13 @@ export function AuthProvider({children}: { children: ReactNode }) {
 
     useEffect(() => {
         // Try to restore session from localStorage
-        const stored = localStorage.getItem('kosa_admin_session');
+        const stored = localStorage.getItem('admin_session');
         if (stored) {
             try {
                 const parsed = JSON.parse(stored);
                 setUser(parsed);
             } catch {
-                localStorage.removeItem('kosa_admin_session');
+                localStorage.removeItem('admin_session');
             }
         }
     }, []);

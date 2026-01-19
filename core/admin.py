@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Election, Student, Position, Candidate, Vote
+from .models import Election, Student, Position, Candidate, Vote, User
 
 
 @admin.register(Election)
@@ -37,6 +37,11 @@ class CandidateAdmin(admin.ModelAdmin):
     search_fields = ("student__full_name", "student__student_id")
 
 
+@admin.register(User)
+class UserAdmin(admin.ModelAdmin):
+    list_display = ("first_name", "last_name", "role")
+
+
 @admin.register(Vote)
 class VoteAdmin(admin.ModelAdmin):
     list_display = ("election", "position", "candidate", "created_at")
@@ -47,3 +52,6 @@ class VoteAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         # Prevent manual vote creation from admin
         return False
+
+
+

@@ -24,50 +24,27 @@ class CandidateSerializer(serializers.ModelSerializer):
 
 class MultiVoteSerializer(serializers.Serializer):
     """
-    Serializer for submitting all votes at once.
-    Expects:
-    {
-        "voter_hash": "STUDENT_ID",
-        "votes": [
-            {"election": 1, "position": 1, "candidate": 5},
-            {"election": 1, "position": 2, "candidate": 8},
-            ...
-        ]
-    }
+    Only validate the votes payload. Student identity and token are
+    authenticated at the view layer (headers).
     """
-    voter_hash = serializers.CharField()
     votes = serializers.ListField(
-        child=serializers.DictField(
-            child=serializers.IntegerField()
-        )
+        child=serializers.DictField(child=serializers.IntegerField()),
+        allow_empty=False
     )
 
     def validate(self, data):
-        voter_hash = data["voter_hash"]
         votes_list = data["votes"]
 
-        # Validate student exists
-        try:
-            student = Student.objects.get(student_id=voter_hash)
-        except Student.DoesNotExist:
-            raise serializers.ValidationError({"voter_hash": "Invalid student ID."})
-
-        if not student.is_active:
-            raise serializers.ValidationError({"voter_hash": "Student not activated to vote."})
-
-        # Check for duplicate positions
-        positions = [v["position"] for v in votes_list]
+        # Check duplicate positions in submission
+        positions = [v.get("position") for v in votes_list]
+        if None in positions:
+            raise serializers.ValidationError("Each vote must include a 'position' id.")
         if len(positions) != len(set(positions)):
             raise serializers.ValidationError("Duplicate positions in submission.")
 
-        # Check if student already voted for any positions
-        election_ids = [v["election"] for v in votes_list]
-        existing = Vote.objects.filter(
-            voter_hash=voter_hash,
-            position_id__in=positions,
-            election_id__in=election_ids
-        )
-        if existing.exists():
-            raise serializers.ValidationError("You have already voted for some positions.")
+        # Basic shape checks for election/candidate presence
+        for v in votes_list:
+            if v.get("election") is None or v.get("candidate") is None:
+                raise serializers.ValidationError("Each vote must include 'election' and 'candidate' ids.")
 
         return data
