@@ -1,12 +1,14 @@
 from rest_framework import viewsets, status
-from rest_framework.response import Response
-from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.db import transaction
 from rest_framework.exceptions import ParseError
 from django.utils import timezone
 from io import BytesIO
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from django.contrib.auth import get_user_model
 from openpyxl import load_workbook
 
 from .models import Election, Position, Candidate, Vote, Student
@@ -20,6 +22,8 @@ from .serializers import (
 )
 from .permissions import IsStaffOrSuperUser, IsActivatorOrSuperUser
 from .authentication import VoterAuthentication
+
+User = get_user_model()
 
 
 class ElectionViewSet(viewsets.ReadOnlyModelViewSet):
@@ -301,6 +305,18 @@ class MultiVoteView(APIView):
             {"detail": "All votes submitted successfully."},
             status=status.HTTP_201_CREATED,
         )
+
+
+
+class MeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        return Response({
+            "username": user.username,
+            "role": user.role,
+        })
 
 
 class StudentActivationView(APIView):

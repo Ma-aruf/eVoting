@@ -1,5 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+
 from .views import (
     ElectionViewSet,
     StudentViewSet,
@@ -7,7 +8,7 @@ from .views import (
     CandidateViewSet,
     MultiVoteView,
     StudentActivationView,
-    BulkStudentUploadView,
+    BulkStudentUploadView, MeView,
 )
 
 router = DefaultRouter()
@@ -29,6 +30,7 @@ urlpatterns = [
         StudentActivationView.as_view(),
         name="student-activate",
     ),
+    path('auth/me/', MeView.as_view(), name='me'),
 
     # Bulk import students via Excel (staff/superuser)
     path(
