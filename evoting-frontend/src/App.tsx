@@ -1,7 +1,6 @@
-// src/App.tsx (relevant part)
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
-import AdminLayout from './components/admin/AdminLayout';
+import { AuthProvider, useAuth, type UserRole } from './contexts/AuthContext';
+import AdminLayout from './AdminLayout';
 import LoginPage from './pages/admin/LoginPage';
 import Dashboard from './pages/admin/Dashboard';
 import StudentsPage from './pages/admin/StudentsPage';
@@ -9,9 +8,8 @@ import ElectionsPage from './pages/admin/ElectionsPage';
 import PositionsPage from './pages/admin/PositionsPage';
 import CandidatesPage from './pages/admin/CandidatesPage';
 import ActivationsPage from './pages/admin/ActivationsPage';
-// ... other pages
 
-function ProtectedRoute({ children, allowedRoles }: { children: JSX.Element; allowedRoles: UserRole[] }) {
+function ProtectedRoute({ children, allowedRoles }: { children: JSX.Element; allowedRoles: Exclude<UserRole, null>[] }) {
   const { user } = useAuth();
   if (!user) return <Navigate to="/admin/login" replace />;
   if (!allowedRoles.includes(user.role)) return <Navigate to="/admin/dashboard" replace />;

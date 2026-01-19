@@ -1,18 +1,17 @@
-// src/components/admin/AdminLayout.tsx
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from './contexts/AuthContext';
 
 export default function AdminLayout() {
   const { user, logout } = useAuth();
   const location = useLocation();
 
   const navItems = [
-    { to: '/admin/dashboard', label: 'Dashboard', roles: ['superadmin', 'staff', 'activator'] },
-    { to: '/admin/students', label: 'Students', roles: ['superadmin', 'staff'] },
-    { to: '/admin/elections', label: 'Elections', roles: ['superadmin'] },
-    { to: '/admin/positions', label: 'Positions', roles: ['superadmin'] },
-    { to: '/admin/candidates', label: 'Candidates', roles: ['superadmin', 'staff'] },
-    { to: '/admin/activations', label: 'Activate Voters', roles: ['activator', 'superadmin'] },
+    { to: '/admin/dashboard', label: 'Dashboard', roles: ['superuser', 'staff', 'activator'] },
+    { to: '/admin/students', label: 'Students', roles: ['superuser', 'staff'] },
+    { to: '/admin/elections', label: 'Elections', roles: ['superuser'] },
+    { to: '/admin/positions', label: 'Positions', roles: ['superuser'] },
+    { to: '/admin/candidates', label: 'Candidates', roles: ['superuser', 'staff'] },
+    { to: '/admin/activations', label: 'Activate Voters', roles: ['activator', 'superuser'] },
   ];
 
   const visibleNav = navItems.filter(item => item.roles.includes(user?.role ?? ''));

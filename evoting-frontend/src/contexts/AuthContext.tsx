@@ -1,8 +1,9 @@
 // src/context/AuthContext.tsx
-import {createContext, type ReactNode, useContext, useEffect, useState} from 'react';
-import {useNavigate} from 'react-router-dom';
+import { createContext, type ReactNode, useContext, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-type UserRole = 'superadmin' | 'staff' | 'activator' | null;
+// Mirror backend roles: superuser, staff, activator
+export type UserRole = 'superuser' | 'staff' | 'activator' | null;
 
 interface AuthState {
     user: { username: string; role: UserRole } | null;
@@ -11,15 +12,17 @@ interface AuthState {
     logout: () => void;
 }
 
+const SESSION_KEY = 'kosa_admin_session';
+
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
-export function AuthProvider({children}: { children: ReactNode }) {
+export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<AuthState['user']>(null);
     const navigate = useNavigate();
 
     useEffect(() => {
         // Try to restore session from localStorage
-        const stored = localStorage.getItem('admin_session');
+        const stored = localStorage.getItem(SESSION_KEY);
         if (stored) {
             try {
                 const parsed = JSON.parse(stored);
@@ -31,12 +34,12 @@ export function AuthProvider({children}: { children: ReactNode }) {
     }, []);
 
     const login = async (username: string, password: string) => {
-        // TODO: Replace with real API call to /api-token-auth/ or your login endpoint
-        // For now: mock based on username
+        // TODO: Replace with real API call to /api/auth/login/ and read role from backend
+        // For now: mock based on username prefix to unblock UI work
         let role: UserRole = null;
 
-        if (username === 'superadmin' && password === 'admin123') {
-            role = 'superadmin';
+        if (username === 'superuser' && password === 'admin123') {
+            role = 'superuser';
         } else if (username.startsWith('staff')) {
             role = 'staff';
         } else if (username.startsWith('activator')) {
@@ -46,21 +49,20 @@ export function AuthProvider({children}: { children: ReactNode }) {
         if (!role) {
             throw new Error('Invalid credentials');
         }
-
-        const userData = {username, role};
-        localStorage.setItem('kosa_admin_session', JSON.stringify(userData));
+        const userData = { username, role };
+        localStorage.setItem(SESSION_KEY, JSON.stringify(userData));
         setUser(userData);
         navigate('/admin/dashboard');
     };
 
     const logout = () => {
-        localStorage.removeItem('kosa_admin_session');
+        localStorage.removeItem(SESSION_KEY);
         setUser(null);
         navigate('/admin/login');
     };
 
     return (
-        <AuthContext.Provider value={{user, isAuthenticated: !!user, login, logout}}>
+        <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, logout }}>
             {children}
         </AuthContext.Provider>
     );
