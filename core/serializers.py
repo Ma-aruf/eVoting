@@ -2,6 +2,17 @@ from rest_framework import serializers
 from .models import Election, Position, Candidate, Vote, Student
 
 
+class StudentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Student
+        fields = ["id", "student_id", "full_name", "class_name", "has_voted", "is_active"]
+        read_only_fields = ["has_voted"]
+
+
+class BulkStudentUploadSerializer(serializers.Serializer):
+    file = serializers.FileField()
+
+
 class ElectionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Election
