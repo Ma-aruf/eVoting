@@ -14,7 +14,7 @@ export default function ActivationsPage() {
     setError(null);
     setLoading(true);
     try {
-      const res = await api.post('students/activate/', {
+      const res = await api.post('api/students/activate/', {
         student_id: studentId,
         is_active: isActive,
       });

@@ -149,6 +149,19 @@ class PositionViewSet(viewsets.ReadOnlyModelViewSet):
         return Position.objects.none()
 
 
+class PositionCreateView(APIView):
+    """
+    Staff or superuser can create positions for an election.
+    """
+    permission_classes = [IsStaffOrSuperUser]
+
+    def post(self, request):
+        serializer = PositionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        position = serializer.save()
+        return Response(PositionSerializer(position).data, status=status.HTTP_201_CREATED)
+
+
 class CandidateViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Public, read-only list of candidates for a given position.
@@ -162,6 +175,73 @@ class CandidateViewSet(viewsets.ReadOnlyModelViewSet):
         if position_id:
             return Candidate.objects.filter(position_id=position_id)
         return Candidate.objects.none()
+
+
+class CandidateCreateView(APIView):
+    """
+    Staff or superuser can register candidates for positions.
+    """
+    permission_classes = [IsStaffOrSuperUser]
+
+    def post(self, request):
+        serializer = CandidateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        candidate = serializer.save()
+        return Response(CandidateSerializer(candidate).data, status=status.HTTP_201_CREATED)
+
+
+class ElectionManageView(APIView):
+    """
+    Staff or superuser can start/stop elections by toggling `is_active`.
+    """
+    permission_classes = [IsStaffOrSuperUser]
+
+    def get(self, request):
+        # Return all elections (active and inactive)
+        elections = Election.objects.all().order_by('-year', '-start_time')
+        serializer = ElectionSerializer(elections, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        """
+        Accepts JSON: { "election_id": 1, "is_active": true }
+        When setting an election active, all other elections are deactivated.
+        """
+        election_id = request.data.get("election_id")
+        is_active = request.data.get("is_active")
+
+        if election_id is None:
+            return Response(
+                {"detail": "election_id required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if is_active is None:
+            return Response(
+                {"detail": "is_active required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            election = Election.objects.get(pk=election_id)
+        except Election.DoesNotExist:
+            return Response(
+                {"detail": "Election not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        with transaction.atomic():
+            if bool(is_active):
+                # Deactivate all others, then activate this one
+                Election.objects.exclude(pk=election.pk).update(is_active=False)
+                election.is_active = True
+            else:
+                election.is_active = False
+            election.save(update_fields=["is_active"])
+
+        return Response(
+            {"detail": "Election status updated.", "id": election.pk, "is_active": election.is_active},
+            status=status.HTTP_200_OK,
+        )
 
 
 class MultiVoteView(APIView):

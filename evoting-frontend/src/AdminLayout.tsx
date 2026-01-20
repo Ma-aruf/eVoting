@@ -11,6 +11,7 @@ export default function AdminLayout() {
         {to: '/admin/dashboard', label: 'Dashboard', roles: ['superuser', 'staff', 'activator']},
         {to: '/admin/students', label: 'Students', roles: ['superuser', 'staff']},
         {to: '/admin/elections', label: 'Elections', roles: ['superuser']},
+        {to: '/admin/manage-elections', label: 'Manage Elections', roles: ['superuser']},
         {to: '/admin/positions', label: 'Positions', roles: ['superuser']},
         {to: '/admin/candidates', label: 'Candidates', roles: ['superuser', 'staff']},
         {to: '/admin/activations', label: 'Activate Voters', roles: ['activator', 'superuser']},

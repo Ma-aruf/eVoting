@@ -8,7 +8,9 @@ from .views import (
     CandidateViewSet,
     MultiVoteView,
     StudentActivationView,
-    BulkStudentUploadView, MeView,
+    BulkStudentUploadView,
+    MeView,
+    PositionCreateView,
 )
 
 router = DefaultRouter()
@@ -37,5 +39,10 @@ urlpatterns = [
         "students/bulk-upload/",
         BulkStudentUploadView.as_view(),
         name="student-bulk-upload",
+    ),
+    path(
+        "positions/create/",
+        PositionCreateView.as_view(),
+        name="position-create",
     ),
 ]
