@@ -9,11 +9,15 @@ import ElectionsPage from './pages/admin/ElectionsPage';
 import PositionsPage from './pages/admin/PositionsPage';
 import CandidatesPage from './pages/admin/CandidatesPage';
 import ActivationsPage from './pages/admin/ActivationsPage';
+import type {JSX} from "react";
 
 function ProtectedRoute({children, allowedRoles}: { children: JSX.Element; allowedRoles: Exclude<UserRole, null>[] }) {
     const {user} = useAuth();
+    const userRole: string | null = localStorage.getItem("kosa_admin_session")
+    const session = JSON.parse(userRole);
+
     if (!user) return <Navigate to="/admin/login" replace/>;
-    if (!allowedRoles.includes(user.role)) return <Navigate to="/admin/dashboard" replace/>;
+    if (!allowedRoles.includes(session.role)) return <Navigate to="/admin/dashboard" replace/>;
     return children;
 }
 

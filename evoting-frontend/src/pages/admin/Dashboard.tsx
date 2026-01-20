@@ -1,10 +1,35 @@
+// pages/admin/Dashboard.tsx
 import {Link} from 'react-router-dom';
 import {useAuth} from '../../hooks/useAuth';
 
 export default function Dashboard() {
     const {user} = useAuth();
 
-    console.log("Current user in Dashboard:", user);
+
+    // Reuse the same nav logic as sidebar (filter out dashboard itself)
+    const navItems = [
+        {
+            to: '/admin/students',
+            label: 'Students',
+            description: 'Manage student records and perform bulk uploads from Excel.',
+            roles: ['superuser', 'staff']
+        },
+        {
+            to: '/admin/elections',
+            label: 'Elections & Positions',
+            description: 'Configure elections, positions, and link candidates.',
+            roles: ['superuser']
+        },
+        {
+            to: '/admin/activations',
+            label: 'Voter Activation',
+            description: 'Activators can enable students to vote before the election.',
+            roles: ['activator', 'superuser']
+        },
+        // Add more if needed (e.g., Candidates, Positions as separate cards)
+    ];
+
+    const visibleItems = navItems.filter(item => item.roles.includes(user?.role ?? ''));
 
     return (
         <div className="space-y-6">
@@ -15,44 +40,28 @@ export default function Dashboard() {
                 </p>
             </header>
 
+
             <section className="grid gap-4 grid-cols-1 md:grid-cols-3">
-                <Link
-                    to="/admin/students"
-                    className="border rounded-lg p-4 hover:bg-gray-50 transition flex flex-col justify-between"
-                >
-                    <div>
-                        <h2 className="font-medium text-gray-800">Students</h2>
-                        <p className="text-sm text-gray-500 mt-1">
-                            Manage student records and perform bulk uploads from Excel.
-                        </p>
-                    </div>
-                </Link>
-
-                <Link
-                    to="/admin/elections"
-                    className="border rounded-lg p-4 hover:bg-gray-50 transition flex flex-col justify-between"
-                >
-                    <div>
-                        <h2 className="font-medium text-gray-800">Elections & Positions</h2>
-                        <p className="text-sm text-gray-500 mt-1">
-                            Configure elections, positions, and link candidates.
-                        </p>
-                    </div>
-                </Link>
-
-                <Link
-                    to="/admin/activations"
-                    className="border rounded-lg p-4 hover:bg-gray-50 transition flex flex-col justify-between"
-                >
-                    <div>
-                        <h2 className="font-medium text-gray-800">Voter Activation</h2>
-                        <p className="text-sm text-gray-500 mt-1">
-                            Activators can enable students to vote before the election.
-                        </p>
-                    </div>
-                </Link>
+                {visibleItems.map(item => (
+                    <Link
+                        key={item.to}
+                        to={item.to}
+                        className="border rounded-lg p-4 hover:bg-gray-50 transition flex flex-col justify-between"
+                    >
+                        <div>
+                            <h2 className="font-medium text-gray-800">{item.label}</h2>
+                            <p className="text-sm text-gray-500 mt-1">
+                                {item.description}
+                            </p>
+                        </div>
+                    </Link>
+                ))}
+                {visibleItems.length === 0 && (
+                    <p className="text-sm text-gray-500 col-span-3">
+                        No additional modules available for your role.
+                    </p>
+                )}
             </section>
         </div>
     );
 }
-

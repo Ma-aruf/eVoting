@@ -11,7 +11,7 @@ interface AuthState {
     logout: () => void;
 }
 
-const SESSION_KEY = 'kosa_admin_session';
+export const SESSION_KEY = 'kosa_admin_session';
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
 function deriveRoleFromUsername(username: string): UserRole {
