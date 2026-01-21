@@ -49,18 +49,22 @@ def get_env(key, default=None, cast=None):
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-ecxq3j)fwr*5m5x8jto&@z-5257#4+*&hps42tgy(7li=f97p5'
+SECRET_KEY = get_env('SECRET_KEY', 'django-insecure-ecxq3j)fwr*5m5x8jto&@z-5257#4+*&hps42tgy(7li=f97p5')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = get_env('DEBUG', default=False, cast=bool)
 
-# ALLOWED_HOSTS = get_env(
-#     "ALLOWED_HOSTS",
-#     default=["localhost", "127.0.0.1"],
-#     cast=list
-# )
-ALLOWED_HOSTS = ["*"]
-# ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+ALLOWED_HOSTS = get_env(
+    "ALLOWED_HOSTS",
+    default=["localhost", "127.0.0.1"],
+    cast=list
+)
+# Add Railway dynamic host
+if get_env('RAILWAY_ENVIRONMENT'):
+    railway_domain = get_env('RAILWAY_PUBLIC_DOMAIN')
+    if railway_domain:
+        ALLOWED_HOSTS.append(railway_domain)
+        ALLOWED_HOSTS.append(f"*.{railway_domain}")
 
 # Application definition
 
@@ -112,21 +116,12 @@ WSGI_APPLICATION = 'evoting.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-os.environ.setdefault("PGDATABASE", "evkasec_db")
-os.environ.setdefault("PGUSER", "postgres")
-os.environ.setdefault("PGPASSWORD", "@nasarabieni")
-os.environ.setdefault("PGHOST", "localhost")
-os.environ.setdefault("PGPORT", "5432")
-
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ["PGDATABASE"],
-        'USER': os.environ["PGUSER"],
-        'PASSWORD': os.environ["PGPASSWORD"],
-        'HOST': os.environ["PGHOST"],
-        'PORT': os.environ["PGPORT"],
-    }
+    'default': dj_database_url.config(
+        default='postgres://postgres:password@localhost:5432/evkasec_db',
+        conn_max_age=600,
+        ssl_require=get_env('RAILWAY_ENVIRONMENT', default=False, cast=bool)
+    )
 }
 
 CORS_ALLOW_ALL_ORIGINS = False
@@ -138,6 +133,11 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5175",
     "http://127.0.0.1:5173",
 ]
+
+# Add Railway frontend URL if available
+railway_frontend_url = get_env('RAILWAY_FRONTEND_URL')
+if railway_frontend_url:
+    CORS_ALLOWED_ORIGINS.append(railway_frontend_url)
 
 CORS_ALLOW_HEADERS = [
     'accept',
@@ -156,6 +156,10 @@ CORS_ALLOW_HEADERS = [
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5175",
 ]
+
+# Add Railway frontend URL to CSRF trusted origins
+if railway_frontend_url:
+    CSRF_TRUSTED_ORIGINS.append(railway_frontend_url)
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (

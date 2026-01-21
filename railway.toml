@@ -1,0 +1,9 @@
+[deploy]
+startCommand = "gunicorn evoting.wsgi:application"
+healthcheckPath = "/"
+healthcheckTimeout = 300
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
+
+[build]
+builder = "NIXPACKS"
