@@ -18,6 +18,33 @@ interface ListResponse<T> {
     results?: T[];
 }
 
+const FolderIcon = () => (
+    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+              d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+    </svg>
+);
+
+const UsersIcon = () => (
+    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+              d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+    </svg>
+);
+
+const ListIcon = () => (
+    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+    </svg>
+);
+
+const CalendarIcon = () => (
+    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+    </svg>
+);
+
 export default function Dashboard() {
     const {user} = useAuth();
 
@@ -35,13 +62,12 @@ export default function Dashboard() {
                 setLoading(true);
                 setError(null);
 
-                // First, get elections and students
                 const [electionsRes, studentsRes] = await Promise.all([
                     api.get<ListResponse<Election> | Election[]>('api/elections/'),
                     api.get<ListResponse<unknown> | unknown[]>('api/students/'),
                 ]);
 
-                const extractCount = <T,>(data: ListResponse<T> | T[]): number => {
+                const extractCount = <T, >(data: ListResponse<T> | T[]): number => {
                     if (Array.isArray(data)) return data.length;
                     if (typeof data.count === 'number') return data.count;
                     if (Array.isArray(data.results)) return data.results.length;
@@ -54,7 +80,6 @@ export default function Dashboard() {
                 setTotalElections(extractCount<Election>(electionsData));
                 setTotalStudents(extractCount(studentsData));
 
-                // Find active election
                 let active: Election | null = null;
                 if (Array.isArray(electionsData)) {
                     active = electionsData.find(e => (e as Election).is_active) as Election | undefined ?? null;
@@ -64,18 +89,14 @@ export default function Dashboard() {
 
                 setActiveElection(active);
 
-                // If there's an active election, fetch its positions and candidates
                 if (active) {
-                    const positionsRes = await
-                        api.get<ListResponse<unknown> | unknown[]>('api/positions/', {
-                        params: { election_id: active.id }
+                    const positionsRes = await api.get<ListResponse<unknown> | unknown[]>('api/positions/', {
+                        params: {election_id: active.id}
                     });
 
                     const positionsData = positionsRes.data;
-
                     setTotalPositions(extractCount(positionsData));
 
-                    // Get position IDs for the active election
                     let positionIds: number[] = [];
                     if (Array.isArray(positionsData)) {
                         positionIds = positionsData.map((p: any) => p.id);
@@ -86,12 +107,10 @@ export default function Dashboard() {
                     const candidateCountResponses = await Promise.all(
                         positionIds.map((positionId) =>
                             api.get<ListResponse<unknown> | unknown[]>('api/candidates/', {
-                                params: { position_id: positionId }
+                                params: {position_id: positionId}
                             })
                         )
                     );
-
-                    console.log("Candidate res", candidateCountResponses)
 
                     const activeCandidatesCount = candidateCountResponses.reduce((sum, res) => {
                         return sum + extractCount(res.data as any);
@@ -99,12 +118,10 @@ export default function Dashboard() {
 
                     setTotalCandidates(activeCandidatesCount);
                 } else {
-                    // No active election
                     setTotalPositions(0);
                     setTotalCandidates(0);
                 }
             } catch (err) {
-                console.error('Failed to load dashboard stats', err);
                 setError('Failed to load dashboard statistics.');
             } finally {
                 setLoading(false);
@@ -114,144 +131,157 @@ export default function Dashboard() {
         fetchStats();
     }, []);
 
-    const todayLabel = new Date().toLocaleDateString(undefined, {
-        weekday: 'short',
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-    });
-
     const formatDateTime = (value: string | undefined) => {
         if (!value) return '';
         return new Date(value).toLocaleString(undefined, {
-            year: 'numeric',
             month: 'short',
             day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
+            year: 'numeric',
         });
     };
 
-    // Quick links based on role (same idea as before)
-    const navItems = [
+    const quickLinks = [
         {
             to: '/admin/students',
             label: 'Students',
-            description: 'Manage student records and perform bulk uploads from Excel.',
+            description: 'Manage student records and bulk uploads.',
             roles: ['superuser', 'staff'],
+            color: 'bg-sky-500',
         },
         {
             to: '/admin/elections',
-            label: 'Elections & Positions',
-            description: 'Configure elections, positions, and link candidates.',
+            label: 'Elections',
+            description: 'Configure elections and positions.',
             roles: ['superuser'],
+            color: 'bg-blue-600',
         },
         {
             to: '/admin/activations',
             label: 'Voter Activation',
-            description: 'Activators can enable students to vote before the election.',
+            description: 'Enable students to vote.',
             roles: ['activator', 'superuser'],
+            color: 'bg-orange-500',
         },
     ];
 
-    const visibleItems = navItems.filter(item => item.roles.includes(user?.role ?? ''));
+    const visibleLinks = quickLinks.filter(item => item.roles.includes(user?.role ?? ''));
 
     return (
         <div className="space-y-6">
-            <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-2">
+            {/* Page Header */}
+            <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold text-gray-800">Admin Dashboard</h1>
-                    <p className="text-sm text-gray-500 mt-1">
-                        Signed in as <span className="font-medium">{user?.username}</span> ({user?.role})
-                    </p>
+                    <h1 className="text-xl font-semibold text-gray-900">Dashboard</h1>
                 </div>
-                <div className="text-sm text-gray-500">
-                    <span className="font-medium">Date:</span> {todayLabel}
+            </div>
+
+            {/* Loading / Error States */}
+            {loading && (
+                <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                    <p className="text-sm text-gray-500">Loading statistics...</p>
                 </div>
-            </header>
+            )}
 
-            {/* High-level stats */}
-            <section className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="border rounded-lg p-4 bg-white shadow-sm">
-                    <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Election</p>
-                    <p className="text-lg font-semibold text-gray-800">
-                        {activeElection ? activeElection.name : 'No active election'}
-                    </p>
-                    {activeElection && (
-                        <p className="text-xs text-gray-500 mt-1">
-                            {formatDateTime(activeElection.start_time)} – {formatDateTime(activeElection.end_time)}
-                        </p>
-                    )}
+            {error && (
+                <div className="bg-red-50 rounded-xl p-4 border border-red-100">
+                    <p className="text-sm text-red-600">{error}</p>
                 </div>
+            )}
 
-                <div className="border rounded-lg p-4 bg-white shadow-sm">
-                    <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Total Students</p>
-                    <p className="text-2xl font-bold text-kosa-primary">{totalStudents}</p>
-                </div>
-
-                <div className="border rounded-lg p-4 bg-white shadow-sm">
-                    <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">
-                        {activeElection ? 'Total Candidates in Active Election' : 'Total Candidates'}
-                    </p>
-                    <p className="text-2xl font-bold text-kosa-primary">{totalCandidates}</p>
-                    {activeElection && (
-                        <p className="text-xs text-gray-500 mt-1">For active election</p>
-                    )}
-                </div>
-
-                <div className="border rounded-lg p-4 bg-white shadow-sm">
-                    <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">
-                        {activeElection ? 'Total Positions in Active Election' : 'Total Positions'}
-                    </p>
-                    <p className="text-2xl font-bold text-kosa-primary">{totalPositions}</p>
-                    {activeElection && (
-                        <p className="text-xs text-gray-500 mt-1">For active election</p>
-                    )}
-                </div>
-            </section>
-
-            {/* Secondary stats row */}
-            <section className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="border rounded-lg p-4 bg-white shadow-sm">
-                    <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Total Elections</p>
-                    <p className="text-2xl font-bold text-kosa-primary">{totalElections}</p>
-                </div>
-
-                {loading && (
-                    <div className="border rounded-lg p-4 bg-white shadow-sm">
-                        <p className="text-sm text-gray-500">Loading statistics…</p>
-                    </div>
-                )}
-
-                {error && (
-                    <div className="border rounded-lg p-4 bg-red-50 border-red-200 shadow-sm">
-                        <p className="text-sm text-red-700">{error}</p>
-                    </div>
-                )}
-            </section>
-
-            {/* Quick navigation cards */}
-            <section className="grid gap-4 grid-cols-1 md:grid-cols-3">
-                {visibleItems.map(item => (
-                    <Link
-                        key={item.to}
-                        to={item.to}
-                        className="border rounded-lg p-4 bg-white hover:bg-gray-50 transition flex flex-col justify-between shadow-sm"
-                    >
-                        <div>
-                            <h2 className="font-medium text-gray-800">{item.label}</h2>
-                            <p className="text-sm text-gray-500 mt-1">
-                                {item.description}
-                            </p>
+            {/* Stat Cards - Folder Style */}
+            <section>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {/* Active Election Card */}
+                    <div
+                        className="bg-gradient-to-br h-40 from-blue-600 to-blue-600 rounded-xl p-5 text-white relative overflow-hidden">
+                        <div className="absolute top-4 right-4 opacity-20">
+                            <CalendarIcon/>
                         </div>
-                    </Link>
-                ))}
-                {visibleItems.length === 0 && (
-                    <p className="text-sm text-gray-500 col-span-3">
-                        No additional modules available for your role.
-                    </p>
-                )}
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="h-10 w-10 rounded-lg bg-white/10 flex items-center justify-center">
+                                <FolderIcon/>
+                            </div>
+                            <span className="text-xs font-medium bg-white/10 px-2 py-1 rounded">ACTIVE</span>
+                        </div>
+                        <h3 className="font-semibold text-lg">
+                            {activeElection ? activeElection.name : 'No Active Election'}
+                        </h3>
+
+                        {activeElection && (
+                            <p className="text-xs text-white/70 mt-2">
+                                {formatDateTime(activeElection.start_time)} - {formatDateTime(activeElection.end_time)}
+                            </p>
+                        )}
+                    </div>
+
+                    {/* Students Card */}
+                    <div
+                        className="bg-gradient-to-br h-40  from-cyan-600 to-cyan-600 rounded-xl p-5 text-white relative overflow-hidden">
+                        <div className="absolute top-4 right-4 opacity-20">
+                            <UsersIcon/>
+                        </div>
+                        <div className="flex items-center gap-3 mb-3">
+                            <p className="text-sm text-white/80 mt-1">Total registered voters</p>
+                        </div>
+                        <h3 className="font-semibold text-lg">Students</h3>
+                        <p className="text-3xl font-bold mt-2">{totalStudents}</p>
+
+                    </div>
+
+                    {/* Elections Card */}
+                    <div
+                        className="bg-gradient-to-br h-40 from-blue-900 to-blue-900 rounded-xl p-5 text-white relative overflow-hidden">
+                        <div className="absolute top-4 right-4 opacity-20">
+                            <ListIcon/>
+                        </div>
+                        <div className="flex items-center gap-3 mb-3">
+                            <p className="text-sm text-white/80 mt-1">Total elections created</p>
+                        </div>
+                        <h3 className="font-semibold text-lg">Elections</h3>
+                        <p className="text-3xl font-bold mt-2">{totalElections}</p>
+                    </div>
+                </div>
             </section>
+
+
+            {/* Active Election Details */}
+            {activeElection && (
+                <section>
+                    <h2 className="text-base font-medium text-gray-900 mb-4">Active Election Details</h2>
+                    <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                        <div className="p-5">
+                            <div className="flex items-start justify-between">
+                                <div className="flex gap-4">
+                                    <h3 className="font-semibold text-lg text-gray-900">{activeElection.name}</h3>
+                                    <p className="text-sm text-gray-500 mt-1">Year: {activeElection.year}</p>
+                                </div>
+                                <span
+                                    className="px-3 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                                    Active
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5">
+                                <div className="bg-gray-50 rounded-lg p-3">
+                                    <p className="text-xs text-gray-500 uppercase">Positions</p>
+                                    <p className="text-xl font-bold text-blue-600">{totalPositions}</p>
+                                </div>
+                                <div className="bg-gray-50 rounded-lg p-3">
+                                    <p className="text-xs text-gray-500 uppercase">Candidates</p>
+                                    <p className="text-xl font-bold text-blue-600">{totalCandidates}</p>
+                                </div>
+                                <div className="bg-gray-50 rounded-lg p-3">
+                                    <p className="text-xs text-gray-500 uppercase">Start</p>
+                                    <p className="text-sm font-medium text-gray-900">{formatDateTime(activeElection.start_time)}</p>
+                                </div>
+                                <div className="bg-gray-50 rounded-lg p-3">
+                                    <p className="text-xs text-gray-500 uppercase">End</p>
+                                    <p className="text-sm font-medium text-gray-900">{formatDateTime(activeElection.end_time)}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            )}
         </div>
     );
 }
