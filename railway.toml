@@ -1,7 +1,7 @@
 [deploy]
 startCommand = "gunicorn evoting.wsgi:application"
 healthcheckPath = "/"
-healthcheckTimeout = 300
+healthcheckTimeout = 100
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 10
 
