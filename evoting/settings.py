@@ -116,13 +116,36 @@ WSGI_APPLICATION = 'evoting.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': dj_database_url.config(
-        default='postgres://postgres:password@localhost:5432/evkasec_db',
-        conn_max_age=600,
-        ssl_require=get_env('RAILWAY_ENVIRONMENT', default=False, cast=bool)
-    )
-}
+# Check if we're in Railway environment
+is_railway = get_env('RAILWAY_ENVIRONMENT', default=False, cast=bool)
+
+if is_railway:
+    # Railway: Use DATABASE_URL or fallback to SQLite
+    DATABASES = {
+        'default': dj_database_url.config(
+            default='sqlite:///' + os.path.join(BASE_DIR, 'db.sqlite3'),
+            conn_max_age=600,
+            ssl_require=True
+        )
+    }
+else:
+    # Local development: Use your existing PostgreSQL setup
+    os.environ.setdefault("PGDATABASE", "evkasec_db")
+    os.environ.setdefault("PGUSER", "postgres")
+    os.environ.setdefault("PGPASSWORD", "@nasarabieni")
+    os.environ.setdefault("PGHOST", "localhost")
+    os.environ.setdefault("PGPORT", "5432")
+    
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.environ["PGDATABASE"],
+            'USER': os.environ["PGUSER"],
+            'PASSWORD': os.environ["PGPASSWORD"],
+            'HOST': os.environ["PGHOST"],
+            'PORT': os.environ["PGPORT"],
+        }
+    }
 
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = True
@@ -138,6 +161,10 @@ CORS_ALLOWED_ORIGINS = [
 railway_frontend_url = get_env('RAILWAY_FRONTEND_URL')
 if railway_frontend_url:
     CORS_ALLOWED_ORIGINS.append(railway_frontend_url)
+
+# In production/Railway, allow all origins if specifically set
+if is_railway and get_env('RAILWAY_ALLOW_ALL_CORS', default=False, cast=bool):
+    CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOW_HEADERS = [
     'accept',
