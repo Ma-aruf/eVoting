@@ -22,9 +22,5 @@ services:
 
       - key: WEB_CONCURRENCY
         value: 4
-
-#      - key: ALLOWED_HOSTS
-#        value: '["nupsapi.onrender.com"]'
-
       - key: DJANGO_SETTINGS_MODULE
         value: evoting.settings
