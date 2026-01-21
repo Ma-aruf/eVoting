@@ -199,7 +199,7 @@ export default function ActivationsPage() {
                         <button
                             type="submit"
                             disabled={loading || !studentId.trim()}
-                            className="px-4 py-2 rounded-lg text-sm font-medium bg-green-600 hover:bg-green-700 text-white disabled:opacity-60 disabled:cursor-not-allowed transition flex-1"
+                            className="px-4 py-2 rounded-lg text-sm font-medium bg-cyan-600 hover:bg-cyan-700 text-white disabled:opacity-60 disabled:cursor-not-allowed transition flex-1"
                         >
                             {loading ? 'Processing…' : 'Activate'}
                         </button>
@@ -207,7 +207,7 @@ export default function ActivationsPage() {
                             type="button"
                             onClick={handleDeactivate}
                             disabled={loading || !studentId.trim()}
-                            className="px-4 py-2 rounded-lg text-sm font-medium bg-red-600 hover:bg-red-700 text-white disabled:opacity-60 disabled:cursor-not-allowed transition flex-1"
+                            className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-800 hover:bg-red-800 text-white disabled:opacity-60 disabled:cursor-not-allowed transition flex-1"
                         >
                             {loading ? 'Processing…' : 'Deactivate'}
                         </button>

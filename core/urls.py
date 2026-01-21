@@ -50,7 +50,9 @@ urlpatterns = [
 
     # Create endpoints
     path("positions/create/", PositionCreateView.as_view(), name="position-create"),
+    path("positions/<int:pk>/", PositionCreateView.as_view()),  # PUT, DELETE
     path("candidates/create/", CandidateCreateView.as_view(), name="candidate-create"),
+    path("candidates/<int:pk>/", CandidateCreateView.as_view()),  # PUT, DELETE
     path("elections/create/", ElectionCreateView.as_view(), name="election-create"),
 
     # Election management

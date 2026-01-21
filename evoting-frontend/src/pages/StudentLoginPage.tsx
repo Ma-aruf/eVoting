@@ -28,8 +28,7 @@ export default function StudentLoginPage() {
 
         try {
             // First, check if student is active and get token
-            // Assuming endpoint: /api/voter/login/ that returns token if active
-            const response = await api.post('/api/voter/login/', {
+            const response = await api.post('api/voter/login/', {
                 student_id: studentId.trim()
             });
 
@@ -49,8 +48,8 @@ export default function StudentLoginPage() {
             const detail = err.response?.data?.detail;
 
             if (err.response?.status === 403) {
+                console.log("Error for not logging it: ", err)
                 setError('You are not activated to vote. Please contact the election committee.');
-                console.log("expecting error for already voting: ", err)
             } else if (err.response?.status === 409) {
                 setError('You have already voted.');
             } else if (detail) {

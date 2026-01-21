@@ -74,6 +74,14 @@ export default function CandidatesPage() {
     const [studentDropdownOpen, setStudentDropdownOpen] = useState(false);
     const [photoUrl, setPhotoUrl] = useState<string>('');
 
+    const [editingCandidate, setEditingCandidate] = useState<Candidate | null>(null);
+    const [editPhotoUrl, setEditPhotoUrl] = useState<string>('');
+    const [editElectionId, setEditElectionId] = useState<number | null>(null);
+    const [editPositionId, setEditPositionId] = useState<number | null>(null);
+    const [editStudentId, setEditStudentId] = useState<number | null>(null);
+    const [editStudentQuery, setEditStudentQuery] = useState('');
+    const [editStudentDropdownOpen, setEditStudentDropdownOpen] = useState(false);
+
     const extractItems = <T,>(data: T[] | ListResponse<T>): T[] => {
         if (Array.isArray(data)) return data;
         if (Array.isArray(data.results)) return data.results;
@@ -93,6 +101,94 @@ export default function CandidatesPage() {
         } catch (err) {
             console.error(err);
             setError('Failed to load elections.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleEditCandidate = (candidate: Candidate) => {
+        setEditingCandidate(candidate);
+        setEditPhotoUrl(candidate.photo_url || '');
+        
+        // Find the position and its election
+        const position = positions.find(p => p.id === candidate.position);
+        if (position) {
+            setEditElectionId(position.election);
+            setEditPositionId(candidate.position);
+        }
+        setEditStudentId(candidate.student);
+        const student = students.find(s => s.id === candidate.student);
+        if (student) {
+            setEditStudentQuery(`${student.full_name} (${student.student_id})`);
+        }
+    };
+
+    const handleUpdateCandidate = async (e: FormEvent) => {
+        e.preventDefault();
+        if (!editingCandidate) return;
+
+        if (!editElectionId || !editPositionId || !editStudentId) {
+            setError('Please select election, position, and student.');
+            return;
+        }
+
+        setError(null);
+        setSuccessMessage(null);
+        setLoading(true);
+
+        try {
+            await api.put(`api/candidates/${editingCandidate.id}/`, {
+                student: editStudentId,
+                position: editPositionId,
+                photo_url: editPhotoUrl.trim() || '',
+            });
+            setSuccessMessage('Candidate updated successfully.');
+            setEditingCandidate(null);
+            setEditPhotoUrl('');
+            setEditElectionId(null);
+            setEditPositionId(null);
+            setEditStudentId(null);
+            setEditStudentQuery('');
+            await fetchCandidates(selectedPositionId);
+        } catch (err: any) {
+            console.error(err);
+            setError(err.response?.data?.detail || 'Failed to update candidate.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (editElectionId !== null) {
+            const fetchEditPositions = async () => {
+                try {
+                    const res = await api.get<Position[] | ListResponse<Position>>('api/positions/', {
+                        params: {election_id: editElectionId},
+                    });
+                    const items = extractItems(res.data);
+                    setPositions(items);
+                } catch (err) {
+                    console.error(err);
+                }
+            };
+            fetchEditPositions();
+        }
+    }, [editElectionId]);
+
+    const handleDeleteCandidate = async (candidate: Candidate) => {
+        if (!confirm(`Delete candidate "${candidate.student_name}"?`)) return;
+
+        setError(null);
+        setSuccessMessage(null);
+        setLoading(true);
+
+        try {
+            await api.delete(`api/candidates/${candidate.id}/`);
+            setSuccessMessage('Candidate deleted.');
+            await fetchCandidates(selectedPositionId);
+        } catch (err: any) {
+            console.error(err);
+            setError(err.response?.data?.detail || 'Failed to delete candidate.');
         } finally {
             setLoading(false);
         }
@@ -221,6 +317,15 @@ export default function CandidatesPage() {
 
     const filteredStudentOptions = students.filter((student) => {
         const q = studentQuery.toLowerCase().trim();
+        if (!q) return true;
+        return (
+            student.full_name.toLowerCase().includes(q) ||
+            student.student_id.toLowerCase().includes(q)
+        );
+    });
+
+    const filteredEditStudentOptions = students.filter((student) => {
+        const q = editStudentQuery.toLowerCase().trim();
         if (!q) return true;
         return (
             student.full_name.toLowerCase().includes(q) ||
@@ -435,6 +540,154 @@ export default function CandidatesPage() {
                 </section>
             )}
 
+            {editingCandidate && (
+                <section className="bg-white rounded-xl border border-blue-200 shadow-sm p-5">
+                    <h2 className="text-base font-medium text-gray-900 mb-4">
+                        Edit Candidate: {editingCandidate.student_name}
+                    </h2>
+                    <form onSubmit={handleUpdateCandidate} className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="edit_election">
+                                    Election
+                                </label>
+                                <select
+                                    id="edit_election"
+                                    value={editElectionId ?? ''}
+                                    onChange={(e) => {
+                                        const value = e.target.value ? Number(e.target.value) : null;
+                                        setEditElectionId(value);
+                                        setEditPositionId(null);
+                                    }}
+                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="">Select election…</option>
+                                    {elections.map((election) => (
+                                        <option key={election.id} value={election.id}>
+                                            {election.name} ({election.year})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="edit_position">
+                                    Position
+                                </label>
+                                <select
+                                    id="edit_position"
+                                    value={editPositionId ?? ''}
+                                    onChange={(e) => setEditPositionId(e.target.value ? Number(e.target.value) : null)}
+                                    disabled={!editElectionId}
+                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
+                                >
+                                    {!editElectionId && <option value="">Select election first</option>}
+                                    {editElectionId && positions.length === 0 && (
+                                        <option value="">No positions for this election</option>
+                                    )}
+                                    {positions.length > 0 && <option value="">Select position…</option>}
+                                    {positions.map((position) => (
+                                        <option key={position.id} value={position.id}>
+                                            {position.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="edit_photo_url">
+                                    Photo URL
+                                </label>
+                                <input
+                                    id="edit_photo_url"
+                                    type="url"
+                                    value={editPhotoUrl}
+                                    onChange={(e) => setEditPhotoUrl(e.target.value)}
+                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="https://..."
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="edit_student_search">
+                                Student
+                            </label>
+                            <div className="relative">
+                                <input
+                                    id="edit_student_search"
+                                    type="text"
+                                    value={editStudentQuery}
+                                    onChange={(e) => {
+                                        setEditStudentQuery(e.target.value);
+                                        setEditStudentDropdownOpen(true);
+                                        setEditStudentId(null);
+                                    }}
+                                    onFocus={() => setEditStudentDropdownOpen(true)}
+                                    onBlur={() => {
+                                        window.setTimeout(() => setEditStudentDropdownOpen(false), 150);
+                                    }}
+                                    placeholder="Type student name or ID..."
+                                    disabled={students.length === 0}
+                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
+                                />
+
+                                {editStudentDropdownOpen && students.length > 0 && (
+                                    <div className="absolute z-10 mt-2 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-64 overflow-auto">
+                                        {filteredEditStudentOptions.length === 0 ? (
+                                            <div className="px-3 py-2 text-sm text-gray-500">No matches</div>
+                                        ) : (
+                                            filteredEditStudentOptions.slice(0, 25).map((student) => (
+                                                <button
+                                                    key={student.id}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setEditStudentId(student.id);
+                                                        setEditStudentQuery(`${student.full_name} (${student.student_id})`);
+                                                        setEditStudentDropdownOpen(false);
+                                                    }}
+                                                    className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition"
+                                                >
+                                                    <span className="font-medium text-gray-900">{student.full_name}</span>{' '}
+                                                    <span className="text-gray-500">({student.student_id})</span>
+                                                </button>
+                                            ))
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                            {!editStudentId && editStudentQuery.trim() && (
+                                <p className="text-xs text-gray-500 mt-1">Select a student from the list.</p>
+                            )}
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button
+                                type="submit"
+                                disabled={loading || !editElectionId || !editPositionId || !editStudentId}
+                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-60 transition"
+                            >
+                                {loading ? 'Saving…' : 'Update Candidate'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setEditingCandidate(null);
+                                    setEditPhotoUrl('');
+                                    setEditElectionId(null);
+                                    setEditPositionId(null);
+                                    setEditStudentId(null);
+                                    setEditStudentQuery('');
+                                }}
+                                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+                </section>
+            )}
+
             {/* Candidates table */}
             <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="flex items-center justify-between p-5 border-b border-gray-100">
@@ -470,6 +723,7 @@ export default function CandidatesPage() {
                                 <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Student</th>
                                 <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Student ID</th>
                                 <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Photo</th>
+                                <th className="text-right px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -497,12 +751,28 @@ export default function CandidatesPage() {
                                                 <span className="text-gray-400 text-xs">No photo</span>
                                             )}
                                         </td>
+                                        <td className="px-5 py-2 text-right">
+                                            <div className="flex justify-end gap-2">
+                                                <button
+                                                    onClick={() => handleEditCandidate(candidate)}
+                                                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 transition"
+                                                >
+                                                    Edit
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteCandidate(candidate)}
+                                                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 hover:bg-red-100 text-red-600 transition"
+                                                >
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        </td>
                                     </tr>
                                 );
                             })}
                             {!loading && filteredCandidates.length === 0 && (
                                 <tr>
-                                    <td colSpan={3} className="px-5 py-8 text-center text-gray-400">
+                                    <td colSpan={4} className="px-5 py-8 text-center text-gray-400">
                                         {searchTerm
                                             ? 'No candidates match your search.'
                                             : (selectedPosition

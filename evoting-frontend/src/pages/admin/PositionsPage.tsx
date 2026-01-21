@@ -53,6 +53,10 @@ export default function PositionsPage() {
     const [positionName, setPositionName] = useState('');
     const [displayOrder, setDisplayOrder] = useState<string>('');
 
+    const [editingPosition, setEditingPosition] = useState<Position | null>(null);
+    const [editPositionName, setEditPositionName] = useState('');
+    const [editDisplayOrder, setEditDisplayOrder] = useState<string>('');
+
     const fetchElections = async () => {
         setLoading(true);
         setError(null);
@@ -121,11 +125,7 @@ export default function PositionsPage() {
         setSuccessMessage(null);
 
         if (!selectedElectionId) {
-            setError('Please select an election first.');
-            return;
-        }
-        if (!positionName.trim() || !displayOrder.trim()) {
-            setError('Please fill in all required fields.');
+            setError('Please select an election.');
             return;
         }
 
@@ -133,19 +133,69 @@ export default function PositionsPage() {
             setLoading(true);
             await api.post('api/positions/create/', {
                 name: positionName.trim(),
-                display_order: Number(displayOrder),
+                display_order: parseInt(displayOrder, 10) || 1,
                 election: selectedElectionId,
             });
 
             setSuccessMessage('Position created successfully.');
             setPositionName('');
             setDisplayOrder('');
-            setShowCreateForm(false);
             await fetchPositions(selectedElectionId);
         } catch (err: any) {
             console.error(err);
             const detail = err.response?.data?.detail;
             setError(detail || 'Failed to create position.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleEditPosition = (position: Position) => {
+        setEditingPosition(position);
+        setEditPositionName(position.name);
+        setEditDisplayOrder(position.display_order.toString());
+    };
+
+    const handleUpdatePosition = async (e: FormEvent) => {
+        e.preventDefault();
+        if (!editingPosition) return;
+
+        setError(null);
+        setSuccessMessage(null);
+        setLoading(true);
+
+        try {
+            await api.put(`api/positions/${editingPosition.id}/`, {
+                name: editPositionName.trim(),
+                display_order: parseInt(editDisplayOrder, 10) || 1,
+            });
+            setSuccessMessage('Position updated successfully.');
+            setEditingPosition(null);
+            setEditPositionName('');
+            setEditDisplayOrder('');
+            await fetchPositions(selectedElectionId);
+        } catch (err: any) {
+            console.error(err);
+            setError(err.response?.data?.detail || 'Failed to update position.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDeletePosition = async (position: Position) => {
+        if (!confirm(`Delete position "${position.name}"?`)) return;
+
+        setError(null);
+        setSuccessMessage(null);
+        setLoading(true);
+
+        try {
+            await api.delete(`api/positions/${position.id}/`);
+            setSuccessMessage('Position deleted.');
+            await fetchPositions(selectedElectionId);
+        } catch (err: any) {
+            console.error(err);
+            setError(err.response?.data?.detail || 'Failed to delete position.');
         } finally {
             setLoading(false);
         }
@@ -296,6 +346,66 @@ export default function PositionsPage() {
                 </section>
             )}
 
+            {/* Edit Position Form */}
+            {editingPosition && (
+                <section className="bg-white rounded-xl border border-blue-200 shadow-sm p-5">
+                    <h2 className="text-base font-medium text-gray-900 mb-4">
+                        Edit Position: {editingPosition.name}
+                    </h2>
+                    <form onSubmit={handleUpdatePosition} className="flex flex-col md:flex-row gap-4 items-end">
+                        <div className="flex-1">
+                            <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="edit_position_name">
+                                Position Name
+                            </label>
+                            <input
+                                id="edit_position_name"
+                                type="text"
+                                value={editPositionName}
+                                onChange={(e) => setEditPositionName(e.target.value)}
+                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="e.g. President"
+                                required
+                            />
+                        </div>
+                        <div className="w-full md:w-48">
+                            <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="edit_display_order">
+                                Display Order
+                            </label>
+                            <input
+                                id="edit_display_order"
+                                type="number"
+                                value={editDisplayOrder}
+                                onChange={(e) => setEditDisplayOrder(e.target.value)}
+                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="e.g. 1"
+                                min={1}
+                                required
+                            />
+                        </div>
+                        <div className="flex gap-3">
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-60 transition"
+                            >
+                                {loading ? 'Saving…' : 'Update'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setEditingPosition(null);
+                                    setEditPositionName('');
+                                    setEditDisplayOrder('');
+                                }}
+                                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+                </section>
+            )}
+
             {/* Positions table */}
             <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="flex items-center justify-between p-5 border-b border-gray-100">
@@ -327,6 +437,7 @@ export default function PositionsPage() {
                             <tr className="bg-blue-100 border-b border-gray-100">
                                 <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                                 <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Display Order</th>
+                                <th className="text-right px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -334,11 +445,27 @@ export default function PositionsPage() {
                                 <tr key={position.id} className="hover:bg-gray-50 transition odd:bg-white even:bg-blue-50">
                                     <td className="px-5 py-2 font-medium text-gray-900">{position.name}</td>
                                     <td className="px-5 py-2 text-gray-700">{position.display_order}</td>
+                                    <td className="px-5 py-2 text-right">
+                                        <div className="flex justify-end gap-2">
+                                            <button
+                                                onClick={() => handleEditPosition(position)}
+                                                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 transition"
+                                            >
+                                                Edit
+                                            </button>
+                                            <button
+                                                onClick={() => handleDeletePosition(position)}
+                                                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 hover:bg-red-100 text-red-600 transition"
+                                            >
+                                                Delete
+                                            </button>
+                                        </div>
+                                    </td>
                                 </tr>
                             ))}
                             {!loading && filteredPositions.length === 0 && (
                                 <tr>
-                                    <td colSpan={2} className="px-5 py-8 text-center text-gray-400">
+                                    <td colSpan={3} className="px-5 py-8 text-center text-gray-400">
                                         {searchTerm
                                             ? 'No positions match your search.'
                                             : (selectedElection

@@ -2,6 +2,7 @@ from io import BytesIO
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from openpyxl import load_workbook
 from rest_framework import viewsets, status
@@ -164,19 +165,23 @@ class BulkStudentUploadView(APIView):
         )
 
 
-class PositionViewSet(viewsets.ReadOnlyModelViewSet):
+class PositionViewSet(viewsets.ModelViewSet):
     """
-    Public, read-only list of positions for a given election.
-    Expects `?election_id=` as a query parameter.
+    Read positions publicly, but only staff/superuser can update/delete.
+    Expects `?election_id=` as a query parameter for listing.
     """
     serializer_class = PositionSerializer
-    permission_classes = [AllowAny]
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [AllowAny()]
+        return [IsStaffOrSuperUser()]
 
     def get_queryset(self):
         election_id = self.request.query_params.get("election_id")
         if election_id:
             return Position.objects.filter(election_id=election_id)
-        return Position.objects.none()
+        return Position.objects.all()
 
 
 class PositionCreateView(APIView):
@@ -190,6 +195,31 @@ class PositionCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         position = serializer.save()
         return Response(PositionSerializer(position).data, status=status.HTTP_201_CREATED)
+
+    def put(self, request, pk):
+        position = get_object_or_404(Position, pk=pk)
+        serializer = PositionSerializer(
+            position,
+            data=request.data,
+            partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        position = serializer.save()
+        return Response(
+            PositionSerializer(position).data,
+            status=status.HTTP_200_OK
+        )
+
+    def patch(self, request, pk):
+        return self.put(request, pk)
+
+    def delete(self, request, pk):
+        position = get_object_or_404(Position, pk=pk)
+        position.delete()
+        return Response(
+            {"detail": "Position deleted successfully"},
+            status=status.HTTP_204_NO_CONTENT
+        )
 
 
 class CandidateViewSet(viewsets.ReadOnlyModelViewSet):
@@ -213,11 +243,39 @@ class CandidateCreateView(APIView):
     """
     permission_classes = [IsStaffOrSuperUser]
 
+    # CREATE
     def post(self, request):
         serializer = CandidateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         candidate = serializer.save()
         return Response(CandidateSerializer(candidate).data, status=status.HTTP_201_CREATED)
+
+    # EDIT
+    def put(self, request, pk):
+        candidate = get_object_or_404(Candidate, pk=pk)
+        serializer = CandidateSerializer(
+            candidate,
+            data=request.data,
+            partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        candidate = serializer.save()
+        return Response(
+            CandidateSerializer(candidate).data,
+            status=status.HTTP_200_OK
+        )
+
+    def patch(self, request, pk):
+        return self.put(request, pk)
+
+    # DELETE
+    def delete(self, request, pk):
+        candidate = get_object_or_404(Candidate, pk=pk)
+        candidate.delete()
+        return Response(
+            {"detail": "Candidate deleted successfully"},
+            status=status.HTTP_204_NO_CONTENT
+        )
 
 
 class ElectionManageView(APIView):
@@ -299,7 +357,9 @@ class MultiVoteView(APIView):
         try:
             with transaction.atomic():
                 # Lock fresh student row to avoid races
-                student = Student.objects.select_for_update().get(pk=student_user.pk)
+                student = Student.objects.select_for_update().get(
+                    pk=student_user.pk
+                )
 
                 now = timezone.now()
 
@@ -408,9 +468,9 @@ class MultiVoteView(APIView):
                 {"detail": "Student not found."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        except Exception:
+        except Exception as e:
             return Response(
-                {"detail": "Error saving votes."},
+                {"detail": str(e)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -536,6 +596,7 @@ class StudentVoterLoginView(APIView):
 
         try:
             student = Student.objects.get(student_id=student_id)
+            print("Student found:", student)
         except Student.DoesNotExist:
             return Response(
                 {"detail": "Student not found."},
@@ -551,6 +612,7 @@ class StudentVoterLoginView(APIView):
 
         # Check if student is active
         if not student.is_active:
+            print("is student activated?: ", student.is_active)
             return Response(
                 {"detail": "Student is not activated to vote."},
                 status=status.HTTP_403_FORBIDDEN,

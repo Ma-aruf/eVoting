@@ -1,0 +1,30 @@
+databases:
+  - name: evkasec_db
+    plan: free
+    databaseName: evkasec_db
+    user: kosaev
+
+services:
+  - type: web
+    plan: free
+    name: kosaevApi
+    runtime: python
+    buildCommand: './build.sh'
+    startCommand: 'python -m gunicorn evoting.asgi:application -k uvicorn.workers.UvicornWorker'
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: evkasec_db
+          property: connectionString
+
+      - key: SECRET_KEY
+        generateValue: true
+
+      - key: WEB_CONCURRENCY
+        value: 4
+
+      - key: ALLOWED_HOSTS
+        value: '["nupsapi.onrender.com"]'
+
+      - key: DJANGO_SETTINGS_MODULE
+        value: evoting.settings

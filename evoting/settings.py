@@ -14,6 +14,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import dj_database_url
+import dj_database_url
 from decouple import RepositoryEnv, Config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -24,6 +25,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # --------------------------------------------------
 ENV_PATH = BASE_DIR / ".env"
 env = Config(RepositoryEnv(ENV_PATH)) if ENV_PATH.exists() else None
+
 
 def get_env(key, default=None, cast=None):
     if key in os.environ:
@@ -60,9 +62,6 @@ DEBUG = True
 
 ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 
-
-
-
 # Application definition
 
 INSTALLED_APPS = [
@@ -81,6 +80,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -109,7 +109,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'evoting.wsgi.application'
 
-
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
@@ -117,14 +116,13 @@ DATABASES = {
     "default": dj_database_url.config(
         default=get_env(
             "DATABASE_URL",
-            "postgres://postgres:postgres@localhost:5432/evkasec_db"
+            "postgres://postgres:postgres@localhost:5432/evkasec_db",
         ),
     )
 }
 
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = True
-
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5175",
@@ -159,7 +157,6 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.IsAuthenticated",
     ),
 }
-
 
 # Simple JWT Configuration
 from datetime import timedelta
@@ -220,6 +217,11 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+STATICFILES_STORAGE = (
+    "whitenoise.storage.CompressedManifestStaticFilesStorage"
+    if not DEBUG
+    else "django.contrib.staticfiles.storage.StaticFilesStorage"
+)
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
@@ -232,11 +234,18 @@ USE_I18N = True
 
 USE_TZ = True
 
-
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+
+if not DEBUG:
+    # Tell Django to copy static assets into a path called `staticfiles` (this is specific to Render)
+    STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+    # Enable the WhiteNoise storage backend, which compresses static files to reduce disk use
+    # and renames the files with unique names for each version to support long-term caching
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
