@@ -25,19 +25,20 @@ from rest_framework_simplejwt.views import (
 
 def health_check(request):
     try:
-        # Basic health check without database dependency
-        from django.conf import settings
+        # Minimal health check - no Django imports that might fail
+        import sys
         return JsonResponse({
             "status": "healthy", 
             "service": "evoting-api",
-            "debug": settings.DEBUG,
-            "version": "1.0.0"
+            "python_version": sys.version,
+            "message": "Django app is running"
         })
     except Exception as e:
         return JsonResponse({
             "status": "unhealthy", 
             "service": "evoting-api",
-            "error": str(e)
+            "error": str(e),
+            "type": type(e).__name__
         }, status=500)
 
 urlpatterns = [

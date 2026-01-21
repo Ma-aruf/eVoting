@@ -1,9 +1,9 @@
 [deploy]
-startCommand = "gunicorn evoting.wsgi:application"
+startCommand = "python test_start.py && gunicorn evoting.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --timeout 120 --log-level debug"
 healthcheckPath = "/"
-healthcheckTimeout = 100
+healthcheckTimeout = 300
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 10
+restartPolicyMaxRetries = 3
 
 [build]
 builder = "NIXPACKS"
