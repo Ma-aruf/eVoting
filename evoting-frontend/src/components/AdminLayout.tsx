@@ -62,12 +62,18 @@ const SearchIcon = () => (
     </svg>
 );
 
+const AdminUsersIcon = () => (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+    </svg>
+);
+
 export default function AdminLayout() {
     const {user, logout} = useAuth();
     const location = useLocation();
 
     const navItems = [
-        {to: '/admin/dashboard', label: 'Dashboard', icon: DashboardIcon, roles: ['superuser', 'staff', 'activator']},
+        {to: '/admin/dashboard', label: 'Dashboard', icon: DashboardIcon, roles: ['superuser', 'staff']},
         {to: '/admin/students', label: 'Students', icon: UsersIcon, roles: ['superuser', 'staff']},
         {to: '/admin/elections', label: 'Elections', icon: CalendarIcon, roles: ['superuser']},
         {to: '/admin/manage-elections', label: 'Manage Elections', icon: PlayIcon, roles: ['superuser']},
@@ -75,6 +81,7 @@ export default function AdminLayout() {
         {to: '/admin/candidates', label: 'Candidates', icon: UserIcon, roles: ['superuser', 'staff']},
         {to: '/admin/activations', label: 'Activate Voters', icon: CheckIcon, roles: ['activator', 'superuser']},
         {to: '/admin/results', label: 'Election Results', icon: ChartIcon, roles: ['superuser', 'staff']},
+        {to: '/admin/users', label: 'Manage Users', icon: AdminUsersIcon, roles: ['superuser']},
     ];
 
     const visibleNav = navItems.filter(item => item.roles.includes(user?.role ?? ''));

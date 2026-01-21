@@ -50,6 +50,7 @@ export default function StudentLoginPage() {
 
             if (err.response?.status === 403) {
                 setError('You are not activated to vote. Please contact the election committee.');
+                console.log("expecting error for already voting: ", err)
             } else if (err.response?.status === 409) {
                 setError('You have already voted.');
             } else if (detail) {

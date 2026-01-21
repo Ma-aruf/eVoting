@@ -17,6 +17,7 @@ export default function LoginPage() {
             await login(username, password);
         } catch (error) {
             const err = error as any;
+            alert(err)
             setError(err?.response?.data?.detail || err.message || 'Login failed');
         }
         finally {

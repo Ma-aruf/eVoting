@@ -33,6 +33,26 @@ interface ListResponse<T> {
     results?: T[];
 }
 
+const UsersIcon = () => (
+    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+              d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+    </svg>
+);
+
+const ListIcon = () => (
+    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+              d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+    </svg>
+);
+
+const PlusIcon = () => (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
+    </svg>
+);
+
 export default function CandidatesPage() {
     const [elections, setElections] = useState<Election[]>([]);
     const [positions, setPositions] = useState<Position[]>([]);
@@ -46,7 +66,12 @@ export default function CandidatesPage() {
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+    const [showCreateForm, setShowCreateForm] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+
     const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
+    const [studentQuery, setStudentQuery] = useState('');
+    const [studentDropdownOpen, setStudentDropdownOpen] = useState(false);
     const [photoUrl, setPhotoUrl] = useState<string>('');
 
     const extractItems = <T,>(data: T[] | ListResponse<T>): T[] => {
@@ -179,6 +204,7 @@ export default function CandidatesPage() {
 
             setSuccessMessage('Candidate created successfully.');
             setSelectedStudentId(null);
+            setStudentQuery('');
             setPhotoUrl('');
             await fetchCandidates(selectedPositionId);
         } catch (err: any) {
@@ -193,44 +219,103 @@ export default function CandidatesPage() {
     const selectedElection = elections.find(e => e.id === selectedElectionId) || null;
     const selectedPosition = positions.find(p => p.id === selectedPositionId) || null;
 
+    const filteredStudentOptions = students.filter((student) => {
+        const q = studentQuery.toLowerCase().trim();
+        if (!q) return true;
+        return (
+            student.full_name.toLowerCase().includes(q) ||
+            student.student_id.toLowerCase().includes(q)
+        );
+    });
+
+    const filteredCandidates = candidates.filter((candidate) => {
+        const student = students.find((s) => s.id === candidate.student);
+        const name = (candidate.student_name || student?.full_name || '').toLowerCase();
+        const id = (student?.student_id || '').toLowerCase();
+        const q = searchTerm.toLowerCase().trim();
+        if (!q) return true;
+        return name.includes(q) || id.includes(q);
+    });
+
     return (
         <div className="space-y-6">
-            <header>
-                <h1 className="text-2xl font-semibold text-gray-800">Candidates</h1>
-                <p className="text-sm text-gray-500 mt-1">
-                    Register and manage candidates for each position.
-                </p>
-            </header>
+            {/* Page Header */}
+            <div className="flex items-center justify-between">
+                <h1 className="text-xl font-semibold text-gray-900">Candidates</h1>
+                <button
+                    onClick={() => setShowCreateForm(!showCreateForm)}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition"
+                >
+                    <PlusIcon />
+                    Add Candidate
+                </button>
+            </div>
 
-            {(error || successMessage) && (
-                <section>
-                    {error && (
-                        <p className="text-sm text-red-600 mb-1">
-                            {error}
-                        </p>
-                    )}
-                    {successMessage && (
-                        <p className="text-sm text-green-600">
-                            {successMessage}
-                        </p>
-                    )}
-                </section>
+            {/* Error / Success Messages */}
+            {error && (
+                <div className="bg-red-50 rounded-xl p-4 border border-red-100">
+                    <p className="text-sm text-red-600">{error}</p>
+                </div>
+            )}
+            {successMessage && (
+                <div className="bg-green-50 rounded-xl p-4 border border-green-100">
+                    <p className="text-sm text-green-600">{successMessage}</p>
+                </div>
             )}
 
-            {/* Filters and create form */}
-            <section className="border rounded-lg p-4 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div className="flex flex-col">
-                        <label className="text-xs font-medium text-gray-600 mb-1" htmlFor="election_select">
-                            Election
-                        </label>
+            {/* Stat Cards */}
+            <section>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="bg-gradient-to-br h-35 from-blue-600 to-blue-600 rounded-xl p-5 text-white relative overflow-hidden">
+                        <div className="absolute top-4 right-4 opacity-20">
+                            <UsersIcon />
+                        </div>
+                        <div className="flex items-center gap-3 mb-3">
+                            <p className="text-sm text-white/80">Registered candidates</p>
+                        </div>
+                        <h3 className="font-semibold text-lg">Candidates</h3>
+                        <p className="text-3xl font-bold mt-2">{candidates.length}</p>
+                    </div>
+
+                    <div className="bg-gradient-to-br h-35 from-cyan-600 to-cyan-600 rounded-xl p-5 text-white relative overflow-hidden">
+                        <div className="absolute top-4 right-4 opacity-20">
+                            <ListIcon />
+                        </div>
+                        <div className="flex items-center gap-3 mb-3">
+                            <p className="text-sm text-white/80">Positions loaded</p>
+                        </div>
+                        <h3 className="font-semibold text-lg">Positions</h3>
+                        <p className="text-3xl font-bold mt-2">{positions.length}</p>
+                    </div>
+
+                    <div className="bg-gradient-to-br h-35 from-blue-900 to-blue-900 rounded-xl p-5 text-white relative overflow-hidden">
+                        <div className="absolute top-4 right-4 opacity-20">
+                            <UsersIcon />
+                        </div>
+                        <div className="flex items-center gap-3 mb-3">
+                            <p className="text-sm text-white/80">Students loaded</p>
+                        </div>
+                        <h3 className="font-semibold text-lg">Students</h3>
+                        <p className="text-3xl font-bold mt-2">{students.length}</p>
+                    </div>
+                </div>
+            </section>
+
+            {/* Filters */}
+            <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                        <h2 className="text-base font-medium text-gray-900">Select Election & Position</h2>
+                        <p className="text-xs text-gray-500 mt-1">Candidates are tied to a position within an election.</p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full md:w-auto">
                         <select
                             id="election_select"
                             value={selectedElectionId ?? ''}
                             onChange={(e) =>
                                 setSelectedElectionId(e.target.value ? Number(e.target.value) : null)
                             }
-                            className="border rounded-md px-3 py-2 text-sm"
+                            className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full md:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
                             {elections.length === 0 && <option value="">No elections available</option>}
                             {elections.length > 0 && <option value="">Select election…</option>}
@@ -240,19 +325,14 @@ export default function CandidatesPage() {
                                 </option>
                             ))}
                         </select>
-                    </div>
 
-                    <div className="flex flex-col">
-                        <label className="text-xs font-medium text-gray-600 mb-1" htmlFor="position_select">
-                            Position
-                        </label>
                         <select
                             id="position_select"
                             value={selectedPositionId ?? ''}
                             onChange={(e) =>
                                 setSelectedPositionId(e.target.value ? Number(e.target.value) : null)
                             }
-                            className="border rounded-md px-3 py-2 text-sm"
+                            className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full md:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             disabled={!selectedElectionId || positions.length === 0}
                         >
                             {!selectedElectionId && <option value="">Select an election first</option>}
@@ -268,42 +348,70 @@ export default function CandidatesPage() {
                         </select>
                     </div>
                 </div>
+            </section>
 
-                <div className="border-t border-gray-100 pt-4 mt-2">
-                    <h2 className="font-medium text-gray-800 mb-2">Add Candidate</h2>
-                    <p className="text-xs text-gray-500 mb-3">
-                        Choose a student and position to register a candidate. Optional: add a photo URL.
-                    </p>
+            {/* Filters and create form */}
+            {showCreateForm && (
+                <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                    <h2 className="text-base font-medium text-gray-900 mb-4">Add Candidate</h2>
                     <form
                         onSubmit={handleCreateCandidate}
-                        className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end"
+                        className="flex flex-col md:flex-row gap-4 items-end"
                     >
-                        <div className="flex flex-col">
-                            <label className="text-xs font-medium text-gray-600 mb-1" htmlFor="student_select">
+                        <div className="flex-1">
+                            <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="student_search">
                                 Student
                             </label>
-                            <select
-                                id="student_select"
-                                value={selectedStudentId ?? ''}
-                                onChange={(e) =>
-                                    setSelectedStudentId(e.target.value ? Number(e.target.value) : null)
-                                }
-                                className="border rounded-md px-3 py-2 text-sm"
-                            >
-                                {students.length === 0 && (
-                                    <option value="">No students available</option>
+                            <div className="relative">
+                                <input
+                                    id="student_search"
+                                    type="text"
+                                    value={studentQuery}
+                                    onChange={(e) => {
+                                        setStudentQuery(e.target.value);
+                                        setStudentDropdownOpen(true);
+                                        setSelectedStudentId(null);
+                                    }}
+                                    onFocus={() => setStudentDropdownOpen(true)}
+                                    onBlur={() => {
+                                        window.setTimeout(() => setStudentDropdownOpen(false), 150);
+                                    }}
+                                    placeholder="Type student name or ID..."
+                                    disabled={students.length === 0}
+                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
+                                />
+
+                                {studentDropdownOpen && students.length > 0 && (
+                                    <div className="absolute z-10 mt-2 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-64 overflow-auto">
+                                        {filteredStudentOptions.length === 0 ? (
+                                            <div className="px-3 py-2 text-sm text-gray-500">No matches</div>
+                                        ) : (
+                                            filteredStudentOptions.slice(0, 25).map((student) => (
+                                                <button
+                                                    key={student.id}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setSelectedStudentId(student.id);
+                                                        setStudentQuery(`${student.full_name} (${student.student_id})`);
+                                                        setStudentDropdownOpen(false);
+                                                    }}
+                                                    className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition"
+                                                >
+                                                    <span className="font-medium text-gray-900">{student.full_name}</span>{' '}
+                                                    <span className="text-gray-500">({student.student_id})</span>
+                                                </button>
+                                            ))
+                                        )}
+                                    </div>
                                 )}
-                                {students.length > 0 && <option value="">Select student…</option>}
-                                {students.map((student) => (
-                                    <option key={student.id} value={student.id}>
-                                        {student.full_name} ({student.student_id})
-                                    </option>
-                                ))}
-                            </select>
+                            </div>
+                            {!selectedStudentId && studentQuery.trim() && (
+                                <p className="text-xs text-gray-500 mt-1">Select a student from the list.</p>
+                            )}
                         </div>
 
-                        <div className="flex flex-col">
-                            <label className="text-xs font-medium text-gray-600 mb-1" htmlFor="photo_url">
+                        <div className="flex-1">
+                            <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="photo_url">
                                 Photo URL (optional)
                             </label>
                             <input
@@ -311,7 +419,7 @@ export default function CandidatesPage() {
                                 type="url"
                                 value={photoUrl}
                                 onChange={(e) => setPhotoUrl(e.target.value)}
-                                className="border rounded-md px-3 py-2 text-sm"
+                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 placeholder="https://..."
                             />
                         </div>
@@ -319,71 +427,90 @@ export default function CandidatesPage() {
                         <button
                             type="submit"
                             disabled={loading || !selectedElectionId || !selectedPositionId}
-                            className="px-4 py-2 bg-kosa-primary hover:bg-kosa-primary/90 text-white text-sm rounded-md disabled:opacity-60"
+                            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-60 transition"
                         >
-                            {loading ? 'Saving…' : 'Add Candidate'}
+                            {loading ? 'Saving…' : 'Submit'}
                         </button>
                     </form>
-                </div>
-            </section>
+                </section>
+            )}
 
             {/* Candidates table */}
-            <section className="border rounded-lg p-4">
-                <div className="flex items-center justify-between mb-3">
-                    <h2 className="font-medium text-gray-800">
-                        Candidates
-                        {selectedElection && selectedPosition
-                            ? ` for ${selectedPosition.name} – ${selectedElection.name} (${selectedElection.year})`
-                            : ''}
-                    </h2>
-                    {loading && <span className="text-xs text-gray-500">Loading…</span>}
+            <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between p-5 border-b border-gray-100">
+                    <div className="flex items-center gap-4">
+                        <h2 className="text-base font-medium text-gray-900">
+                            Candidates
+                            {selectedElection && selectedPosition
+                                ? ` for ${selectedPosition.name} – ${selectedElection.name} (${selectedElection.year})`
+                                : ''}
+                        </h2>
+                        {loading && <span className="text-xs text-gray-500">Loading…</span>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="text"
+                            placeholder="Search by name or ID..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-64 border border-blue-200 border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        {searchTerm && (
+                            <span className="text-xs text-gray-500">
+                                {filteredCandidates.length} of {candidates.length}
+                            </span>
+                        )}
+                    </div>
                 </div>
+
                 <div className="overflow-x-auto">
                     <table className="min-w-full text-sm">
                         <thead>
-                        <tr className="border-b bg-gray-50">
-                            <th className="text-left px-3 py-2">Student</th>
-                            <th className="text-left px-3 py-2">Student ID</th>
-                            <th className="text-left px-3 py-2">Photo</th>
-                        </tr>
+                            <tr className="bg-blue-100 border-b border-gray-100">
+                                <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Student</th>
+                                <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Student ID</th>
+                                <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Photo</th>
+                            </tr>
                         </thead>
-                        <tbody>
-                        {candidates.map((candidate) => {
-                            const student = students.find((s) => s.id === candidate.student);
-                            return (
-                                <tr key={candidate.id} className="border-b last:border-b-0">
-                                    <td className="px-3 py-2">
-                                        {candidate.student_name || student?.full_name || '—'}
-                                    </td>
-                                    <td className="px-3 py-2">
-                                        {student?.student_id || '—'}
-                                    </td>
-                                    <td className="px-3 py-2">
-                                        {candidate.photo_url ? (
-                                            <a
-                                                href={candidate.photo_url}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="text-blue-600 hover:underline"
-                                            >
-                                                View
-                                            </a>
-                                        ) : (
-                                            <span className="text-gray-400 text-xs">No photo</span>
-                                        )}
+                        <tbody className="divide-y divide-gray-100">
+                            {filteredCandidates.map((candidate) => {
+                                const student = students.find((s) => s.id === candidate.student);
+                                return (
+                                    <tr key={candidate.id} className="hover:bg-gray-50 transition odd:bg-white even:bg-blue-50">
+                                        <td className="px-5 py-2 font-medium text-gray-900">
+                                            {candidate.student_name || student?.full_name || '—'}
+                                        </td>
+                                        <td className="px-5 py-2 text-gray-700">
+                                            {student?.student_id || '—'}
+                                        </td>
+                                        <td className="px-5 py-2">
+                                            {candidate.photo_url ? (
+                                                <a
+                                                    href={candidate.photo_url}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="text-blue-600 hover:underline"
+                                                >
+                                                    View
+                                                </a>
+                                            ) : (
+                                                <span className="text-gray-400 text-xs">No photo</span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                            {!loading && filteredCandidates.length === 0 && (
+                                <tr>
+                                    <td colSpan={3} className="px-5 py-8 text-center text-gray-400">
+                                        {searchTerm
+                                            ? 'No candidates match your search.'
+                                            : (selectedPosition
+                                                ? 'No candidates registered for this position yet.'
+                                                : 'Select an election and position to view candidates.')}
                                     </td>
                                 </tr>
-                            );
-                        })}
-                        {!loading && candidates.length === 0 && (
-                            <tr>
-                                <td colSpan={3} className="px-3 py-4 text-center text-gray-400">
-                                    {selectedPosition
-                                        ? 'No candidates registered for this position yet.'
-                                        : 'Select an election and position to view candidates.'}
-                                </td>
-                            </tr>
-                        )}
+                            )}
                         </tbody>
                     </table>
                 </div>

@@ -14,7 +14,7 @@ from rest_framework.views import APIView
 
 from .authentication import VoterAuthentication
 from .models import Election, Position, Candidate, Vote, Student
-from .permissions import IsStaffOrSuperUser, IsActivatorOrSuperUser
+from .permissions import IsStaffOrSuperUser, IsActivatorOrSuperUser, IsStaffOrSuperUserOrReadOnlyActivator, IsSuperUser
 from .serializers import (
     StudentSerializer,
     BulkStudentUploadSerializer,
@@ -22,10 +22,23 @@ from .serializers import (
     PositionSerializer,
     CandidateSerializer,
     MultiVoteSerializer,
+    UserSerializer,
 )
 from .utils import generate_voter_hmac
 
 User = get_user_model()
+
+
+class UserViewSet(viewsets.ModelViewSet):
+    """
+    Superuser-only: manage admin users (staff, activator, superuser).
+    """
+    queryset = User.objects.all().order_by('-date_joined')
+    serializer_class = UserSerializer
+    permission_classes = [IsSuperUser]
+
+    def get_queryset(self):
+        return User.objects.all().order_by('-date_joined')
 
 
 class ElectionViewSet(viewsets.ReadOnlyModelViewSet):
@@ -49,7 +62,16 @@ class StudentViewSet(viewsets.ModelViewSet):
     """
     queryset = Student.objects.all()
     serializer_class = StudentSerializer
-    permission_classes = [IsStaffOrSuperUser, IsActivatorOrSuperUser]
+    permission_classes = [IsStaffOrSuperUserOrReadOnlyActivator]
+
+    def destroy(self, request, *args, **kwargs):
+        student = self.get_object()
+        if student.has_voted:
+            return Response(
+                {"detail": "Cannot delete a student who has already voted."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
 
 
 class BulkStudentUploadView(APIView):
@@ -520,18 +542,18 @@ class StudentVoterLoginView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        # Check if student has already voted (check this first since voting also deactivates the student)
+        if student.has_voted:
+            return Response(
+                {"detail": "Student has already voted."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
         # Check if student is active
         if not student.is_active:
             return Response(
                 {"detail": "Student is not activated to vote."},
                 status=status.HTTP_403_FORBIDDEN,
-            )
-
-        # Check if student has already voted
-        if student.has_voted:
-            return Response(
-                {"detail": "Student has already voted."},
-                status=status.HTTP_409_CONFLICT,
             )
 
         # Generate HMAC token

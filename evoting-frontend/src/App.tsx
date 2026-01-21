@@ -10,10 +10,11 @@ import ManageElectionsPage from './pages/admin/ManageElectionsPage';
 import PositionsPage from './pages/admin/PositionsPage';
 import CandidatesPage from './pages/admin/CandidatesPage';
 import ActivationsPage from './pages/admin/ActivationsPage';
+import UsersPage from './pages/admin/UsersPage';
 import type {JSX} from "react";
-import StudentLoginPage from "./pages/StudentLoginPage.tsx";
-import VotingPage from "./pages/VotingPage.tsx";
-import ResultsPage from "./pages/admin/ResultsPage.tsx";
+import StudentLoginPage from "./pages/StudentLoginPage";
+import VotingPage from "./pages/VotingPage";
+import ResultsPage from "./pages/admin/ResultsPage";
 
 function ProtectedRoute({children, allowedRoles}: { children: JSX.Element; allowedRoles: Exclude<UserRole, null>[] }) {
     const {user} = useAuth();
@@ -23,7 +24,8 @@ function ProtectedRoute({children, allowedRoles}: { children: JSX.Element; allow
 
     // Only allow access if the user's role is in the allowed list
     if (!user.role || !allowedRoles.includes(user.role)) {
-        return <Navigate to="/admin/dashboard" replace/>;
+        const fallback = user.role === 'activator' ? '/admin/activations' : '/admin/dashboard';
+        return <Navigate to={fallback} replace/>;
     }
 
     return children;
@@ -41,7 +43,14 @@ function App() {
                     {/* All admin pages live under /admin */}
                     <Route path="/admin" element={<AdminLayout/>}>
                         <Route index element={<Navigate to="/admin/dashboard" replace/>}/>
-                        <Route path="dashboard" element={<Dashboard/>}/>
+                        <Route
+                            path="dashboard"
+                            element={
+                                <ProtectedRoute allowedRoles={['superuser', 'staff']}>
+                                    <Dashboard/>
+                                </ProtectedRoute>
+                            }
+                        />
 
                         <Route
                             path="students"
@@ -101,9 +110,16 @@ function App() {
                                    <ProtectedRoute allowedRoles={['superuser']}>
                                        <ResultsPage/>
                                    </ProtectedRoute>
-
-
                                }/>
+
+                        <Route
+                            path="users"
+                            element={
+                                <ProtectedRoute allowedRoles={['superuser']}>
+                                    <UsersPage/>
+                                </ProtectedRoute>
+                            }
+                        />
 
                         {/* Fallback */}
                         <Route path="*" element={<Navigate to="/admin/dashboard" replace/>}/>

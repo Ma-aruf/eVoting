@@ -19,6 +19,7 @@ from .views import (
     PositionStatsView,
     ElectionResultsView,
     CandidatesForPositionView,
+    UserViewSet,
 )
 
 router = DefaultRouter()
@@ -26,6 +27,7 @@ router.register(r"elections", ElectionViewSet, basename="election")
 router.register(r"students", StudentViewSet, basename="student")
 router.register(r"positions", PositionViewSet, basename="position")
 router.register(r"candidates", CandidateViewSet, basename="candidate")
+router.register(r"users", UserViewSet, basename="user")
 
 
 

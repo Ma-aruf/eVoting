@@ -10,6 +10,8 @@ interface Student {
     is_active: boolean;
 }
 
+const CLASS_OPTIONS = ['Form 1', 'Form 2', 'Form 3'];
+
 const UsersIcon = () => (
     <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
@@ -37,6 +39,20 @@ const PlusIcon = () => (
     </svg>
 );
 
+const EditIcon = () => (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+    </svg>
+);
+
+const TrashIcon = () => (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+    </svg>
+);
+
 export default function StudentsPage() {
     const [students, setStudents] = useState<Student[]>([]);
     const [loading, setLoading] = useState(false);
@@ -51,8 +67,16 @@ export default function StudentsPage() {
     const [fullName, setFullName] = useState('');
     const [className, setClassName] = useState('');
 
+    // Edit modal state
+    const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+    const [editFullName, setEditFullName] = useState('');
+    const [editClassName, setEditClassName] = useState('');
+
     const [file, setFile] = useState<File | null>(null);
     const [uploadResult, setUploadResult] = useState<string | null>(null);
+
+    // Search state
+    const [searchTerm, setSearchTerm] = useState('');
 
     const fetchStudents = async () => {
         setLoading(true);
@@ -83,7 +107,7 @@ export default function StudentsPage() {
         setError(null);
         setSuccessMessage(null);
 
-        if (!studentId.trim() || !fullName.trim() || !className.trim()) {
+        if (!studentId.trim() || !fullName.trim() || !className) {
             setError('Please fill in all required fields.');
             return;
         }
@@ -93,7 +117,7 @@ export default function StudentsPage() {
             await api.post('api/students/', {
                 student_id: studentId.trim(),
                 full_name: fullName.trim(),
-                class_name: className.trim(),
+                class_name: className,
             });
 
             setSuccessMessage('Student added successfully.');
@@ -130,8 +154,70 @@ export default function StudentsPage() {
         }
     };
 
+    const openEditModal = (student: Student) => {
+        setEditingStudent(student);
+        setEditFullName(student.full_name);
+        setEditClassName(student.class_name);
+    };
+
+    const handleEditStudent = async (e: FormEvent) => {
+        e.preventDefault();
+        if (!editingStudent) return;
+        setError(null);
+        setSuccessMessage(null);
+
+        try {
+            setLoading(true);
+            await api.patch(`api/students/${editingStudent.id}/`, {
+                full_name: editFullName.trim(),
+                class_name: editClassName,
+            });
+            // Update student in place to maintain order
+            setStudents(prev => prev.map(s =>
+                s.id === editingStudent.id
+                    ? { ...s, full_name: editFullName.trim(), class_name: editClassName }
+                    : s
+            ));
+            setSuccessMessage('Student updated successfully.');
+            setEditingStudent(null);
+        } catch (err: any) {
+            const detail = err.response?.data?.detail;
+            setError(detail || 'Failed to update student.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDeleteStudent = async (student: Student) => {
+        if (student.has_voted) {
+            setError('Cannot delete a student who has already voted.');
+            return;
+        }
+        if (!confirm(`Are you sure you want to delete ${student.full_name}?`)) return;
+
+        setError(null);
+        setSuccessMessage(null);
+        try {
+            setLoading(true);
+            await api.delete(`api/students/${student.id}/`);
+            setSuccessMessage('Student deleted successfully.');
+            await fetchStudents();
+        } catch (err: any) {
+            const detail = err.response?.data?.detail;
+            setError(detail || 'Failed to delete student.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const activeCount = students.filter(s => s.is_active).length;
     const votedCount = students.filter(s => s.has_voted).length;
+
+    // Filter students by search term
+    const filteredStudents = students.filter(s =>
+        s.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        s.student_id.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
     return (
         <div className="space-y-6">
@@ -196,15 +282,18 @@ export default function StudentsPage() {
                             <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="class_name">
                                 Class
                             </label>
-                            <input
+                            <select
                                 id="class_name"
-                                type="text"
                                 value={className}
                                 onChange={(e) => setClassName(e.target.value)}
                                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                placeholder="e.g. SHS 2 Science 1"
                                 required
-                            />
+                            >
+                                <option value="">Select class...</option>
+                                {CLASS_OPTIONS.map(opt => (
+                                    <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                            </select>
                         </div>
                         <button
                             type="submit"
@@ -292,8 +381,24 @@ export default function StudentsPage() {
             {/* Students Table */}
             <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="flex items-center justify-between p-5 border-b border-gray-100">
-                    <h2 className="text-base font-medium text-gray-900">All Students</h2>
-                    {loading && <span className="text-xs text-gray-500">Loading…</span>}
+                    <div className="flex items-center gap-4">
+                        <h2 className="text-base font-medium text-gray-900">All Students</h2>
+                        {loading && <span className="text-xs text-gray-500">Loading…</span>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="text"
+                            placeholder="Search by name or ID..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-64 border border-blue-200 border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        {searchTerm && (
+                            <span className="text-xs text-gray-500">
+                                {filteredStudents.length} of {students.length}
+                            </span>
+                        )}
+                    </div>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="min-w-full text-sm">
@@ -304,10 +409,11 @@ export default function StudentsPage() {
                                 <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Class</th>
                                 <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Active</th>
                                 <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Has Voted</th>
+                                <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y  divide-gray-100">
-                            {students.map((s) => (
+                            {filteredStudents.map((s) => (
                                 <tr key={s.id} className="hover:bg-gray-50 transition odd:bg-white even:bg-blue-50 ">
                                     <td className="px-5 py-2 font-medium text-gray-900">{s.student_id}</td>
                                     <td className="px-5 py-2 text-gray-700">{s.full_name}</td>
@@ -317,17 +423,36 @@ export default function StudentsPage() {
                                             {s.is_active ? 'Yes' : 'No'}
                                         </span>
                                     </td>
-                                    <td className="px-5 ">
+                                    <td className="px-5 py-2">
                                         <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${s.has_voted ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
                                             {s.has_voted ? 'Yes' : 'No'}
                                         </span>
                                     </td>
+                                    <td className="px-5 py-2">
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => openEditModal(s)}
+                                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                                title="Edit student"
+                                            >
+                                                <EditIcon />
+                                            </button>
+                                            <button
+                                                onClick={() => handleDeleteStudent(s)}
+                                                disabled={s.has_voted}
+                                                className={`p-1.5 rounded-lg transition ${s.has_voted ? 'text-gray-300 cursor-not-allowed' : 'text-red-600 hover:bg-red-50'}`}
+                                                title={s.has_voted ? 'Cannot delete - student has voted' : 'Delete student'}
+                                            >
+                                                <TrashIcon />
+                                            </button>
+                                        </div>
+                                    </td>
                                 </tr>
                             ))}
-                            {!loading && students.length === 0 && (
+                            {!loading && filteredStudents.length === 0 && (
                                 <tr>
-                                    <td colSpan={5} className="px-5 py-8 text-center text-gray-400">
-                                        No students found.
+                                    <td colSpan={6} className="px-5 py-8 text-center text-gray-400">
+                                        {searchTerm ? 'No students match your search.' : 'No students found.'}
                                     </td>
                                 </tr>
                             )}
@@ -335,6 +460,74 @@ export default function StudentsPage() {
                     </table>
                 </div>
             </section>
+
+            {/* Edit Modal */}
+            {editingStudent && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-6">
+                        <h2 className="text-lg font-semibold text-gray-900 mb-4">Edit Student</h2>
+                        <form onSubmit={handleEditStudent} className="space-y-4">
+                            <div>
+                                <label className="text-xs font-medium text-gray-600 mb-1 block">
+                                    Student ID
+                                </label>
+                                <input
+                                    type="text"
+                                    value={editingStudent.student_id}
+                                    disabled
+                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-500"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="edit_full_name">
+                                    Full Name
+                                </label>
+                                <input
+                                    id="edit_full_name"
+                                    type="text"
+                                    value={editFullName}
+                                    onChange={(e) => setEditFullName(e.target.value)}
+                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="edit_class_name">
+                                    Class
+                                </label>
+                                <select
+                                    id="edit_class_name"
+                                    value={editClassName}
+                                    onChange={(e) => setEditClassName(e.target.value)}
+                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    required
+                                >
+                                    <option value="">Select class...</option>
+                                    {CLASS_OPTIONS.map(opt => (
+                                        <option key={opt} value={opt}>{opt}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="flex justify-end gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setEditingStudent(null)}
+                                    className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-60 transition"
+                                >
+                                    {loading ? 'Saving…' : 'Save Changes'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

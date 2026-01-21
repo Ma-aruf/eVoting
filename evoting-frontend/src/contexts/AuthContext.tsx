@@ -77,6 +77,10 @@ export function AuthProvider({children}: { children: ReactNode }) {
                 localStorage.setItem(SESSION_KEY, JSON.stringify(userData));
                 setUser(userData);
                 setIsAuthenticated(true);
+
+                const target = role === 'activator' ? '/admin/activations' : '/admin/dashboard';
+                navigate(target);
+                return;
             } catch (err) {
                 // If profile fetch fails, fallback to username-based role
                 const role = deriveRoleFromUsername(username);
@@ -87,9 +91,11 @@ export function AuthProvider({children}: { children: ReactNode }) {
                 localStorage.setItem(SESSION_KEY, JSON.stringify(userData));
                 setUser(userData);
                 setIsAuthenticated(true);
-            }
 
-            navigate('/admin/dashboard');
+                const target = role === 'activator' ? '/admin/activations' : '/admin/dashboard';
+                navigate(target);
+                return;
+            }
         } catch (err: any) {
             // Clear any partial state on login failure
             localStorage.removeItem('access_token');
