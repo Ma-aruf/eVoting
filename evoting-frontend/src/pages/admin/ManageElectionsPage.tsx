@@ -10,18 +10,28 @@ interface Election {
     is_active: boolean;
 }
 
+interface ListResponse<T> {
+    count?: number;
+    results?: T[];
+}
+
 export default function ManageElectionsPage() {
     const [elections, setElections] = useState<Election[]>([]);
     const [loading, setLoading] = useState(false);
+    const [actionElectionId, setActionElectionId] = useState<number | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+    const activeElection = elections.find((e) => e.is_active) ?? null;
 
     const fetchElections = async () => {
         setLoading(true);
         setError(null);
         try {
-            const res = await api.get<Election[]>('api/elections/manage/');
-            setElections(res.data);
+            const res = await api.get<ListResponse<Election> | Election[]>('api/elections/manage/');
+            const data = res.data;
+            const list = Array.isArray(data) ? data : (data.results ?? []);
+            setElections(list);
         } catch (err) {
             console.error(err);
             setError('Failed to load elections.');
@@ -37,9 +47,14 @@ export default function ManageElectionsPage() {
     const handleToggle = async (election: Election, nextActive: boolean) => {
         setError(null);
         setSuccessMessage(null);
+
+        const verb = nextActive ? 'set active' : 'stop';
+        const ok = window.confirm(`Are you sure you want to ${verb} "${election.name}"?`);
+        if (!ok) return;
+
         try {
-            setLoading(true);
-            await api.post('api/elections/manage/', {
+            setActionElectionId(election.id);
+            await api.patch('api/elections/manage/', {
                 election_id: election.id,
                 is_active: nextActive,
             });
@@ -54,7 +69,7 @@ export default function ManageElectionsPage() {
             const detail = err.response?.data?.detail;
             setError(detail || 'Failed to update election status.');
         } finally {
-            setLoading(false);
+            setActionElectionId(null);
         }
     };
 
@@ -75,6 +90,32 @@ export default function ManageElectionsPage() {
                     Start or stop elections by toggling their active status. Only one election can be active at a time.
                 </p>
             </header>
+
+            <section className="border rounded-lg p-4 bg-white">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                        <p className="text-xs uppercase tracking-wide text-gray-500">Currently Active</p>
+                        <p className="text-lg font-semibold text-gray-900">
+                            {activeElection ? activeElection.name : 'No active election'}
+                        </p>
+                        {activeElection && (
+                            <p className="text-sm text-gray-600">
+                                {formatDateTime(activeElection.start_time)} – {formatDateTime(activeElection.end_time)}
+                            </p>
+                        )}
+                    </div>
+                    {activeElection && (
+                        <button
+                            type="button"
+                            disabled={actionElectionId === activeElection.id}
+                            onClick={() => handleToggle(activeElection, false)}
+                            className="px-3 py-2 rounded-md text-sm font-medium bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {actionElectionId === activeElection.id ? 'Stopping…' : 'Stop Active Election'}
+                        </button>
+                    )}
+                </div>
+            </section>
 
             {(error || successMessage) && (
                 <section>
@@ -110,18 +151,23 @@ export default function ManageElectionsPage() {
                         </thead>
                         <tbody>
                         {elections.map((election) => (
-                            <tr key={election.id} className="border-b last:border-b-0">
+                            <tr
+                                key={election.id}
+                                className={`border-b last:border-b-0 ${election.is_active ? 'bg-green-50' : ''}`}
+                            >
                                 <td className="px-3 py-2">{election.name}</td>
                                 <td className="px-3 py-2">{election.year}</td>
                                 <td className="px-3 py-2">{formatDateTime(election.start_time)}</td>
                                 <td className="px-3 py-2">{formatDateTime(election.end_time)}</td>
                                 <td className="px-3 py-2">
                                     {election.is_active ? (
-                                        <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">
+                                        <span
+                                            className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">
                                             Active
                                         </span>
                                     ) : (
-                                        <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                                        <span
+                                            className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
                                             Inactive
                                         </span>
                                     )}
@@ -129,15 +175,17 @@ export default function ManageElectionsPage() {
                                 <td className="px-3 py-2">
                                     <button
                                         type="button"
-                                        disabled={loading}
+                                        disabled={actionElectionId !== null}
                                         onClick={() => handleToggle(election, !election.is_active)}
                                         className={`px-3 py-1 rounded-md text-xs font-medium ${
                                             election.is_active
                                                 ? 'bg-red-600 hover:bg-red-700 text-white'
-                                                : 'bg-kosa-primary hover:bg-kosa-primary/90 text-white'
-                                        } disabled:opacity-60`}
+                                                : 'bg-green-600 hover:bg-green-700 text-white'
+                                        } disabled:opacity-50 disabled:cursor-not-allowed`}
                                     >
-                                        {election.is_active ? 'Stop Election' : 'Set Active'}
+                                        {actionElectionId === election.id
+                                            ? (election.is_active ? 'Stopping…' : 'Activating…')
+                                            : (election.is_active ? 'Stop Election' : 'Set Active')}
                                     </button>
                                 </td>
                             </tr>

@@ -1,17 +1,20 @@
-from rest_framework import viewsets, status
-from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework.parsers import MultiPartParser, FormParser
-from django.db import transaction
-from rest_framework.exceptions import ParseError
-from django.utils import timezone
 from io import BytesIO
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from django.contrib.auth import get_user_model
-from openpyxl import load_workbook
 
+from django.contrib.auth import get_user_model
+from django.db import transaction
+from django.utils import timezone
+from openpyxl import load_workbook
+from rest_framework import viewsets, status
+from rest_framework.exceptions import ParseError
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.permissions import AllowAny
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from .authentication import VoterAuthentication
 from .models import Election, Position, Candidate, Vote, Student
+from .permissions import IsStaffOrSuperUser, IsActivatorOrSuperUser
 from .serializers import (
     StudentSerializer,
     BulkStudentUploadSerializer,
@@ -20,20 +23,22 @@ from .serializers import (
     CandidateSerializer,
     MultiVoteSerializer,
 )
-from .permissions import IsStaffOrSuperUser, IsActivatorOrSuperUser
-from .authentication import VoterAuthentication
+from .utils import generate_voter_hmac
 
 User = get_user_model()
 
 
 class ElectionViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    Public, read-only list of active elections.
-    Write operations are handled via separate staff-protected endpoints.
-    """
-    queryset = Election.objects.filter(is_active=True)
+    queryset = Election.objects.all()  #
     serializer_class = ElectionSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Optional: allow filtering by is_active
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            return Election.objects.filter(is_active=is_active.lower() == 'true')
+        return Election.objects.all()
 
 
 class StudentViewSet(viewsets.ModelViewSet):
@@ -44,7 +49,7 @@ class StudentViewSet(viewsets.ModelViewSet):
     """
     queryset = Student.objects.all()
     serializer_class = StudentSerializer
-    permission_classes = [IsStaffOrSuperUser]
+    permission_classes = [IsStaffOrSuperUser, IsActivatorOrSuperUser]
 
 
 class BulkStudentUploadView(APIView):
@@ -83,17 +88,20 @@ class BulkStudentUploadView(APIView):
 
         rows_to_create = []
         file_ids = set()
+
         for row in ws.iter_rows(min_row=2, values_only=True):
-            student_id = (row[header_map["student_id"]] or "").strip()
-            full_name = (row[header_map["full_name"]] or "").strip()
-            class_name = (row[header_map["class_name"]] or "").strip()
+            # Force everything to string right away (handles int/float/None nicely)
+            get_str = lambda idx: str(row[idx]).strip() if row[idx] is not None else ""
+
+            student_id = get_str(header_map["student_id"])
+            full_name = get_str(header_map["full_name"])
+            class_name = get_str(header_map["class_name"])
 
             if not student_id or not full_name or not class_name:
                 continue  # skip incomplete rows
 
             if student_id in file_ids:
-                # skip duplicates inside the same file
-                continue
+                continue  # skip duplicates in the same file
             file_ids.add(student_id)
 
             rows_to_create.append(
@@ -194,6 +202,8 @@ class ElectionManageView(APIView):
     """
     Staff or superuser can start/stop elections by toggling `is_active`.
     """
+
+    print("Inside ElectionManageView")
     permission_classes = [IsStaffOrSuperUser]
 
     def get(self, request):
@@ -202,11 +212,12 @@ class ElectionManageView(APIView):
         serializer = ElectionSerializer(elections, many=True)
         return Response(serializer.data)
 
-    def post(self, request):
+    def patch(self, request):
         """
         Accepts JSON: { "election_id": 1, "is_active": true }
         When setting an election active, all other elections are deactivated.
         """
+        print("Inside post")
         election_id = request.data.get("election_id")
         is_active = request.data.get("is_active")
 
@@ -347,7 +358,7 @@ class MultiVoteView(APIView):
 
                     # Ensure no existing vote for that position by this voter token
                     if Vote.objects.filter(
-                        voter_hash=token, position_id=position_id
+                            voter_hash=token, position_id=position_id
                     ).exists():
                         return Response(
                             {"detail": "Duplicate vote detected for a position."},
@@ -387,7 +398,6 @@ class MultiVoteView(APIView):
         )
 
 
-
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -407,6 +417,8 @@ class StudentActivationView(APIView):
     permission_classes = [IsActivatorOrSuperUser]
 
     def post(self, request):
+        print("INSIDE ACTIVATION VIEW - POST CALLED")  # ← add this
+        print(request.path, request.method)
         student_id = request.data.get("student_id")
         if not student_id:
             return Response(
@@ -429,10 +441,303 @@ class StudentActivationView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Only toggle the is_active flag; do not expose other fields
-        student.is_active = bool(is_active)
+        # Check current status for better message
+        current_status = student.is_active
+        new_status = bool(is_active)
+
+        if current_status == new_status:
+            status_text = "active" if current_status else "inactive"
+            return Response(
+                {"detail": f"Student is already {status_text}."},
+                status=status.HTTP_200_OK,
+            )
+
+        # Only toggle the is_active flag
+        student.is_active = new_status
         student.save(update_fields=["is_active"])
+
+        status_text = "activated" if new_status else "deactivated"
         return Response(
-            {"detail": "Student activation updated."},
+            {"detail": f"Student {status_text} successfully."},
             status=status.HTTP_200_OK,
         )
+
+
+class ElectionCreateView(APIView):
+    """
+    Staff or superuser can create a new election.
+    """
+    permission_classes = [IsStaffOrSuperUser]
+
+    def post(self, request):
+        serializer = ElectionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        election = serializer.save()
+        return Response(ElectionSerializer(election).data, status=status.HTTP_201_CREATED)
+
+
+class StudentVoterLoginView(APIView):
+    """
+    Generate HMAC token for active students who haven't voted yet.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        student_id = request.data.get("student_id")
+
+        if not student_id:
+            return Response(
+                {"detail": "student_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check if there's an active election
+        active_election = Election.objects.filter(is_active=True).first()
+        if not active_election:
+            return Response(
+                {"detail": "No active election at this time."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Check if election is within voting window
+        now = timezone.now()
+        if now < active_election.start_time:
+            return Response(
+                {"detail": "Voting has not started yet."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if now > active_election.end_time:
+            return Response(
+                {"detail": "Voting has ended."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            student = Student.objects.get(student_id=student_id)
+        except Student.DoesNotExist:
+            return Response(
+                {"detail": "Student not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Check if student is active
+        if not student.is_active:
+            return Response(
+                {"detail": "Student is not activated to vote."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Check if student has already voted
+        if student.has_voted:
+            return Response(
+                {"detail": "Student has already voted."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # Generate HMAC token
+        token = generate_voter_hmac(student.student_id)
+
+        return Response({
+            "token": token,
+            "student": {
+                "id": student.id,
+                "student_id": student.student_id,
+                "full_name": student.full_name,
+                "class_name": student.class_name,
+            },
+            "election": {
+                "id": active_election.id,
+                "name": active_election.name,
+                "year": active_election.year,
+            }
+        }, status=status.HTTP_200_OK)
+
+
+class ElectionStatsView(APIView):
+    """Get basic election statistics"""
+    permission_classes = [IsStaffOrSuperUser]
+
+    def get(self, request, election_id):
+        try:
+            election = Election.objects.get(pk=election_id)
+        except Election.DoesNotExist:
+            return Response(
+                {"detail": "Election not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        total_voters = Student.objects.count()
+        voters_voted = Student.objects.filter(has_voted=True).count()
+
+        return Response({
+            "election_id": election.id,
+            "election_name": election.name,
+            "total_voters": total_voters,
+            "voters_voted": voters_voted,
+            "turnout_percentage": round((voters_voted / total_voters * 100), 2) if total_voters > 0 else 0.0
+        })
+
+
+class PositionStatsView(APIView):
+    """Get statistics for a specific position including skipped votes"""
+    permission_classes = [IsStaffOrSuperUser]
+
+    def get(self, request):
+        position_id = request.query_params.get("position_id")
+        if not position_id:
+            return Response(
+                {"detail": "position_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            position = Position.objects.get(pk=position_id)
+        except Position.DoesNotExist:
+            return Response(
+                {"detail": "Position not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        election = position.election
+
+        # Unique voters who cast any vote in this election
+        unique_voters = Vote.objects.filter(election=election).values('voter_hash').distinct().count()
+
+        # Votes actually cast for this position
+        position_votes = Vote.objects.filter(position=position).count()
+
+        skipped = max(0, unique_voters - position_votes)
+
+        return Response({
+            "position_id": position.id,
+            "position_name": position.name,
+            "election": election.name,
+            "unique_voters_in_election": unique_voters,
+            "votes_for_this_position": position_votes,
+            "skipped_votes": skipped,
+            "skip_percentage": round((skipped / unique_voters * 100), 2) if unique_voters > 0 else 0.0
+        })
+
+
+class ElectionResultsView(APIView):
+    """Get comprehensive results for an entire election"""
+    permission_classes = [IsStaffOrSuperUser]
+
+    def get(self, request, election_id):
+        try:
+            election = Election.objects.get(pk=election_id)
+        except Election.DoesNotExist:
+            return Response(
+                {"detail": "Election not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # All positions in display order
+        positions = Position.objects.filter(election=election).order_by('display_order')
+
+        # Total unique voters in this election (across all positions)
+        unique_voters = Vote.objects.filter(election=election).values('voter_hash').distinct().count()
+
+        results = []
+
+        for position in positions:
+            candidates = Candidate.objects.filter(position=position)
+
+            candidate_results = []
+            total_valid_votes_this_position = 0
+
+            for candidate in candidates:
+                vote_count = Vote.objects.filter(
+                    candidate=candidate,
+                    position=position
+                ).count()
+
+                candidate_results.append({
+                    "id": candidate.id,
+                    "student_id": candidate.student.student_id,
+                    "candidate_name": candidate.student.full_name,
+                    "photo_url": candidate.photo_url or "",
+                    "vote_count": vote_count,
+                })
+
+                total_valid_votes_this_position += vote_count
+
+            skipped = max(0, unique_voters - total_valid_votes_this_position)
+
+            # Add percentages
+            for cand in candidate_results:
+                cand["percentage"] = (
+                    round((cand["vote_count"] / total_valid_votes_this_position * 100), 2)
+                    if total_valid_votes_this_position > 0 else 0.0
+                )
+
+            # Sort candidates by votes descending
+            candidate_results.sort(key=lambda x: x["vote_count"], reverse=True)
+
+            results.append({
+                "position_id": position.id,
+                "position_name": position.name,
+                "display_order": position.display_order,
+                "total_valid_votes": total_valid_votes_this_position,
+                "skipped_votes": skipped,
+                "skip_percentage": round((skipped / unique_voters * 100), 2) if unique_voters > 0 else 0.0,
+                "candidates": candidate_results,
+            })
+
+        # Overall election stats
+        total_students = Student.objects.count()
+        students_who_voted = Student.objects.filter(has_voted=True).count()
+
+        return Response({
+            "election_id": election.id,
+            "election_name": election.name,
+            "year": election.year,
+            "total_students": total_students,
+            "students_who_voted": students_who_voted,
+            "voter_turnout_percentage": round((students_who_voted / total_students * 100),
+                                              2) if total_students > 0 else 0.0,
+            "unique_voters_who_cast_at_least_one_vote": unique_voters,
+            "positions": results,
+        })
+
+
+class CandidatesForPositionView(APIView):
+    permission_classes = [IsStaffOrSuperUser]
+
+    def get(self, request):
+        position_id = request.query_params.get("position_id")
+        print(position_id)
+
+        if not position_id:
+            return Response(
+                {"detail": "position_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            candidates = Candidate.objects.filter(position_id=position_id).select_related('student')
+        except ValueError:
+            return Response(
+                {"detail": "Invalid position_id."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        result = []
+
+        for candidate in candidates:
+            vote_count = Vote.objects.filter(
+                candidate_id=candidate.id,
+                position_id=position_id
+            ).count()
+
+            candidate_data = {
+                "candidate_id": candidate.id,
+                "candidate_name": candidate.student.full_name,
+                "student_id": candidate.student.student_id,
+                "positionid": int(position_id),  # Add position_id to response
+                "vote_count": vote_count
+            }
+
+            result.append(candidate_data)
+
+        return Response(result, status=status.HTTP_200_OK)

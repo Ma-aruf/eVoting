@@ -1,4 +1,4 @@
-import {FormEvent, useEffect, useState} from 'react';
+import {type FormEvent, useEffect, useState} from 'react';
 import api from '../../apiConfig';
 
 interface Election {
@@ -31,8 +31,12 @@ export default function ElectionsPage() {
         setLoading(true);
         setError(null);
         try {
-            const res = await api.get<Election[] | ListResponse<Election>>('api/elections/');
+            const res = await
+                api.get<Election[] | ListResponse<Election>>('api/elections/');
             const data = res.data;
+
+            console.log("Election data: ", data)
+
             if (Array.isArray(data)) {
                 setElections(data);
             } else if (Array.isArray(data.results)) {
@@ -64,7 +68,7 @@ export default function ElectionsPage() {
 
         try {
             setLoading(true);
-            await api.post('api/elections/', {
+            await api.post('api/elections/create/', {
                 name: name.trim(),
                 year: Number(year),
                 start_time: new Date(startTime).toISOString(),
@@ -238,11 +242,13 @@ export default function ElectionsPage() {
                                 <td className="px-3 py-2">{formatDateTime(election.end_time)}</td>
                                 <td className="px-3 py-2">
                                     {election.is_active ? (
-                                        <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">
+                                        <span
+                                            className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">
                                             Active
                                         </span>
                                     ) : (
-                                        <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                                        <span
+                                            className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
                                             Inactive
                                         </span>
                                     )}

@@ -35,20 +35,10 @@ export default function Dashboard() {
                 setLoading(true);
                 setError(null);
 
-                const [
-                    electionsRes,
-                    studentsRes,
-                    candidatesRes,
-                    positionsRes,
-                    activeElectionRes,
-                ] = await Promise.all([
+                // First, get elections and students
+                const [electionsRes, studentsRes] = await Promise.all([
                     api.get<ListResponse<Election> | Election[]>('api/elections/'),
                     api.get<ListResponse<unknown> | unknown[]>('api/students/'),
-                    api.get<ListResponse<unknown> | unknown[]>('api/candidates/'),
-                    api.get<ListResponse<unknown> | unknown[]>('api/positions/'),
-                    api.get<ListResponse<Election> | Election[]>('api/elections/', {
-                        params: {is_active: true},
-                    }),
                 ]);
 
                 const extractCount = <T,>(data: ListResponse<T> | T[]): number => {
@@ -60,33 +50,59 @@ export default function Dashboard() {
 
                 const electionsData = electionsRes.data;
                 const studentsData = studentsRes.data;
-                const candidatesData = candidatesRes.data;
-                const positionsData = positionsRes.data;
-                const activeData = activeElectionRes.data;
 
                 setTotalElections(extractCount<Election>(electionsData));
                 setTotalStudents(extractCount(studentsData));
-                setTotalCandidates(extractCount(candidatesData));
-                setTotalPositions(extractCount(positionsData));
 
+                // Find active election
                 let active: Election | null = null;
-                if (Array.isArray(activeData)) {
-                    active = activeData.find(e => (e as Election).is_active) as Election | undefined ?? null;
-                } else if (Array.isArray(activeData.results)) {
-                    active = (activeData.results as Election[]).find(e => e.is_active) ?? null;
-                }
-
-                // Fallback: if no explicit active election from filtered query, try first from all elections
-                if (!active) {
-                    if (Array.isArray(electionsData) && electionsData.length > 0) {
-                        active = electionsData[0] as Election;
-                    } else if (Array.isArray((electionsData as ListResponse<Election>).results) &&
-                        (electionsData as ListResponse<Election>).results!.length > 0) {
-                        active = (electionsData as ListResponse<Election>).results![0];
-                    }
+                if (Array.isArray(electionsData)) {
+                    active = electionsData.find(e => (e as Election).is_active) as Election | undefined ?? null;
+                } else if (Array.isArray((electionsData as ListResponse<Election>).results)) {
+                    active = (electionsData as ListResponse<Election>).results!.find(e => e.is_active) ?? null;
                 }
 
                 setActiveElection(active);
+
+                // If there's an active election, fetch its positions and candidates
+                if (active) {
+                    const positionsRes = await
+                        api.get<ListResponse<unknown> | unknown[]>('api/positions/', {
+                        params: { election_id: active.id }
+                    });
+
+                    const positionsData = positionsRes.data;
+
+                    setTotalPositions(extractCount(positionsData));
+
+                    // Get position IDs for the active election
+                    let positionIds: number[] = [];
+                    if (Array.isArray(positionsData)) {
+                        positionIds = positionsData.map((p: any) => p.id);
+                    } else if (Array.isArray(positionsData.results)) {
+                        positionIds = positionsData.results.map((p: any) => p.id);
+                    }
+
+                    const candidateCountResponses = await Promise.all(
+                        positionIds.map((positionId) =>
+                            api.get<ListResponse<unknown> | unknown[]>('api/candidates/', {
+                                params: { position_id: positionId }
+                            })
+                        )
+                    );
+
+                    console.log("Candidate res", candidateCountResponses)
+
+                    const activeCandidatesCount = candidateCountResponses.reduce((sum, res) => {
+                        return sum + extractCount(res.data as any);
+                    }, 0);
+
+                    setTotalCandidates(activeCandidatesCount);
+                } else {
+                    // No active election
+                    setTotalPositions(0);
+                    setTotalCandidates(0);
+                }
             } catch (err) {
                 console.error('Failed to load dashboard stats', err);
                 setError('Failed to load dashboard statistics.');
@@ -174,13 +190,23 @@ export default function Dashboard() {
                 </div>
 
                 <div className="border rounded-lg p-4 bg-white shadow-sm">
-                    <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Total Candidates</p>
+                    <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">
+                        {activeElection ? 'Total Candidates in Active Election' : 'Total Candidates'}
+                    </p>
                     <p className="text-2xl font-bold text-kosa-primary">{totalCandidates}</p>
+                    {activeElection && (
+                        <p className="text-xs text-gray-500 mt-1">For active election</p>
+                    )}
                 </div>
 
                 <div className="border rounded-lg p-4 bg-white shadow-sm">
-                    <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Total Positions</p>
+                    <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">
+                        {activeElection ? 'Total Positions in Active Election' : 'Total Positions'}
+                    </p>
                     <p className="text-2xl font-bold text-kosa-primary">{totalPositions}</p>
+                    {activeElection && (
+                        <p className="text-xs text-gray-500 mt-1">For active election</p>
+                    )}
                 </div>
             </section>
 

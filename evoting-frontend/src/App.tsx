@@ -1,7 +1,7 @@
 import {BrowserRouter, Navigate, Route, Routes} from 'react-router-dom';
 import {AuthProvider, type UserRole} from './contexts/AuthContext';
 import {useAuth} from './hooks/useAuth';
-import AdminLayout from './AdminLayout';
+import AdminLayout from './components/AdminLayout.tsx';
 import LoginPage from './pages/admin/LoginPage';
 import Dashboard from './pages/admin/Dashboard';
 import StudentsPage from './pages/admin/StudentsPage';
@@ -11,6 +11,9 @@ import PositionsPage from './pages/admin/PositionsPage';
 import CandidatesPage from './pages/admin/CandidatesPage';
 import ActivationsPage from './pages/admin/ActivationsPage';
 import type {JSX} from "react";
+import StudentLoginPage from "./pages/StudentLoginPage.tsx";
+import VotingPage from "./pages/VotingPage.tsx";
+import ResultsPage from "./pages/admin/ResultsPage.tsx";
 
 function ProtectedRoute({children, allowedRoles}: { children: JSX.Element; allowedRoles: Exclude<UserRole, null>[] }) {
     const {user} = useAuth();
@@ -31,7 +34,9 @@ function App() {
         <BrowserRouter>
             <AuthProvider>
                 <Routes>
+                    <Route path="/" element={<StudentLoginPage/>}/>
                     <Route path="/admin/login" element={<LoginPage/>}/>
+                    <Route path="/vote" element={<VotingPage/>}/>
 
                     {/* All admin pages live under /admin */}
                     <Route path="/admin" element={<AdminLayout/>}>
@@ -91,6 +96,14 @@ function App() {
                                 </ProtectedRoute>
                             }
                         />
+                        <Route path="results"
+                               element={
+                                   <ProtectedRoute allowedRoles={['superuser']}>
+                                       <ResultsPage/>
+                                   </ProtectedRoute>
+
+
+                               }/>
 
                         {/* Fallback */}
                         <Route path="*" element={<Navigate to="/admin/dashboard" replace/>}/>
@@ -100,4 +113,5 @@ function App() {
         </BrowserRouter>
     );
 }
+
 export default App;

@@ -1,5 +1,5 @@
 import {Link, Outlet, useLocation} from 'react-router-dom';
-import {useAuth} from './hooks/useAuth';
+import {useAuth} from '../hooks/useAuth';
 
 export default function AdminLayout() {
     const {user, logout} = useAuth();
@@ -15,6 +15,10 @@ export default function AdminLayout() {
         {to: '/admin/positions', label: 'Positions', roles: ['superuser']},
         {to: '/admin/candidates', label: 'Candidates', roles: ['superuser', 'staff']},
         {to: '/admin/activations', label: 'Activate Voters', roles: ['activator', 'superuser']},
+        {to: '/admin/results', label: 'Election Results',
+            description: 'View detailed voting results and statistics.',
+            roles: ['superuser', 'staff'],
+        }
     ];
 
     const visibleNav = navItems.filter(item => item.roles.includes(user?.role ?? ''));
