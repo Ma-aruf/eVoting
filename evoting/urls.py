@@ -58,7 +58,7 @@ def create_superuser_view(request):
 
 urlpatterns = [
     path('', health_check, name='health_check'),
-    path('create-superuser/', create_superuser_view, name='create-superuser'),
+    # path('create-superuser/', create_superuser_view, name='create-superuser'),
     path('admin/', admin.site.urls),
     path("api/", include("core.urls")),
 
