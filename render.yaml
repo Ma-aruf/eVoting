@@ -1,6 +1,5 @@
 services:
-  - type: web
-    plan: static
+  - type: static_site
     name: kasec-evoting
     buildCommand: 'cd evoting-frontend && npm install && npm run build'
     staticPublishPath: 'evoting-frontend/dist'
