@@ -1,30 +1,7 @@
 import {useEffect, useState} from 'react';
 import {useNavigate} from 'react-router-dom';
 import api from '../apiConfig';
-
-interface Election {
-    id: number;
-    name: string;
-    year: number;
-    start_time: string;
-    end_time: string;
-    is_active: boolean;
-}
-
-interface Position {
-    id: number;
-    name: string;
-    display_order: number;
-    election: number;
-}
-
-interface Candidate {
-    id: number;
-    student: number;
-    student_name: string;
-    position: number;
-    photo_url?: string;
-}
+import {useVotingData, type Candidate} from '../hooks/useVotingData';
 
 interface SelectedVote {
     position_id: number;
@@ -36,11 +13,7 @@ interface SelectedVote {
 
 export default function VotingPage() {
     const navigate = useNavigate();
-    const [activeElection, setActiveElection] = useState<Election | null>(null);
-    const [positions, setPositions] = useState<Position[]>([]);
-    const [candidatesByPosition, setCandidatesByPosition] = useState<Record<number, Candidate[]>>({});
     const [selectedVotes, setSelectedVotes] = useState<SelectedVote[]>([]);
-    const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
@@ -58,100 +31,36 @@ export default function VotingPage() {
         }
     }, [studentId, voterToken, navigate]);
 
-    // Fetch active election, positions, and candidates
+    // Fetch voting data using React Query (cached for entire session)
+    const {data: votingData, isLoading: loading, error: queryError} = useVotingData(
+        !!(studentId && voterToken)
+    );
+
+    // Extract data from React Query result
+    const activeElection = votingData?.election ?? null;
+    const positions = votingData?.positions ?? [];
+    const candidatesByPosition = votingData?.candidatesByPosition ?? {};
+
+    // Initialize selected votes when positions are loaded
     useEffect(() => {
-        if (!studentId || !voterToken) return;
+        if (positions.length > 0 && selectedVotes.length === 0) {
+            const initialVotes = positions.map((position) => ({
+                position_id: position.id,
+                position_name: position.name,
+                candidate_id: null,
+                candidate_name: '',
+                candidate_photo: undefined
+            }));
+            setSelectedVotes(initialVotes);
+        }
+    }, [positions, selectedVotes.length]);
 
-        const fetchVotingData = async () => {
-            try {
-                setLoading(true);
-                setError(null);
-
-                // 1. Get active election
-                const electionRes = await api.get('/api/elections/', {
-                    params: {is_active: true}
-                });
-
-                let elections = electionRes.data;
-                if (elections.results) {
-                    elections = elections.results;
-                }
-
-                if (!Array.isArray(elections) || elections.length === 0) {
-                    setError('No active election found.');
-                    return;
-                }
-
-                const activeElection = elections[0];
-                setActiveElection(activeElection);
-
-                // 2. Get positions for this election
-                const positionsRes = await api.get('/api/positions/', {
-                    params: {election_id: activeElection.id}
-                });
-
-                let positions = positionsRes.data;
-                if (positions.results) {
-                    positions = positions.results;
-                }
-
-                if (!Array.isArray(positions)) {
-                    positions = [];
-                }
-
-                // Sort by display_order
-                positions.sort((a: { display_order: number; }, b: {
-                    display_order: number;
-                }) => a.display_order - b.display_order);
-                setPositions(positions);
-
-                // 3. Get candidates for each position
-                const candidatesMap: Record<number, Candidate[]> = {};
-                const candidatePromises = positions.map(async (position: Position) => {
-                    try {
-                        const candidatesRes = await api.get('/api/candidates/', {
-                            params: {position_id: position.id}
-                        });
-
-                        let candidates = candidatesRes.data;
-                        if (candidates.results) {
-                            candidates = candidates.results;
-                        }
-
-                        if (Array.isArray(candidates)) {
-                            // Shuffle candidates for random order
-                            candidates = [...candidates].sort(() => Math.random() - 0.5);
-                            candidatesMap[position.id] = candidates;
-                        }
-                    } catch (err) {
-                        console.error(`Failed to fetch candidates for position ${position.id}:`, err);
-                        candidatesMap[position.id] = [];
-                    }
-                });
-
-                await Promise.all(candidatePromises);
-                setCandidatesByPosition(candidatesMap);
-
-                // 4. Initialize selected votes (empty for each position)
-                const initialVotes = positions.map((position: { id: number; name: string; }) => ({
-                    position_id: position.id,
-                    position_name: position.name,
-                    candidate_id: null,
-                    candidate_name: '',
-                    candidate_photo: undefined
-                }));
-                setSelectedVotes(initialVotes);
-
-            } catch (err) {
-                console.error('Failed to fetch voting data:', err);
-                setError('Failed to load voting data. Please try again.');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchVotingData();
-    }, [studentId, voterToken]);
+    // Handle query error
+    useEffect(() => {
+        if (queryError) {
+            setError(queryError instanceof Error ? queryError.message : 'Failed to load voting data.');
+        }
+    }, [queryError]);
 
     const handleSelectCandidate = (positionId: number, candidate: Candidate) => {
         setSelectedVotes(prev =>
@@ -192,11 +101,6 @@ export default function VotingPage() {
             return;
         }
 
-        // Show final confirmation
-        const finalConfirm = window.confirm(
-            `You are about to submit votes for ${votesToSubmit.length} position(s). This action cannot be undone. Confirm submission?`
-        );
-        if (!finalConfirm) return;
 
         setSubmitting(true);
         setError(null);

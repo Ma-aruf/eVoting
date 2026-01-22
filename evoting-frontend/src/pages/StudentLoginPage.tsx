@@ -153,7 +153,7 @@ export default function StudentLoginPage() {
                                         value={studentId}
                                         onChange={(e) => setStudentId(e.target.value.toUpperCase())}
                                         className="w-full pl-12 pr-4 py-4 bg-gray-50/50 border border-blue-400 rounded-xl focus:ring-1 focus:ring-blue-500 focus:border-blue-500 focus:bg-white transition-all text-lg"
-                                        placeholder="e.g., S12345"
+                                        placeholder="Enter you voter ID.."
                                         required
                                         autoFocus
                                     />
