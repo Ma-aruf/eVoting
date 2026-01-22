@@ -155,7 +155,7 @@ export function useElectionResults() {
         const csvRows = [];
 
         // Header row
-        csvRows.push(['Election', 'Position', 'Candidate', 'Student ID', 'Votes', 'Percentage', 'Skipped Votes', 'Skipped %'].join(','));
+        csvRows.push(['Election', 'Position', 'Candidate', 'Student ID', 'Votes', 'Percentage'].join(','));
 
         // Data rows
         results.positions.forEach(position => {
@@ -167,8 +167,6 @@ export function useElectionResults() {
                     `"${candidate.student_id}"`,
                     candidate.vote_count,
                     candidate.percentage.toFixed(2),
-                    position.skipped_votes,
-                    position.skipped_percentage.toFixed(2)
                 ].join(','));
             });
 
@@ -180,8 +178,6 @@ export function useElectionResults() {
                 '""',
                 0,
                 0,
-                position.skipped_votes,
-                position.skipped_percentage.toFixed(2)
             ].join(','));
         });
 
