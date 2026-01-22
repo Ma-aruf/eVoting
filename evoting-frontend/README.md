@@ -1,4 +1,27 @@
-# React + TypeScript + Vite
+# eVoting Frontend
+
+React + TypeScript + Vite frontend for the eVoting application.
+
+## Deployment (Vercel)
+
+### Environment Variables
+
+Set the following environment variable in Vercel:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `VITE_API_BASE_URL` | Backend API URL | `https://evoting-kasec.up.railway.app/` |
+
+### Deploy Steps
+
+1. Connect your GitHub repository to Vercel
+2. Set the **Root Directory** to `evoting-frontend`
+3. Add the environment variable above
+4. Deploy
+
+---
+
+## Local Development
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

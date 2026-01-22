@@ -15,20 +15,6 @@ interface ListResponse<T> {
     results?: T[];
 }
 
-const UsersIcon = () => (
-    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-              d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
-    </svg>
-);
-
-const CheckCircleIcon = () => (
-    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-    </svg>
-);
-
 export default function ActivationsPage() {
     const [students, setStudents] = useState<Student[]>([]);
     const [loading, setLoading] = useState(false);
@@ -36,8 +22,6 @@ export default function ActivationsPage() {
     const [studentQuery, setStudentQuery] = useState('');
     const [studentDropdownOpen, setStudentDropdownOpen] = useState(false);
     const [studentId, setStudentId] = useState('');
-
-    const [searchTerm, setSearchTerm] = useState('');
 
     const [message, setMessage] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -107,14 +91,6 @@ export default function ActivationsPage() {
         if (!q) return true;
         return s.full_name.toLowerCase().includes(q) || s.student_id.toLowerCase().includes(q);
     });
-
-    const activeCount = students.filter(s => s.is_active).length;
-    const inactiveCount = students.length - activeCount;
-
-    const filteredStudents = students.filter(s =>
-        s.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        s.student_id.toLowerCase().includes(searchTerm.toLowerCase())
-    );
 
     return (
         <div className="space-y-6">

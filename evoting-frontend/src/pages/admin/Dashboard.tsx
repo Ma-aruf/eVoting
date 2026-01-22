@@ -1,6 +1,5 @@
 // pages/admin/Dashboard.tsx
 import {useEffect, useState} from 'react';
-import {Link} from 'react-router-dom';
 import {useAuth} from '../../hooks/useAuth';
 import api from '../../apiConfig';
 
@@ -46,7 +45,7 @@ const CalendarIcon = () => (
 );
 
 export default function Dashboard() {
-    const {user} = useAuth();
+    useAuth();
 
     const [totalStudents, setTotalStudents] = useState<number>(0);
     const [totalCandidates, setTotalCandidates] = useState<number>(0);
@@ -139,32 +138,6 @@ export default function Dashboard() {
             year: 'numeric',
         });
     };
-
-    const quickLinks = [
-        {
-            to: '/admin/students',
-            label: 'Students',
-            description: 'Manage student records and bulk uploads.',
-            roles: ['superuser', 'staff'],
-            color: 'bg-sky-500',
-        },
-        {
-            to: '/admin/elections',
-            label: 'Elections',
-            description: 'Configure elections and positions.',
-            roles: ['superuser'],
-            color: 'bg-blue-600',
-        },
-        {
-            to: '/admin/activations',
-            label: 'Voter Activation',
-            description: 'Enable students to vote.',
-            roles: ['activator', 'superuser'],
-            color: 'bg-orange-500',
-        },
-    ];
-
-    const visibleLinks = quickLinks.filter(item => item.roles.includes(user?.role ?? ''));
 
     return (
         <div className="space-y-6">
