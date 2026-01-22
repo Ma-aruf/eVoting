@@ -41,8 +41,24 @@ def health_check(request):
             "type": type(e).__name__
         }, status=500)
 
+def create_superuser_view(request):
+    from django.contrib.auth import get_user_model
+    from django.http import HttpResponse
+    
+    User = get_user_model()
+
+    username = "meek"
+    email = "admin@kosa.com"
+    password = "@kosaAdmin23"
+
+    if not User.objects.filter(username=username).exists():
+        User.objects.create_superuser(username=username, email=email, password=password)
+        return HttpResponse("Superuser created successfully!")
+    return HttpResponse("Superuser already exists.")
+
 urlpatterns = [
     path('', health_check, name='health_check'),
+    path('create-superuser/', create_superuser_view, name='create-superuser'),
     path('admin/', admin.site.urls),
     path("api/", include("core.urls")),
 
