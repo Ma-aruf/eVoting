@@ -43,9 +43,13 @@ class UserViewSet(viewsets.ModelViewSet):
 
 
 class ElectionViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Election.objects.all()  #
+    """
+    Public read-only access to elections.
+    Voters need to see active elections without JWT auth.
+    """
+    queryset = Election.objects.all()
     serializer_class = ElectionSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get_queryset(self):
         # Optional: allow filtering by is_active

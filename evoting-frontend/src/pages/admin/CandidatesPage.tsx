@@ -495,7 +495,8 @@ export default function CandidatesPage() {
                                                 <button
                                                     key={student.id}
                                                     type="button"
-                                                    onClick={() => {
+                                                    onMouseDown={(e) => {
+                                                        e.preventDefault();
                                                         setSelectedStudentId(student.id);
                                                         setStudentQuery(`${student.full_name} (${student.student_id})`);
                                                         setStudentDropdownOpen(false);
@@ -641,7 +642,8 @@ export default function CandidatesPage() {
                                                 <button
                                                     key={student.id}
                                                     type="button"
-                                                    onClick={() => {
+                                                    onMouseDown={(e) => {
+                                                        e.preventDefault();
                                                         setEditStudentId(student.id);
                                                         setEditStudentQuery(`${student.full_name} (${student.student_id})`);
                                                         setEditStudentDropdownOpen(false);

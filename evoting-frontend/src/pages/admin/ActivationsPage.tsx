@@ -154,7 +154,8 @@ export default function ActivationsPage() {
                                             <button
                                                 key={student.id}
                                                 type="button"
-                                                onClick={() => {
+                                                onMouseDown={(e) => {
+                                                    e.preventDefault();
                                                     setStudentId(student.student_id);
                                                     setStudentQuery(`${student.full_name} (${student.student_id})`);
                                                     setStudentDropdownOpen(false);
