@@ -14,7 +14,6 @@ from datetime import timedelta
 from pathlib import Path
 
 import dj_database_url
-import dj_database_url
 from decouple import RepositoryEnv, Config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -53,12 +52,6 @@ SECRET_KEY = get_env('DJANGO_SECRETE_KEY', 'a=84(-blt_b=$hn)-d1qcuh0*cd!13!92c0)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = get_env('DEBUG', default=False, cast=bool)
-
-# ALLOWED_HOSTS = get_env(
-#     "ALLOWED_HOSTS",
-#     default=["localhost", "127.0.0.1"],
-#     cast=list
-# )
 
 ALLOWED_HOSTS = ["*"]
 # Add Railway dynamic host
@@ -115,45 +108,43 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'evoting.wsgi.application'
 
+
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-# Check if we're in Railway environment
-is_railway = get_env('RAILWAY_ENVIRONMENT', default=False, cast=bool)
+# Priority: DATABASE_URL > PG* env vars > local defaults
+database_url = os.environ.get('DATABASE_URL')
 
-if is_railway:
-    # Railway: Use DATABASE_URL or fallback to SQLite
-    database_url = os.environ.get('DATABASE_URL')
-    if database_url:
-        DATABASES = {
-            'default': dj_database_url.parse(database_url, conn_max_age=600)
-        }
-    else:
-        # Fallback to SQLite
-        DATABASES = {
-            'default': {
-                'ENGINE': 'django.db.backends.sqlite3',
-                'NAME': BASE_DIR / 'db.sqlite3',
-            }
-        }
-else:
-    # Local development: Use your existing PostgreSQL setup
-    os.environ.setdefault("PGDATABASE", "evkasec_db")
-    os.environ.setdefault("PGUSER", "postgres")
-    os.environ.setdefault("PGPASSWORD", "@nasarabieni")
-    os.environ.setdefault("PGHOST", "localhost")
-    os.environ.setdefault("PGPORT", "5432")
-    
+if database_url:
+    # Use DATABASE_URL if available (Railway provides this)
+    DATABASES = {
+        'default': dj_database_url.parse(database_url, conn_max_age=600)
+    }
+elif os.environ.get('PGDATABASE') and os.environ.get('PGHOST'):
+    # Use individual PG* environment variables if set
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.environ["PGDATABASE"],
-            'USER': os.environ["PGUSER"],
-            'PASSWORD': os.environ["PGPASSWORD"],
-            'HOST': os.environ["PGHOST"],
-            'PORT': os.environ["PGPORT"],
+            'NAME': os.environ.get('PGDATABASE'),
+            'USER': os.environ.get('PGUSER', 'postgres'),
+            'PASSWORD': os.environ.get('PGPASSWORD', ''),
+            'HOST': os.environ.get('PGHOST', 'localhost'),
+            'PORT': os.environ.get('PGPORT', '5432'),
         }
     }
+else:
+    # Local development defaults
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': 'evkasec_db',
+            'USER': 'postgres',
+            'PASSWORD': '@nasarabieni',
+            'HOST': 'localhost',
+            'PORT': '5432',
+        }
+    }
+
 
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = True
@@ -169,10 +160,6 @@ CORS_ALLOWED_ORIGINS = [
 railway_frontend_url = get_env('RAILWAY_FRONTEND_URL')
 if railway_frontend_url:
     CORS_ALLOWED_ORIGINS.append(railway_frontend_url)
-
-# In production/Railway, allow all origins if specifically set
-if is_railway and get_env('RAILWAY_ALLOW_ALL_CORS', default=False, cast=bool):
-    CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOW_HEADERS = [
     'accept',
@@ -208,8 +195,6 @@ REST_FRAMEWORK = {
 }
 
 # Simple JWT Configuration
-from datetime import timedelta
-
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=2),
@@ -289,7 +274,7 @@ USE_TZ = True
 STATIC_URL = '/static/'
 
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
-STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
+STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")] if os.path.exists(os.path.join(BASE_DIR, "static")) else []
 
 
 # Default primary key field type
