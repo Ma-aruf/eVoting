@@ -132,11 +132,11 @@ export default function ElectionsPage() {
     return (
         <div className="space-y-6">
             {/* Page Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <h1 className="text-xl font-semibold text-gray-900">Elections</h1>
                 <button
                     onClick={() => setShowCreateForm(!showCreateForm)}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition"
+                    className="flex w-full sm:w-auto justify-center items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition"
                 >
                     <PlusIcon />
                     Create Election
@@ -271,18 +271,18 @@ export default function ElectionsPage() {
 
             {/* Elections table */}
             <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-                <div className="flex items-center justify-between p-5 border-b border-gray-100">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-5 border-b border-gray-100">
                     <div className="flex items-center gap-4">
                         <h2 className="text-base font-medium text-gray-900">All Elections</h2>
                         {loading && <span className="text-xs text-gray-500">Loading…</span>}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
                         <input
                             type="text"
                             placeholder="Search by name or year..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-64 border border-blue-200 border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full sm:w-64 border border-blue-200 border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                         {searchTerm && (
                             <span className="text-xs text-gray-500">

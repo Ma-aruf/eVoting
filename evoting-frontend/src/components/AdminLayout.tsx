@@ -1,3 +1,4 @@
+import {useEffect, useState} from 'react';
 import {Link, Outlet, useLocation} from 'react-router-dom';
 import {useAuth} from '../hooks/useAuth';
 
@@ -65,6 +66,11 @@ const AdminUsersIcon = () => (
 export default function AdminLayout() {
     const {user, logout} = useAuth();
     const location = useLocation();
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+
+    useEffect(() => {
+        setSidebarOpen(false);
+    }, [location.pathname]);
 
     const navItems = [
         {to: '/admin/dashboard', label: 'Dashboard', icon: DashboardIcon, roles: ['superuser', 'staff']},
@@ -83,7 +89,7 @@ export default function AdminLayout() {
     return (
         <div className="h-screen overflow-hidden bg-gray-100">
             {/* Sidebar - Fixed */}
-            <aside className="fixed top-0 left-0 w-56 h-screen bg-gradient-to-b from-blue-700 via-blue-600 to-blue-500 text-white flex flex-col">
+            <aside className="fixed top-0 left-0 hidden md:flex w-56 h-screen bg-gradient-to-b from-blue-700 via-blue-600 to-blue-500 text-white flex-col">
                 {/* Brand */}
                 <div className="px-5 py-6">
                     <h1 className="text-xl font-bold tracking-wide">eVoting</h1>
@@ -124,19 +130,94 @@ export default function AdminLayout() {
                 </div>
             </aside>
 
+            <div
+                className={`fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity ${
+                    sidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+                }`}
+                onClick={() => setSidebarOpen(false)}
+            />
+
+            <aside
+                className={`fixed top-0 left-0 z-50 md:hidden w-72 max-w-[80vw] h-screen bg-gradient-to-b from-blue-700 via-blue-600 to-blue-500 text-white flex flex-col transform transition-transform duration-200 ${
+                    sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+                }`}
+            >
+                <div className="px-5 py-6 flex items-start justify-between">
+                    <div>
+                        <h1 className="text-xl font-bold tracking-wide">eVoting</h1>
+                        <p className="text-xs text-white/70 mt-1">Admin Panel</p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setSidebarOpen(false)}
+                        className="p-2 rounded-lg hover:bg-white/10 transition"
+                        aria-label="Close sidebar"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <nav className="flex-1 px-3 space-y-1 overflow-y-auto">
+                    {visibleNav.map(item => {
+                        const isActive = location.pathname === item.to;
+                        const Icon = item.icon;
+                        return (
+                            <Link
+                                key={item.to}
+                                to={item.to}
+                                onClick={() => setSidebarOpen(false)}
+                                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
+                                    isActive
+                                        ? 'bg-white text-blue-700 font-medium shadow-sm'
+                                        : 'text-white/90 hover:bg-white/10'
+                                }`}
+                            >
+                                <Icon />
+                                <span>{item.label}</span>
+                            </Link>
+                        );
+                    })}
+                </nav>
+
+                <div className="px-3 pb-6">
+                    <button
+                        onClick={logout}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-white/90 hover:bg-white/10 transition-all"
+                    >
+                        <LogoutIcon />
+                        <span>Logout</span>
+                    </button>
+                </div>
+            </aside>
+
             {/* Main Area - Offset by sidebar width */}
-            <div className="ml-56 h-screen flex flex-col">
+            <div className="md:ml-56 h-screen flex flex-col">
                 {/* Top Header - Fixed within main area */}
                 <header className="bg-sky-100 border-b border-sky-200 flex-shrink-0">
-                    <div className="flex items-center justify-between px-6 py-3">
-                        {/* Search Bar */}
-                        <div className="relative flex-1 max-w-md">
+                    <div className="flex items-center justify-between px-4 sm:px-6 py-3">
+                        <div className="flex items-center gap-3">
+                            <button
+                                type="button"
+                                className="md:hidden p-2 rounded-lg hover:bg-black/5 transition"
+                                onClick={() => setSidebarOpen(true)}
+                                aria-label="Open sidebar"
+                            >
+                                <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                                </svg>
+                            </button>
 
+                            {/* Search Bar */}
+                            <div className="relative flex-1 max-w-md">
+
+                            </div>
                         </div>
 
                         {/* User Info */}
-                        <div className="flex items-center gap-4 ml-6">
-                            <div className="text-right">
+                        <div className="flex items-center gap-3 sm:gap-4 ml-4">
+                            <div className="text-right hidden sm:block">
                                 <p className="text-sm font-medium text-gray-900">{user?.username}</p>
                                 <p className="text-xs text-gray-500">{user?.role?.toUpperCase()}</p>
                             </div>
@@ -148,7 +229,7 @@ export default function AdminLayout() {
                 </header>
 
                 {/* Content - Scrollable */}
-                <main className="flex-1 p-6 overflow-y-auto">
+                <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
                     <Outlet />
                 </main>
             </div>

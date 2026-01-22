@@ -221,8 +221,8 @@ export default function VotingPage() {
         <div className="min-h-screen bg-gray-100 flex flex-col">
             {/* Header */}
             <header className="bg-white shadow-sm flex-shrink-0">
-                <div className="px-4 py-3">
-                    <div className="flex items-center justify-between">
+                <div className="px-4 sm:px-6 py-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div>
                             <h1 className="text-xl font-bold text-gray-800">Student Voting Portal</h1>
                             <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
@@ -240,7 +240,7 @@ export default function VotingPage() {
                         </div>
                         <button
                             onClick={handleLogout}
-                            className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+                            className="w-full sm:w-auto px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
                         >
                             Logout
                         </button>
@@ -251,7 +251,7 @@ export default function VotingPage() {
             {/* Progress Bar */}
 
             {/* Main Content - Centered Single Position */}
-            <div className="flex-1 overflow-y-auto p-4 flex flex-col items-center">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col items-center">
                 {positions.length > 0 && (() => {
                     const position = positions[currentPositionIndex];
                     const candidates = candidatesByPosition[position.id] || [];
@@ -259,14 +259,14 @@ export default function VotingPage() {
                     const isLastPosition = currentPositionIndex === positions.length - 1;
 
                     return (
-                        <div className="w-full  max-w-5xl">
+                        <div className="w-full max-w-5xl">
                             {/* Position Indicator */}
-                            <div className="flex  items-center justify-center gap-2 mb-4">
+                            <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
                                 {positions.map((_, idx) => (
                                     <button
                                         key={idx}
                                         onClick={() => setCurrentPositionIndex(idx)}
-                                        className={`w-3 h-3 rounded-full transition-all ${
+                                        className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full transition-all ${
                                             idx === currentPositionIndex
                                                 ? 'bg-blue-600 scale-125'
                                                 : idx < currentPositionIndex
@@ -281,11 +281,11 @@ export default function VotingPage() {
                             <div className="bg-white rounded-xl shadow-lg">
                                 {/* Position Header */}
                                 <div
-                                    className="px-6 py-4 border-b bg-gradient-to-r from-blue-600 to-blue-700 rounded-t-xl">
-                                    <div className="flex items-center justify-between">
+                                    className="px-4 sm:px-6 py-4 border-b bg-gradient-to-r from-blue-600 to-blue-700 rounded-t-xl">
+                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                                         <div>
                                             <p className="text-blue-200 text-sm">Position {currentPositionIndex + 1} of {positions.length}</p>
-                                            <h3 className="text-4xl font-bold text-white">{position.name}</h3>
+                                            <h3 className="text-2xl sm:text-4xl font-bold text-white">{position.name}</h3>
                                         </div>
                                         <div className="flex items-center gap-2">
                                             {selectedVote?.candidate_id && (
@@ -305,7 +305,7 @@ export default function VotingPage() {
                                 </div>
 
                                 {/* Candidates - Centered with fit width */}
-                                <div className="p-6">
+                                <div className="p-4 sm:p-6">
                                     {candidates.length > 0 ? (
                                         <div className="flex justify-center">
                                             <div className="inline-flex flex-wrap justify-center gap-4">
@@ -315,7 +315,7 @@ export default function VotingPage() {
                                                     return (
                                                         <div
                                                             key={candidate.id}
-                                                            className={`flex flex-col items-center p-5 rounded-xl border-2 transition-all w-[160px] cursor-pointer ${
+                                                            className={`flex flex-col items-center p-4 sm:p-5 rounded-xl border-2 transition-all w-[140px] sm:w-[160px] cursor-pointer ${
                                                                 isSelected
                                                                     ? 'border-green-500 bg-green-50 ring-2 ring-green-200 shadow-lg'
                                                                     : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50 hover:shadow-md'
@@ -383,8 +383,8 @@ export default function VotingPage() {
                                 </div>
 
                                 {/* Navigation Footer */}
-                                <div className="px-6 py-4 bg-gray-50 border-t rounded-b-xl">
-                                    <div className="flex items-center justify-between">
+                                <div className="px-4 sm:px-6 py-4 bg-gray-50 border-t rounded-b-xl">
+                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                                         <div className="text-sm text-gray-500">
                                             {selectedCount} of {positions.length} completed
                                         </div>
@@ -393,7 +393,7 @@ export default function VotingPage() {
                                             <button
                                                 onClick={handleSubmitVotes}
                                                 disabled={submitting || selectedCount !== positions.length}
-                                                className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg disabled:opacity-60 disabled:cursor-not-allowed transition flex items-center gap-2"
+                                                className="w-full sm:w-auto px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg disabled:opacity-60 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
                                             >
                                                 {submitting ? (
                                                     <>
@@ -426,34 +426,6 @@ export default function VotingPage() {
                             </div>
 
                             {/* Summary below card */}
-                            <div className="mt-6 bg-white rounded-xl shadow border p-4">
-                                <h3 className="text-sm font-semibold text-gray-700 mb-3">Your Selections</h3>
-                                <div className="flex flex-wrap gap-2">
-                                    {positions.map((pos, idx) => {
-                                        const vote = selectedVotes.find(v => v.position_id === pos.id);
-                                        const hasVoted = vote?.candidate_id !== null;
-
-                                        return (
-                                            <button
-                                                key={pos.id}
-                                                onClick={() => setCurrentPositionIndex(idx)}
-                                                className={`px-3 py-1.5 text-xs font-medium rounded-full border transition ${
-                                                    idx === currentPositionIndex
-                                                        ? 'ring-2 ring-blue-400 ring-offset-1'
-                                                        : ''
-                                                } ${
-                                                    hasVoted
-                                                        ? 'bg-green-100 text-green-700 border-green-300'
-                                                        : 'bg-gray-100 text-gray-600 border-gray-200'
-                                                }`}
-                                            >
-                                                {pos.name}
-                                                {hasVoted && ' ✓'}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
 
                             {error && (
                                 <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">

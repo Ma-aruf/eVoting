@@ -47,10 +47,10 @@ export default function ResultsPage() {
                     <h1 className="text-xl font-semibold text-gray-900">Election Results</h1>
                 </div>
 
-                <div className="flex items-center space-x-3">
+                <div className="flex w-full md:w-auto items-center">
                     <button
                         onClick={exportToCSV}
-                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg flex items-center transition"
+                        className="w-full md:w-auto px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg flex items-center justify-center transition"
                     >
                         <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -72,7 +72,7 @@ export default function ResultsPage() {
                     <select
                         value={selectedElectionId || ''}
                         onChange={(e) => setSelectedElectionId(e.target.value ? Number(e.target.value) : null)}
-                        className="border border-gray-200 rounded-lg px-4 py-2.5 text-sm min-w-[280px] focus:ring-1 focus:ring-blue-100 focus:border-blue-500"
+                        className="border border-gray-200 rounded-lg px-4 py-2.5 text-sm w-full md:min-w-[280px] md:w-auto focus:ring-1 focus:ring-blue-100 focus:border-blue-500"
                         disabled={loading}
                     >
                         <option value="">Select an election...</option>
@@ -134,11 +134,11 @@ export default function ResultsPage() {
                                         <h3 className="text-2xl font-bold text-white">{currentPosition.position_name}</h3>
                                     </div>
                                     {results.positions.length > 0 && (
-                                        <div className="flex items-center justify-between mb-1 gap-3 rounded-xl p-0">
+                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-1 gap-3 rounded-xl p-0">
                                             <button
                                                 onClick={() => setCurrentPositionIndex(prev => Math.max(0, prev - 1))}
                                                 disabled={currentPositionIndex === 0}
-                                                className="flex items-center gap-2 px-2 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition"
+                                                className="flex w-full sm:w-auto justify-center items-center gap-2 px-2 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition"
                                             >
                                                 <svg className="w-5 h-5" fill="none" stroke="currentColor"
                                                      viewBox="0 0 24 24">
@@ -152,7 +152,7 @@ export default function ResultsPage() {
                                             <button
                                                 onClick={() => setCurrentPositionIndex(prev => Math.min(results.positions.length - 1, prev + 1))}
                                                 disabled={currentPositionIndex === results.positions.length - 1}
-                                                className="flex items-center gap-2 px-4 py-2 bg-yellow-500 hover:bg-yellow-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition"
+                                                className="flex w-full sm:w-auto justify-center items-center gap-2 px-4 py-2 bg-yellow-500 hover:bg-yellow-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition"
                                             >
                                                 Next
                                                 <svg className="w-5 h-5" fill="none" stroke="currentColor"
@@ -170,7 +170,7 @@ export default function ResultsPage() {
                             {/* Candidate Cards */}
                             <div className="p-5">
                                 <div className="flex justify-center">
-                                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-6  w-full">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6  w-full">
                                         {currentPosition.candidates.map((candidate, index) => {
                                             const maxVotes = Math.max(...currentPosition.candidates.map(c => c.vote_count));
                                             const barWidth = maxVotes > 0 ? (candidate.vote_count / maxVotes) * 100 : 0;

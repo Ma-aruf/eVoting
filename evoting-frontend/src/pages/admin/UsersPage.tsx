@@ -142,14 +142,14 @@ export default function UsersPage() {
     return (
         <div className="space-y-6">
             {/* Page Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <h1 className="text-xl font-semibold text-gray-900">Manage Users</h1>
                 <button
                     onClick={() => {
                         resetForm();
                         setShowForm(true);
                     }}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white transition"
+                    className="inline-flex w-full sm:w-auto justify-center items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white transition"
                 >
                     <PlusIcon/>
                     Add User

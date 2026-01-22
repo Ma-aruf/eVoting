@@ -81,5 +81,5 @@ dist-ssr
 *.sln
 *.sw?
 
-
+.windsurf
 
