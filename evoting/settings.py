@@ -49,16 +49,18 @@ def get_env(key, default=None, cast=None):
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = get_env('SECRET_KEY', 'django-insecure-ecxq3j)fwr*5m5x8jto&@z-5257#4+*&hps42tgy(7li=f97p5')
+SECRET_KEY = get_env('DJANGO_SECRETE_KEY', 'a=84(-blt_b=$hn)-d1qcuh0*cd!13!92c0)(vy37^(9amds^x')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = get_env('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = get_env(
-    "ALLOWED_HOSTS",
-    default=["localhost", "127.0.0.1"],
-    cast=list
-)
+# ALLOWED_HOSTS = get_env(
+#     "ALLOWED_HOSTS",
+#     default=["localhost", "127.0.0.1"],
+#     cast=list
+# )
+
+ALLOWED_HOSTS = ["*"]
 # Add Railway dynamic host
 if get_env('RAILWAY_ENVIRONMENT'):
     railway_domain = get_env('RAILWAY_PUBLIC_DOMAIN')
@@ -182,7 +184,9 @@ CORS_ALLOW_HEADERS = [
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5175",
+    "https://*.railway.app",
 ]
+
 
 # Add Railway frontend URL to CSRF trusted origins
 if railway_frontend_url:
@@ -276,7 +280,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
