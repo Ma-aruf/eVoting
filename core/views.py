@@ -283,7 +283,6 @@ class ElectionManageView(APIView):
     Staff or superuser can start/stop elections by toggling `is_active`.
     """
 
-    print("Inside ElectionManageView")
     permission_classes = [IsStaffOrSuperUser]
 
     def get(self, request):
