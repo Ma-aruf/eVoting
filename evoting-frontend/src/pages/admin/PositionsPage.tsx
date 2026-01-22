@@ -1,5 +1,6 @@
 import {type FormEvent, useEffect, useState} from 'react';
 import api from '../../apiConfig';
+import {showError, showSuccess} from '../../utils/toast';
 
 interface Election {
     id: number;
@@ -44,8 +45,6 @@ export default function PositionsPage() {
     const [selectedElectionId, setSelectedElectionId] = useState<number | null>(null);
 
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
      const [showCreateForm, setShowCreateForm] = useState(false);
      const [searchTerm, setSearchTerm] = useState('');
@@ -59,7 +58,6 @@ export default function PositionsPage() {
 
     const fetchElections = async () => {
         setLoading(true);
-        setError(null);
         try {
             const res = await api.get<Election[] | ListResponse<Election>>('api/elections/');
             const data = res.data;
@@ -75,7 +73,7 @@ export default function PositionsPage() {
             }
         } catch (err) {
             console.error(err);
-            setError('Failed to load elections.');
+            showError('Failed to load elections.');
         } finally {
             setLoading(false);
         }
@@ -87,7 +85,6 @@ export default function PositionsPage() {
             return;
         }
         setLoading(true);
-        setError(null);
         try {
             const res = await api.get<Position[] | ListResponse<Position>>('api/positions/', {
                 params: {election_id: electionId},
@@ -102,7 +99,7 @@ export default function PositionsPage() {
             }
         } catch (err) {
             console.error(err);
-            setError('Failed to load positions.');
+            showError('Failed to load positions.');
         } finally {
             setLoading(false);
         }
@@ -121,11 +118,9 @@ export default function PositionsPage() {
 
     const handleCreatePosition = async (e: FormEvent) => {
         e.preventDefault();
-        setError(null);
-        setSuccessMessage(null);
 
         if (!selectedElectionId) {
-            setError('Please select an election.');
+            showError('Please select an election.');
             return;
         }
 
@@ -137,14 +132,14 @@ export default function PositionsPage() {
                 election: selectedElectionId,
             });
 
-            setSuccessMessage('Position created successfully.');
+            showSuccess('Position created successfully.');
             setPositionName('');
             setDisplayOrder('');
             await fetchPositions(selectedElectionId);
         } catch (err: any) {
             console.error(err);
             const detail = err.response?.data?.detail;
-            setError(detail || 'Failed to create position.');
+            showError(detail || 'Failed to create position.');
         } finally {
             setLoading(false);
         }
@@ -160,8 +155,6 @@ export default function PositionsPage() {
         e.preventDefault();
         if (!editingPosition) return;
 
-        setError(null);
-        setSuccessMessage(null);
         setLoading(true);
 
         try {
@@ -169,14 +162,14 @@ export default function PositionsPage() {
                 name: editPositionName.trim(),
                 display_order: parseInt(editDisplayOrder, 10) || 1,
             });
-            setSuccessMessage('Position updated successfully.');
+            showSuccess('Position updated successfully.');
             setEditingPosition(null);
             setEditPositionName('');
             setEditDisplayOrder('');
             await fetchPositions(selectedElectionId);
         } catch (err: any) {
             console.error(err);
-            setError(err.response?.data?.detail || 'Failed to update position.');
+            showError(err.response?.data?.detail || 'Failed to update position.');
         } finally {
             setLoading(false);
         }
@@ -185,17 +178,15 @@ export default function PositionsPage() {
     const handleDeletePosition = async (position: Position) => {
         if (!confirm(`Delete position "${position.name}"?`)) return;
 
-        setError(null);
-        setSuccessMessage(null);
         setLoading(true);
 
         try {
             await api.delete(`api/positions/${position.id}/`);
-            setSuccessMessage('Position deleted.');
+            showSuccess('Position deleted.');
             await fetchPositions(selectedElectionId);
         } catch (err: any) {
             console.error(err);
-            setError(err.response?.data?.detail || 'Failed to delete position.');
+            showError(err.response?.data?.detail || 'Failed to delete position.');
         } finally {
             setLoading(false);
         }
@@ -223,17 +214,6 @@ export default function PositionsPage() {
                 </button>
             </div>
 
-            {/* Error / Success Messages */}
-            {error && (
-                <div className="bg-red-50 rounded-xl p-4 border border-red-100">
-                    <p className="text-sm text-red-600">{error}</p>
-                </div>
-            )}
-            {successMessage && (
-                <div className="bg-green-50 rounded-xl p-4 border border-green-100">
-                    <p className="text-sm text-green-600">{successMessage}</p>
-                </div>
-            )}
 
             {/* Stat Cards */}
             <section>

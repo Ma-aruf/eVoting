@@ -2,11 +2,11 @@
 import {type FormEvent, useState} from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from "../apiConfig.ts";
+import {showError} from '../utils/toast';
 
 export default function StudentLoginPage() {
     const [studentId, setStudentId] = useState('');
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
     const navigate = useNavigate();
 
 
@@ -20,10 +20,8 @@ export default function StudentLoginPage() {
     console.log("Ele: ", getElection())
 
 
-
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
-        setError(null);
         setLoading(true);
 
         try {
@@ -49,13 +47,13 @@ export default function StudentLoginPage() {
 
             if (err.response?.status === 403) {
                 console.log("Error for not logging it: ", err)
-                setError('You are not activated to vote. Please contact the election committee.');
+                showError('You are not activated to vote. Please contact the election committee.');
             } else if (err.response?.status === 409) {
-                setError('You have already voted.');
+                showError('You have already voted.');
             } else if (detail) {
-                setError(detail);
+                showError(detail);
             } else {
-                setError('Failed to login. Please check your student ID and try again.');
+                showError('Failed to login. Please check your student ID and try again.');
             }
         } finally {
             setLoading(false);
@@ -74,12 +72,6 @@ export default function StudentLoginPage() {
                     <h1 className="text-2xl font-bold text-gray-800">Student Voting Portal</h1>
                     <p className="text-sm text-gray-500 mt-2">Enter your student ID to begin voting</p>
                 </div>
-
-                {error && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                        <p className="text-sm text-red-700">{error}</p>
-                    </div>
-                )}
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>

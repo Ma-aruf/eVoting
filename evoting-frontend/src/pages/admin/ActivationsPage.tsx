@@ -1,5 +1,6 @@
 import {type FormEvent, type MouseEvent, useEffect, useState} from 'react';
 import api from '../../apiConfig';
+import {showError, showSuccess} from '../../utils/toast';
 
 interface Student {
     id: number;
@@ -23,12 +24,8 @@ export default function ActivationsPage() {
     const [studentDropdownOpen, setStudentDropdownOpen] = useState(false);
     const [studentId, setStudentId] = useState('');
 
-    const [message, setMessage] = useState<string | null>(null);
-    const [error, setError] = useState<string | null>(null);
-
     const fetchStudents = async () => {
         setLoading(true);
-        setError(null);
         try {
             const res = await api.get<Student[] | ListResponse<Student>>('api/students/');
             const data = res.data;
@@ -40,7 +37,7 @@ export default function ActivationsPage() {
                 setStudents([]);
             }
         } catch (err) {
-            setError('Failed to load students.');
+            showError('Failed to load students.');
         } finally {
             setLoading(false);
         }
@@ -54,21 +51,19 @@ export default function ActivationsPage() {
         const id = (targetStudentId ?? studentId).trim();
         if (!id) return;
 
-        setMessage(null);
-        setError(null);
         setLoading(true);
         try {
-            const res = await api.post('api/students/activate/', {
+            await api.post('api/students/activate/', {
                 student_id: id,
                 is_active: nextActive,
             });
 
-            setMessage(res.data.detail || (nextActive ? 'Student activated successfully' : 'Student deactivated successfully'));
+            showSuccess(nextActive ? 'Student activated successfully' : 'Student deactivated successfully');
             setStudentId('');
             setStudentQuery('');
             await fetchStudents();
         } catch (err: any) {
-            setError(err.response?.data?.detail || (nextActive ? 'Activation failed. Please try again.' : 'Deactivation failed. Please try again.'));
+            showError(err.response?.data?.detail || (nextActive ? 'Activation failed. Please try again.' : 'Deactivation failed. Please try again.'));
         } finally {
             setLoading(false);
         }
@@ -98,19 +93,6 @@ export default function ActivationsPage() {
             <div className="flex items-center justify-between">
                 <h1 className="text-xl font-semibold text-gray-900">Voter Activation</h1>
             </div>
-
-            {/* Error / Success Messages */}
-            {error && (
-                <div className="bg-red-50 rounded-xl p-4 border border-red-100">
-                    <p className="text-sm text-red-600">{error}</p>
-                </div>
-            )}
-            {message && (
-                <div className="bg-green-50 rounded-xl p-4 border border-green-100">
-                    <p className="text-sm text-green-600">{message}</p>
-                </div>
-            )}
-
 
             {/* Activate/Deactivate Card */}
             <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">

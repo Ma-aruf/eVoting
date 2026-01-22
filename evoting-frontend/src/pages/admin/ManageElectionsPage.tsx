@@ -1,5 +1,6 @@
 import {useEffect, useState} from 'react';
 import api from '../../apiConfig';
+import {showError, showSuccess} from '../../utils/toast';
 
 interface Election {
     id: number;
@@ -33,8 +34,6 @@ export default function ManageElectionsPage() {
     const [elections, setElections] = useState<Election[]>([]);
     const [loading, setLoading] = useState(false);
     const [actionElectionId, setActionElectionId] = useState<number | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
      const [searchTerm, setSearchTerm] = useState('');
 
@@ -42,7 +41,6 @@ export default function ManageElectionsPage() {
 
     const fetchElections = async () => {
         setLoading(true);
-        setError(null);
         try {
             const res = await api.get<ListResponse<Election> | Election[]>('api/elections/manage/');
             const data = res.data;
@@ -50,7 +48,7 @@ export default function ManageElectionsPage() {
             setElections(list);
         } catch (err) {
             console.error(err);
-            setError('Failed to load elections.');
+            showError('Failed to load elections.');
         } finally {
             setLoading(false);
         }
@@ -61,9 +59,6 @@ export default function ManageElectionsPage() {
     }, []);
 
     const handleToggle = async (election: Election, nextActive: boolean) => {
-        setError(null);
-        setSuccessMessage(null);
-
         const verb = nextActive ? 'set active' : 'stop';
         const ok = window.confirm(`Are you sure you want to ${verb} "${election.name}"?`);
         if (!ok) return;
@@ -74,16 +69,16 @@ export default function ManageElectionsPage() {
                 election_id: election.id,
                 is_active: nextActive,
             });
-            setSuccessMessage(
+            showSuccess(
                 nextActive
                     ? `Election "${election.name}" is now active.`
-                    : `Election "${election.name}" has been stopped.`,
+                    : `Election "${election.name}" has been stopped.`
             );
             await fetchElections();
         } catch (err: any) {
             console.error(err);
             const detail = err.response?.data?.detail;
-            setError(detail || 'Failed to update election status.');
+            showError(detail || 'Failed to update election status.');
         } finally {
             setActionElectionId(null);
         }
@@ -116,17 +111,6 @@ export default function ManageElectionsPage() {
                 </p>
             </div>
 
-            {/* Error / Success Messages */}
-            {error && (
-                <div className="bg-red-50 rounded-xl p-4 border border-red-100">
-                    <p className="text-sm text-red-600">{error}</p>
-                </div>
-            )}
-            {successMessage && (
-                <div className="bg-green-50 rounded-xl p-4 border border-green-100">
-                    <p className="text-sm text-green-600">{successMessage}</p>
-                </div>
-            )}
 
             {/* Stat Cards */}
             <section>

@@ -2,6 +2,7 @@
 import {useEffect, useState} from 'react';
 import {useAuth} from '../../hooks/useAuth';
 import api from '../../apiConfig';
+import {showError} from '../../utils/toast';
 
 interface Election {
     id: number;
@@ -53,13 +54,11 @@ export default function Dashboard() {
     const [totalElections, setTotalElections] = useState<number>(0);
     const [activeElection, setActiveElection] = useState<Election | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
-    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchStats = async () => {
             try {
                 setLoading(true);
-                setError(null);
 
                 const [electionsRes, studentsRes] = await Promise.all([
                     api.get<ListResponse<Election> | Election[]>('api/elections/'),
@@ -121,7 +120,7 @@ export default function Dashboard() {
                     setTotalCandidates(0);
                 }
             } catch (err) {
-                setError('Failed to load dashboard statistics.');
+                showError('Failed to load dashboard statistics');
             } finally {
                 setLoading(false);
             }
@@ -152,12 +151,6 @@ export default function Dashboard() {
             {loading && (
                 <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
                     <p className="text-sm text-gray-500">Loading statistics...</p>
-                </div>
-            )}
-
-            {error && (
-                <div className="bg-red-50 rounded-xl p-4 border border-red-100">
-                    <p className="text-sm text-red-600">{error}</p>
                 </div>
             )}
 

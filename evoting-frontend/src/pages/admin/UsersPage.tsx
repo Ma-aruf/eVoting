@@ -1,5 +1,6 @@
 import {type FormEvent, useEffect, useState} from 'react';
 import api from '../../apiConfig';
+import {showError, showSuccess} from '../../utils/toast';
 
 interface User {
     id: number;
@@ -35,14 +36,11 @@ export default function UsersPage() {
     const [password, setPassword] = useState('');
     const [role, setRole] = useState<'staff' | 'activator' | 'superuser'>('staff');
 
-    const [message, setMessage] = useState<string | null>(null);
-    const [error, setError] = useState<string | null>(null);
 
     const [editingUser, setEditingUser] = useState<User | null>(null);
 
     const fetchUsers = async () => {
         setLoading(true);
-        setError(null);
         try {
             const res = await api.get<User[] | ListResponse<User>>('api/users/');
             const data = res.data;
@@ -54,7 +52,7 @@ export default function UsersPage() {
                 setUsers([]);
             }
         } catch (err) {
-            setError('Failed to load users.');
+            showError('Failed to load users.');
         } finally {
             setLoading(false);
         }
@@ -74,8 +72,6 @@ export default function UsersPage() {
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
-        setMessage(null);
-        setError(null);
         setLoading(true);
 
         try {
@@ -85,10 +81,10 @@ export default function UsersPage() {
                     payload.password = password;
                 }
                 await api.patch(`api/users/${editingUser.id}/`, payload);
-                setMessage('User updated successfully.');
+                showSuccess('User updated successfully.');
             } else {
                 await api.post('api/users/', {username, password, role});
-                setMessage('User created successfully.');
+                showSuccess('User created successfully.');
             }
             resetForm();
             await fetchUsers();
@@ -98,9 +94,9 @@ export default function UsersPage() {
                 const messages = Object.entries(detail)
                     .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
                     .join('; ');
-                setError(messages || 'Operation failed.');
+                showError(messages || 'Operation failed.');
             } else {
-                setError(detail || 'Operation failed.');
+                showError(detail || 'Operation failed.');
             }
         } finally {
             setLoading(false);
@@ -118,15 +114,13 @@ export default function UsersPage() {
     const handleDelete = async (user: User) => {
         if (!confirm(`Delete user "${user.username}"?`)) return;
 
-        setMessage(null);
-        setError(null);
         setLoading(true);
         try {
             await api.delete(`api/users/${user.id}/`);
-            setMessage('User deleted.');
+            showSuccess('User deleted.');
             await fetchUsers();
         } catch (err: any) {
-            setError(err.response?.data?.detail || 'Failed to delete user.');
+            showError(err.response?.data?.detail || 'Failed to delete user.');
         } finally {
             setLoading(false);
         }
@@ -162,17 +156,6 @@ export default function UsersPage() {
                 </button>
             </div>
 
-            {/* Error / Success Messages */}
-            {error && (
-                <div className="bg-red-50 rounded-xl p-4 border border-red-100">
-                    <p className="text-sm text-red-600">{error}</p>
-                </div>
-            )}
-            {message && (
-                <div className="bg-green-50 rounded-xl p-4 border border-green-100">
-                    <p className="text-sm text-green-600">{message}</p>
-                </div>
-            )}
 
             {/* Add/Edit User Form */}
             {showForm && (

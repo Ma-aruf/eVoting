@@ -1,5 +1,6 @@
 import {type FormEvent, useEffect, useState} from 'react';
 import api from '../../apiConfig';
+import {showError, showSuccess} from '../../utils/toast';
 
 interface Student {
     id: number;
@@ -56,8 +57,6 @@ const TrashIcon = () => (
 export default function StudentsPage() {
     const [students, setStudents] = useState<Student[]>([]);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
     // Toggle for add student form
     const [showAddForm, setShowAddForm] = useState(false);
@@ -80,7 +79,6 @@ export default function StudentsPage() {
 
     const fetchStudents = async () => {
         setLoading(true);
-        setError(null);
         try {
             const res = await api.get<Student[] | { results?: Student[] }>('api/students/');
             const data = res.data;
@@ -92,7 +90,7 @@ export default function StudentsPage() {
                 setStudents([]);
             }
         } catch (err) {
-            setError('Failed to load students');
+            showError('Failed to load students');
         } finally {
             setLoading(false);
         }
@@ -104,11 +102,9 @@ export default function StudentsPage() {
 
     const handleCreateStudent = async (e: FormEvent) => {
         e.preventDefault();
-        setError(null);
-        setSuccessMessage(null);
 
         if (!studentId.trim() || !fullName.trim() || !className) {
-            setError('Please fill in all required fields.');
+            showError('Please fill in all required fields.');
             return;
         }
 
@@ -120,7 +116,7 @@ export default function StudentsPage() {
                 class_name: className,
             });
 
-            setSuccessMessage('Student added successfully.');
+            showSuccess('Student added successfully.');
             setStudentId('');
             setFullName('');
             setClassName('');
@@ -128,7 +124,7 @@ export default function StudentsPage() {
             await fetchStudents();
         } catch (err: any) {
             const detail = err.response?.data?.detail;
-            setError(detail || 'Failed to add student. Make sure the ID is unique.');
+            showError(detail || 'Failed to add student. Make sure the ID is unique.');
         } finally {
             setLoading(false);
         }
@@ -138,8 +134,6 @@ export default function StudentsPage() {
         e.preventDefault();
         if (!file) return;
         setUploadResult(null);
-        setError(null);
-        setSuccessMessage(null);
         const formData = new FormData();
         formData.append('file', file);
         try {
@@ -150,7 +144,7 @@ export default function StudentsPage() {
             setFile(null);
             await fetchStudents();
         } catch (err: any) {
-            setError(err.response?.data?.detail || 'Bulk upload failed');
+            showError(err.response?.data?.detail || 'Bulk upload failed');
         }
     };
 
@@ -163,8 +157,6 @@ export default function StudentsPage() {
     const handleEditStudent = async (e: FormEvent) => {
         e.preventDefault();
         if (!editingStudent) return;
-        setError(null);
-        setSuccessMessage(null);
 
         try {
             setLoading(true);
@@ -178,11 +170,11 @@ export default function StudentsPage() {
                     ? { ...s, full_name: editFullName.trim(), class_name: editClassName }
                     : s
             ));
-            setSuccessMessage('Student updated successfully.');
+            showSuccess('Student updated successfully.');
             setEditingStudent(null);
         } catch (err: any) {
             const detail = err.response?.data?.detail;
-            setError(detail || 'Failed to update student.');
+            showError(detail || 'Failed to update student.');
         } finally {
             setLoading(false);
         }
@@ -190,21 +182,18 @@ export default function StudentsPage() {
 
     const handleDeleteStudent = async (student: Student) => {
         if (student.has_voted) {
-            setError('Cannot delete a student who has already voted.');
+            showError('Cannot delete a student who has already voted.');
             return;
         }
         if (!confirm(`Are you sure you want to delete ${student.full_name}?`)) return;
-
-        setError(null);
-        setSuccessMessage(null);
         try {
             setLoading(true);
             await api.delete(`api/students/${student.id}/`);
-            setSuccessMessage('Student deleted successfully.');
+            showSuccess('Student deleted successfully.');
             await fetchStudents();
         } catch (err: any) {
             const detail = err.response?.data?.detail;
-            setError(detail || 'Failed to delete student.');
+            showError(detail || 'Failed to delete student.');
         } finally {
             setLoading(false);
         }
@@ -233,17 +222,6 @@ export default function StudentsPage() {
                 </button>
             </div>
 
-            {/* Error / Success Messages */}
-            {error && (
-                <div className="bg-red-50 rounded-xl p-4 border border-red-100">
-                    <p className="text-sm text-red-600">{error}</p>
-                </div>
-            )}
-            {successMessage && (
-                <div className="bg-green-50 rounded-xl p-4 border border-green-100">
-                    <p className="text-sm text-green-600">{successMessage}</p>
-                </div>
-            )}
 
             {/* Add Student Form - Collapsible */}
             {showAddForm && (

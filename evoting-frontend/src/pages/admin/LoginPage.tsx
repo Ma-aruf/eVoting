@@ -1,24 +1,22 @@
 import {type FormEvent, useState} from 'react';
 import {useAuth} from '../../hooks/useAuth';
+import {showError} from '../../utils/toast';
 
 
 export default function LoginPage() {
     const {login} = useAuth();
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
-    const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
-        setError(null);
         setLoading(true);
         try {
             await login(username, password);
         } catch (error) {
             const err = error as any;
-            alert(err)
-            setError(err?.response?.data?.detail || err.message || 'Login failed');
+            showError(err?.response?.data?.detail || err.message || 'Login failed');
         }
         finally {
             setLoading(false);
@@ -29,7 +27,6 @@ export default function LoginPage() {
         <div className="min-h-screen flex items-center justify-center bg-gray-50">
             <div className="w-full max-w-md bg-white shadow rounded-lg p-6 space-y-4">
                 <h1 className="text-xl font-semibold text-gray-800 text-center">Admin Login</h1>
-                {error && <p className="text-sm text-red-600 text-center">{error}</p>}
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Username</label>

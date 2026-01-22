@@ -1,5 +1,6 @@
 import {type FormEvent, useEffect, useState} from 'react';
 import api from '../../apiConfig';
+import {showError, showSuccess} from '../../utils/toast';
 
 interface Election {
     id: number;
@@ -38,8 +39,6 @@ interface ListResponse<T> {
 export default function ElectionsPage() {
     const [elections, setElections] = useState<Election[]>([]);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
      const [showCreateForm, setShowCreateForm] = useState(false);
      const [searchTerm, setSearchTerm] = useState('');
@@ -52,7 +51,6 @@ export default function ElectionsPage() {
 
     const fetchElections = async () => {
         setLoading(true);
-        setError(null);
         try {
             const res = await
                 api.get<Election[] | ListResponse<Election>>('api/elections/');
@@ -67,7 +65,7 @@ export default function ElectionsPage() {
             }
         } catch (err) {
             console.error(err);
-            setError('Failed to load elections.');
+            showError('Failed to load elections.');
         } finally {
             setLoading(false);
         }
@@ -79,11 +77,9 @@ export default function ElectionsPage() {
 
     const handleCreateElection = async (e: FormEvent) => {
         e.preventDefault();
-        setError(null);
-        setSuccessMessage(null);
 
         if (!name.trim() || !year.trim() || !startTime || !endTime) {
-            setError('Please fill in all required fields.');
+            showError('Please fill in all required fields.');
             return;
         }
 
@@ -97,7 +93,7 @@ export default function ElectionsPage() {
                 is_active: isActive,
             });
 
-            setSuccessMessage('Election created successfully.');
+            showSuccess('Election created successfully.');
             setName('');
             setYear('');
             setStartTime('');
@@ -110,7 +106,7 @@ export default function ElectionsPage() {
         } catch (err: any) {
             console.error(err);
             const detail = err.response?.data?.detail;
-            setError(detail || 'Failed to create election.');
+            showError(detail || 'Failed to create election.');
         } finally {
             setLoading(false);
         }
@@ -147,17 +143,6 @@ export default function ElectionsPage() {
                 </button>
             </div>
 
-            {/* Error / Success Messages */}
-            {error && (
-                <div className="bg-red-50 rounded-xl p-4 border border-red-100">
-                    <p className="text-sm text-red-600">{error}</p>
-                </div>
-            )}
-            {successMessage && (
-                <div className="bg-green-50 rounded-xl p-4 border border-green-100">
-                    <p className="text-sm text-green-600">{successMessage}</p>
-                </div>
-            )}
 
             {/* Create election form */}
             {showCreateForm && (

@@ -1,5 +1,6 @@
 import {type FormEvent, useEffect, useState} from 'react';
 import api from '../../apiConfig';
+import {showError, showSuccess} from '../../utils/toast';
 
 interface Election {
     id: number;
@@ -63,8 +64,6 @@ export default function CandidatesPage() {
     const [selectedPositionId, setSelectedPositionId] = useState<number | null>(null);
 
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
     const [showCreateForm, setShowCreateForm] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -90,8 +89,7 @@ export default function CandidatesPage() {
 
     const fetchElections = async () => {
         setLoading(true);
-        setError(null);
-        try {
+                try {
             const res = await api.get<Election[] | ListResponse<Election>>('api/elections/');
             const items = extractItems(res.data);
             setElections(items);
@@ -100,7 +98,7 @@ export default function CandidatesPage() {
             }
         } catch (err) {
             console.error(err);
-            setError('Failed to load elections.');
+            showError('Failed to load elections.');
         } finally {
             setLoading(false);
         }
@@ -128,13 +126,11 @@ export default function CandidatesPage() {
         if (!editingCandidate) return;
 
         if (!editElectionId || !editPositionId || !editStudentId) {
-            setError('Please select election, position, and student.');
+            showError('Please select election, position, and student.');
             return;
         }
 
-        setError(null);
-        setSuccessMessage(null);
-        setLoading(true);
+                        setLoading(true);
 
         try {
             await api.put(`api/candidates/${editingCandidate.id}/`, {
@@ -142,7 +138,7 @@ export default function CandidatesPage() {
                 position: editPositionId,
                 photo_url: editPhotoUrl.trim() || '',
             });
-            setSuccessMessage('Candidate updated successfully.');
+            showSuccess('Candidate updated successfully.');
             setEditingCandidate(null);
             setEditPhotoUrl('');
             setEditElectionId(null);
@@ -152,7 +148,7 @@ export default function CandidatesPage() {
             await fetchCandidates(selectedPositionId);
         } catch (err: any) {
             console.error(err);
-            setError(err.response?.data?.detail || 'Failed to update candidate.');
+            showError(err.response?.data?.detail || 'Failed to update candidate.');
         } finally {
             setLoading(false);
         }
@@ -178,17 +174,15 @@ export default function CandidatesPage() {
     const handleDeleteCandidate = async (candidate: Candidate) => {
         if (!confirm(`Delete candidate "${candidate.student_name}"?`)) return;
 
-        setError(null);
-        setSuccessMessage(null);
-        setLoading(true);
+                        setLoading(true);
 
         try {
             await api.delete(`api/candidates/${candidate.id}/`);
-            setSuccessMessage('Candidate deleted.');
+            showSuccess('Candidate deleted.');
             await fetchCandidates(selectedPositionId);
         } catch (err: any) {
             console.error(err);
-            setError(err.response?.data?.detail || 'Failed to delete candidate.');
+            showError(err.response?.data?.detail || 'Failed to delete candidate.');
         } finally {
             setLoading(false);
         }
@@ -210,8 +204,7 @@ export default function CandidatesPage() {
             return;
         }
         setLoading(true);
-        setError(null);
-        try {
+                try {
             const res = await api.get<Position[] | ListResponse<Position>>('api/positions/', {
                 params: {election_id: electionId},
             });
@@ -222,7 +215,7 @@ export default function CandidatesPage() {
             }
         } catch (err) {
             console.error(err);
-            setError('Failed to load positions.');
+            showError('Failed to load positions.');
         } finally {
             setLoading(false);
         }
@@ -234,15 +227,14 @@ export default function CandidatesPage() {
             return;
         }
         setLoading(true);
-        setError(null);
-        try {
+                try {
             const res = await api.get<Candidate[] | ListResponse<Candidate>>('api/candidates/', {
                 params: {position_id: positionId},
             });
             setCandidates(extractItems(res.data));
         } catch (err) {
             console.error(err);
-            setError('Failed to load candidates.');
+            showError('Failed to load candidates.');
         } finally {
             setLoading(false);
         }
@@ -274,19 +266,17 @@ export default function CandidatesPage() {
 
     const handleCreateCandidate = async (e: FormEvent) => {
         e.preventDefault();
-        setError(null);
-        setSuccessMessage(null);
-
+                
         if (!selectedElectionId) {
-            setError('Please select an election.');
+            showError('Please select an election.');
             return;
         }
         if (!selectedPositionId) {
-            setError('Please select a position.');
+            showError('Please select a position.');
             return;
         }
         if (!selectedStudentId) {
-            setError('Please select a student.');
+            showError('Please select a student.');
             return;
         }
 
@@ -298,7 +288,7 @@ export default function CandidatesPage() {
                 photo_url: photoUrl.trim() || undefined,
             });
 
-            setSuccessMessage('Candidate created successfully.');
+            showSuccess('Candidate created successfully.');
             setSelectedStudentId(null);
             setStudentQuery('');
             setPhotoUrl('');
@@ -306,7 +296,7 @@ export default function CandidatesPage() {
         } catch (err: any) {
             console.error(err);
             const detail = err.response?.data?.detail;
-            setError(detail || 'Failed to create candidate.');
+            showError(detail || 'Failed to create candidate.');
         } finally {
             setLoading(false);
         }
@@ -356,17 +346,6 @@ export default function CandidatesPage() {
                 </button>
             </div>
 
-            {/* Error / Success Messages */}
-            {error && (
-                <div className="bg-red-50 rounded-xl p-4 border border-red-100">
-                    <p className="text-sm text-red-600">{error}</p>
-                </div>
-            )}
-            {successMessage && (
-                <div className="bg-green-50 rounded-xl p-4 border border-green-100">
-                    <p className="text-sm text-green-600">{successMessage}</p>
-                </div>
-            )}
 
             {/* Stat Cards */}
             <section>

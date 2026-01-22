@@ -1,4 +1,6 @@
 import {BrowserRouter, Navigate, Route, Routes} from 'react-router-dom';
+import {ToastContainer} from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import {AuthProvider, type UserRole} from './contexts/AuthContext';
 import {useAuth} from './hooks/useAuth';
 import AdminLayout from './components/AdminLayout.tsx';
@@ -35,6 +37,7 @@ function App() {
     return (
         <BrowserRouter>
             <AuthProvider>
+                <ToastContainer />
                 <Routes>
                     <Route path="/" element={<StudentLoginPage/>}/>
                     <Route path="/voter-login" element={<StudentLoginPage/>}/>
