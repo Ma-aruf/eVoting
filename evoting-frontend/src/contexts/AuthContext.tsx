@@ -1,5 +1,5 @@
 import {createContext, type ReactNode, useEffect, useState} from 'react';
-import {useNavigate} from 'react-router-dom';
+import {useLocation, useNavigate} from 'react-router-dom';
 import api from "../apiConfig.ts";
 import { jwtDecode } from 'jwt-decode';
 
@@ -48,6 +48,8 @@ export function AuthProvider({children}: { children: ReactNode }) {
     });
 
     const navigate = useNavigate();
+    const location = useLocation();
+    const isAdminRoute = location.pathname.startsWith('/admin');
 
     const login = async (username: string, password: string) => {
         try {
@@ -118,7 +120,9 @@ export function AuthProvider({children}: { children: ReactNode }) {
         if (api.defaults && api.defaults.headers && api.defaults.headers.common) {
             delete api.defaults.headers.common['Authorization'];
         }
-        navigate('/admin/login');
+        if (isAdminRoute) {
+            navigate('/admin/login');
+        }
     };
 
 
@@ -163,17 +167,19 @@ export function AuthProvider({children}: { children: ReactNode }) {
 
     // Add auto-refresh on app load
     useEffect(() => {
+        if (!isAdminRoute) return;
+
         const token = localStorage.getItem('access_token');
-        if (token) {
-            // Check token immediately on load
-            checkAndRefreshToken();
+        if (!token) return;
 
-            // Set up interval to check token periodically (every 1 minute)
-            const intervalId = setInterval(checkAndRefreshToken, 60000);
+        // Check token immediately on load
+        checkAndRefreshToken();
 
-            return () => clearInterval(intervalId);
-        }
-    }, []);
+        // Set up interval to check token periodically (every 1 minute)
+        const intervalId = setInterval(checkAndRefreshToken, 60000);
+
+        return () => clearInterval(intervalId);
+    }, [isAdminRoute]);
 
     return (
         <AuthContext.Provider value={{user, isAuthenticated, login, logout}}>
