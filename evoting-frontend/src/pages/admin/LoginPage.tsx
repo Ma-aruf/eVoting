@@ -55,10 +55,6 @@ export default function LoginPage() {
                         {loading ? 'Signing in...' : 'Sign in'}
                     </button>
                 </form>
-                <p className="text-xs text-gray-500 text-center">
-                    Dev note: login is currently mocked. Use usernames like <code>superuser</code>, <code>staff1</code>,
-                    or <code>activator1</code> with password <code>admin123</code>.
-                </p>
             </div>
         </div>
     );
