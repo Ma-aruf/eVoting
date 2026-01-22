@@ -142,7 +142,7 @@ export default function ActivationsPage() {
                                 }}
                                 placeholder="Type student name or ID..."
                                 disabled={students.length === 0}
-                                className="w-full border border-blue-200 border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
+                                className="w-full  border-blue-200 border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
                             />
 
                             {studentDropdownOpen && students.length > 0 && (

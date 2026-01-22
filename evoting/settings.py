@@ -154,6 +154,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5175",
     "http://127.0.0.1:5173",
+    "https://kasec-evoting-7lkj.onrender.com"
 ]
 
 # Add Railway frontend URL if available
