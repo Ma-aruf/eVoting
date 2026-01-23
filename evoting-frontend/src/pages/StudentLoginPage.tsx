@@ -80,7 +80,7 @@ export default function StudentLoginPage() {
                 <div className="relative z-10 flex flex-col justify-center px-12 text-white">
                     <h2 className="text-4xl font-bold mb-4">Welcome to eVoting</h2>
                     <p className="text-lg text-blue-100 max-w-md">
-                        Your voice matters. Cast your vote securely and make a difference The Great Kasec.
+                        Your voice matters. Cast your vote securely and make a difference in The Great Kasec.
                     </p>
                     <div className="mt-8 space-y-4">
                         <div className="flex items-center gap-3">
@@ -133,7 +133,7 @@ export default function StudentLoginPage() {
                                 </svg>
                             </div>
                             <h1 className="text-2xl font-bold text-gray-800">Student Login</h1>
-                            <p className="text-sm text-gray-500 mt-2">Enter your student ID to access the voting portal</p>
+                            <p className="text-sm text-gray-500 mt-2">Enter your Voter ID to access the voting portal</p>
                         </div>
 
                         <form onSubmit={handleSubmit} className="space-y-6">
