@@ -109,7 +109,7 @@ export default function ManageElectionsPage() {
             </section>
 
             {/* Currently Active */}
-            <section className="bg-white/50 rounded-xl border border-gray-100  p-5">
+            <section className="bg-white/50 rounded-xl border border-gray-200  p-5">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div className="flex items-center gap-3 ">
                         <p className="text-lg font-semibold text-gray-900">
