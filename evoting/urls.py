@@ -11,21 +11,13 @@ from rest_framework_simplejwt.views import (
 )
 
 def health_check(request):
-    response_data = {
+    # Simple, fast health check that always returns 200
+    # Railway just needs to see the app is running, not database status
+    return JsonResponse({
         "status": "ok",
         "service": "evoting-api",
         "timestamp": now().isoformat(),
-    }
-
-    # Optional: database check (non-fatal)
-    try:
-        from django.db import connections
-        connections["default"].cursor()
-        response_data["database"] = "connected"
-    except Exception:
-        response_data["database"] = "not_ready"
-
-    return JsonResponse(response_data, status=200)
+    }, status=200)
 
 urlpatterns = [
     path('', health_check, name='health_check'),

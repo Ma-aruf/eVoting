@@ -37,25 +37,9 @@ if [ $? -eq 0 ]; then
     python manage.py collectstatic --noinput
     
     echo "Starting Gunicorn..."
-    # Start Gunicorn in background
-    gunicorn evoting.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --timeout 120 --log-level debug &
-    GUNICORN_PID=$!
-    
-    echo "Waiting for Gunicorn to be ready..."
-    # Wait for Gunicorn to be ready to accept requests
-    for i in {1..30}; do
-        if curl -s http://localhost:$PORT/ > /dev/null 2>&1; then
-            echo "Gunicorn is ready! Health check should pass."
-            # Keep the process running
-            wait $GUNICORN_PID
-        else
-            echo "Attempt $i: Gunicorn not ready yet, waiting 2 seconds..."
-            sleep 2
-        fi
-    done
-    
-    echo "Gunicorn failed to become ready in time, but keeping it running..."
-    wait $GUNICORN_PID
+    # Give extra time for everything to be ready
+    sleep 5
+    exec gunicorn evoting.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --timeout 120 --log-level debug
 else
     echo "Database connection failed, but proceeding anyway..."
     echo "Starting Gunicorn without migrations..."
