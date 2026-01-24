@@ -16,7 +16,6 @@ from pathlib import Path
 import dj_database_url
 from decouple import RepositoryEnv, Config
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # --------------------------------------------------
@@ -108,40 +107,24 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'evoting.wsgi.application'
 
-
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-# Priority: DATABASE_URL > PG* env vars > local defaults
-database_url = os.environ.get('DATABASE_URL')
+database_url = os.environ.get("DATABASE_URL")
 
 if database_url:
-    # Use DATABASE_URL if available (Railway provides this)
     DATABASES = {
-        'default': dj_database_url.parse(database_url, conn_max_age=600)
-    }
-elif os.environ.get('PGDATABASE') and os.environ.get('PGHOST'):
-    # Use individual PG* environment variables if set
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.environ.get('PGDATABASE'),
-            'USER': os.environ.get('PGUSER', 'postgres'),
-            'PASSWORD': os.environ.get('PGPASSWORD', ''),
-            'HOST': os.environ.get('PGHOST', 'localhost'),
-            'PORT': os.environ.get('PGPORT', '5432'),
-        }
+        "default": dj_database_url.parse(database_url, conn_max_age=600)
     }
 else:
-    # Local development defaults
     DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': 'evkasec_db',
-            'USER': 'postgres',
-            'PASSWORD': '@nasarabieni',
-            'HOST': 'localhost',
-            'PORT': '5432',
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": get_env("NAME"),
+            "USER": get_env("USER"),
+            "PASSWORD": get_env("PASSWORD"),
+            "HOST": get_env("HOST", "localhost"),
+            "PORT": get_env("PORT", "5432"),
         }
     }
 
@@ -157,10 +140,7 @@ CORS_ALLOWED_ORIGINS = [
     "https://kasec-evoting-7lkj.onrender.com"
 ]
 
-# Add Railway frontend URL if available
-railway_frontend_url = get_env('RAILWAY_FRONTEND_URL')
-if railway_frontend_url:
-    CORS_ALLOWED_ORIGINS.append(railway_frontend_url)
+
 
 CORS_ALLOW_HEADERS = [
     'accept',
@@ -178,13 +158,8 @@ CORS_ALLOW_HEADERS = [
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5175",
-    "https://*.railway.app",
 ]
 
-
-# Add Railway frontend URL to CSRF trusted origins
-if railway_frontend_url:
-    CSRF_TRUSTED_ORIGINS.append(railway_frontend_url)
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
@@ -276,7 +251,6 @@ STATIC_URL = '/static/'
 
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")] if os.path.exists(os.path.join(BASE_DIR, "static")) else []
-
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
