@@ -200,19 +200,6 @@ export default function CandidatesPage() {
                 </div>
             )}
 
-            {/* Page Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <h1 className="text-xl font-semibold text-gray-900">Candidates</h1>
-                <button
-                    onClick={() => setShowCreateForm(!showCreateForm)}
-                    className="flex w-full sm:w-auto justify-center items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition"
-                >
-                    <PlusIcon />
-                    Add Candidate
-                </button>
-            </div>
-
-
             {/* Stat Cards */}
             <section>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -252,7 +239,7 @@ export default function CandidatesPage() {
             </section>
 
             {/* Filters */}
-            <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <section className="rounded-xl border border-gray-100 p-2 px-4">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                     <div>
                         <h2 className="text-base font-medium text-gray-900">Select Election & Position</h2>
@@ -265,7 +252,7 @@ export default function CandidatesPage() {
                             onChange={(e) =>
                                 setSelectedElectionId(e.target.value ? Number(e.target.value) : null)
                             }
-                            className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full md:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full md:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
                             {elections.length === 0 && <option value="">No elections available</option>}
                             {elections.length > 0 && <option value="">Select election…</option>}
@@ -282,7 +269,7 @@ export default function CandidatesPage() {
                             onChange={(e) =>
                                 setSelectedPositionId(e.target.value ? Number(e.target.value) : null)
                             }
-                            className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full md:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full md:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             disabled={!selectedElectionId || positions.length === 0}
                         >
                             {!selectedElectionId && <option value="">Select an election first</option>}
@@ -299,10 +286,19 @@ export default function CandidatesPage() {
                     </div>
                 </div>
             </section>
+            <div className="flex justify-end">
+                <button
+                    onClick={() => setShowCreateForm(!showCreateForm)}
+                    className="flex w-full sm:w-auto justify-center items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition"
+                >
+                    <PlusIcon />
+                    Add Candidate
+                </button>
+            </div>
 
             {/* Filters and create form */}
             {showCreateForm && (
-                <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                <section className="bg-white rounded-xl border border-gray-200 p-5">
                     <h2 className="text-base font-medium text-gray-900 mb-4">Add Candidate</h2>
                     <form
                         onSubmit={handleCreateCandidate}
@@ -387,7 +383,7 @@ export default function CandidatesPage() {
             )}
 
             {editingCandidate && (
-                <section className="bg-white rounded-xl border border-blue-200 shadow-sm p-5">
+                <section className="bg-white rounded-xl border border-gray-200 s-sm p-2 px-5">
                     <h2 className="text-base font-medium text-gray-900 mb-4">
                         Edit Candidate: {editingCandidate.student_name}
                     </h2>
@@ -536,7 +532,7 @@ export default function CandidatesPage() {
             )}
 
             {/* Candidates table */}
-            <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <section className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-5 border-b border-gray-100">
                     <div className="flex items-center gap-4">
                         <h2 className="text-base font-medium text-gray-900">
