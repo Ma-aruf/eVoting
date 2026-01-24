@@ -1,38 +1,11 @@
 import {type FormEvent, useEffect, useState} from 'react';
-import api from '../../apiConfig';
-import {showError, showSuccess} from '../../utils/toast';
+import {useElections} from '../../queries/useElections';
+import {usePositions} from '../../queries/usePositions';
+import {useAllStudents} from '../../queries/useAllStudents';
+import {useCandidates, useCreateCandidate, useUpdateCandidate, useDeleteCandidate} from '../../queries/useCandidates';
+import type {Candidate} from '../../queries/useCandidates';
+import {showError} from '../../utils/toast';
 
-interface Election {
-    id: number;
-    name: string;
-    year: number;
-}
-
-interface Position {
-    id: number;
-    name: string;
-    display_order: number;
-    election: number;
-}
-
-interface Student {
-    id: number;
-    student_id: string;
-    full_name: string;
-}
-
-interface Candidate {
-    id: number;
-    student: number;
-    student_name: string;
-    position: number;
-    photo_url: string;
-}
-
-interface ListResponse<T> {
-    count?: number;
-    results?: T[];
-}
 
 const UsersIcon = () => (
     <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -55,15 +28,23 @@ const PlusIcon = () => (
 );
 
 export default function CandidatesPage() {
-    const [elections, setElections] = useState<Election[]>([]);
-    const [positions, setPositions] = useState<Position[]>([]);
-    const [students, setStudents] = useState<Student[]>([]);
-    const [candidates, setCandidates] = useState<Candidate[]>([]);
-
     const [selectedElectionId, setSelectedElectionId] = useState<number | null>(null);
     const [selectedPositionId, setSelectedPositionId] = useState<number | null>(null);
-
-    const [loading, setLoading] = useState(false);
+    
+    // Queries
+    const {data: elections = [], isLoading: electionsLoading} = useElections();
+    const {data: positions = [], isLoading: positionsLoading} = usePositions(selectedElectionId);
+    const {data: students = [], isLoading: studentsLoading} = useAllStudents();
+    const {data: candidates = [], isLoading: candidatesLoading} = useCandidates(selectedPositionId);
+    
+    // Mutations
+    const createCandidateMutation = useCreateCandidate();
+    const updateCandidateMutation = useUpdateCandidate();
+    const deleteCandidateMutation = useDeleteCandidate();
+    
+    // Loading state
+    const loading = electionsLoading || positionsLoading || studentsLoading || candidatesLoading || 
+                   createCandidateMutation.isPending || updateCandidateMutation.isPending || deleteCandidateMutation.isPending;
 
     const [showCreateForm, setShowCreateForm] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -81,30 +62,8 @@ export default function CandidatesPage() {
     const [editStudentQuery, setEditStudentQuery] = useState('');
     const [editStudentDropdownOpen, setEditStudentDropdownOpen] = useState(false);
 
-    const extractItems = <T,>(data: T[] | ListResponse<T>): T[] => {
-        if (Array.isArray(data)) return data;
-        if (Array.isArray(data.results)) return data.results;
-        return [];
-    };
 
-    const fetchElections = async () => {
-        setLoading(true);
-                try {
-            const res = await api.get<Election[] | ListResponse<Election>>('api/elections/');
-            const items = extractItems(res.data);
-            setElections(items);
-            if (!selectedElectionId && items.length > 0) {
-                setSelectedElectionId(items[0].id);
-            }
-        } catch (err) {
-            console.error(err);
-            showError('Failed to load elections.');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleEditCandidate = (candidate: Candidate) => {
+    const handleEditCandidate = (candidate: any) => {
         setEditingCandidate(candidate);
         setEditPhotoUrl(candidate.photo_url || '');
         
@@ -130,139 +89,43 @@ export default function CandidatesPage() {
             return;
         }
 
-                        setLoading(true);
-
-        try {
-            await api.put(`api/candidates/${editingCandidate.id}/`, {
-                student: editStudentId,
-                position: editPositionId,
-                photo_url: editPhotoUrl.trim() || '',
-            });
-            showSuccess('Candidate updated successfully.');
-            setEditingCandidate(null);
-            setEditPhotoUrl('');
-            setEditElectionId(null);
-            setEditPositionId(null);
-            setEditStudentId(null);
-            setEditStudentQuery('');
-            await fetchCandidates(selectedPositionId);
-        } catch (err: any) {
-            console.error(err);
-            showError(err.response?.data?.detail || 'Failed to update candidate.');
-        } finally {
-            setLoading(false);
-        }
+        updateCandidateMutation.mutate({
+            id: editingCandidate.id,
+            student: editStudentId,
+            position: editPositionId,
+            photo_url: editPhotoUrl.trim() || '',
+        }, {
+            onSuccess: () => {
+                setEditingCandidate(null);
+                setEditPhotoUrl('');
+                setEditElectionId(null);
+                setEditPositionId(null);
+                setEditStudentId(null);
+                setEditStudentQuery('');
+            },
+        });
     };
 
-    useEffect(() => {
-        if (editElectionId !== null) {
-            const fetchEditPositions = async () => {
-                try {
-                    const res = await api.get<Position[] | ListResponse<Position>>('api/positions/', {
-                        params: {election_id: editElectionId},
-                    });
-                    const items = extractItems(res.data);
-                    setPositions(items);
-                } catch (err) {
-                    console.error(err);
-                }
-            };
-            fetchEditPositions();
-        }
-    }, [editElectionId]);
 
-    const handleDeleteCandidate = async (candidate: Candidate) => {
+    const handleDeleteCandidate = async (candidate: any) => {
         if (!confirm(`Delete candidate "${candidate.student_name}"?`)) return;
 
-                        setLoading(true);
-
-        try {
-            await api.delete(`api/candidates/${candidate.id}/`);
-            showSuccess('Candidate deleted.');
-            await fetchCandidates(selectedPositionId);
-        } catch (err: any) {
-            console.error(err);
-            showError(err.response?.data?.detail || 'Failed to delete candidate.');
-        } finally {
-            setLoading(false);
-        }
+        deleteCandidateMutation.mutate(candidate);
     };
 
-    const fetchStudents = async () => {
-        try {
-            const res = await api.get<Student[] | ListResponse<Student>>('api/students/');
-            setStudents(extractItems(res.data));
-        } catch (err) {
-            console.error(err);
-            // Do not block page if students fail; just show empty dropdown
-        }
-    };
 
-    const fetchPositions = async (electionId: number | null) => {
-        if (!electionId) {
-            setPositions([]);
-            return;
-        }
-        setLoading(true);
-                try {
-            const res = await api.get<Position[] | ListResponse<Position>>('api/positions/', {
-                params: {election_id: electionId},
-            });
-            const items = extractItems(res.data);
-            setPositions(items);
-            if (!selectedPositionId && items.length > 0) {
-                setSelectedPositionId(items[0].id);
-            }
-        } catch (err) {
-            console.error(err);
-            showError('Failed to load positions.');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const fetchCandidates = async (positionId: number | null) => {
-        if (!positionId) {
-            setCandidates([]);
-            return;
-        }
-        setLoading(true);
-                try {
-            const res = await api.get<Candidate[] | ListResponse<Candidate>>('api/candidates/', {
-                params: {position_id: positionId},
-            });
-            setCandidates(extractItems(res.data));
-        } catch (err) {
-            console.error(err);
-            showError('Failed to load candidates.');
-        } finally {
-            setLoading(false);
-        }
-    };
-
+    // Auto-select first election and position when data loads
     useEffect(() => {
-        fetchElections();
-        fetchStudents();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    useEffect(() => {
-        if (selectedElectionId !== null) {
-            fetchPositions(selectedElectionId);
-        } else {
-            setPositions([]);
+        if (elections.length > 0 && !selectedElectionId) {
+            setSelectedElectionId(elections[0].id);
         }
-        setSelectedPositionId(null);
-        setCandidates([]);
-    }, [selectedElectionId]);
-
+    }, [elections, selectedElectionId]);
+    
     useEffect(() => {
-        if (selectedPositionId !== null) {
-            fetchCandidates(selectedPositionId);
-        } else {
-            setCandidates([]);
+        if (positions.length > 0 && !selectedPositionId) {
+            setSelectedPositionId(positions[0].id);
         }
-    }, [selectedPositionId]);
+    }, [positions, selectedPositionId]);
 
     const handleCreateCandidate = async (e: FormEvent) => {
         e.preventDefault();
@@ -280,26 +143,17 @@ export default function CandidatesPage() {
             return;
         }
 
-        try {
-            setLoading(true);
-            await api.post('api/candidates/create/', {
-                student: selectedStudentId,
-                position: selectedPositionId,
-                photo_url: photoUrl.trim() || undefined,
-            });
-
-            showSuccess('Candidate created successfully.');
-            setSelectedStudentId(null);
-            setStudentQuery('');
-            setPhotoUrl('');
-            await fetchCandidates(selectedPositionId);
-        } catch (err: any) {
-            console.error(err);
-            const detail = err.response?.data?.detail;
-            showError(detail || 'Failed to create candidate.');
-        } finally {
-            setLoading(false);
-        }
+        createCandidateMutation.mutate({
+            student: selectedStudentId,
+            position: selectedPositionId,
+            photo_url: photoUrl.trim() || undefined,
+        }, {
+            onSuccess: () => {
+                setSelectedStudentId(null);
+                setStudentQuery('');
+                setPhotoUrl('');
+            },
+        });
     };
 
     const selectedElection = elections.find(e => e.id === selectedElectionId) || null;
@@ -333,7 +187,19 @@ export default function CandidatesPage() {
     });
 
     return (
+
         <div className="space-y-6">
+              {/* Loading Overlay */}
+            {loading && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center rounded-xl">
+                    <div className="bg-white/20 px-6 py-4 rounded-lg shadow-md flex items-center gap-3">
+                        <div
+                            className="w-6 h-6 border-2 border-gray-300 border-t-green-600 rounded-full animate-spin"></div>
+                        <span className="text-sm text-gray-700">Loading positions…</span>
+                    </div>
+                </div>
+            )}
+
             {/* Page Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <h1 className="text-xl font-semibold text-gray-900">Candidates</h1>
