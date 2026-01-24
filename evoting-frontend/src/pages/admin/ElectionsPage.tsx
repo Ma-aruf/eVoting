@@ -1,47 +1,39 @@
-import {type FormEvent, useEffect, useState} from 'react';
-import api from '../../apiConfig';
-import {showError, showSuccess} from '../../utils/toast';
+import {type FormEvent, useState} from 'react';
+import {useElections} from '../../queries/useElections';
+import {useCreateElection} from '../../queries/useElectionsMutations';
+import {showError} from '../../utils/toast';
 
-interface Election {
-    id: number;
-    name: string;
-    year: number;
-    start_time: string;
-    end_time: string;
-    is_active: boolean;
-}
+const CalendarIcon = () => (
+    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+    </svg>
+);
 
-interface ListResponse<T> {
-    count?: number;
-    results?: T[];
-}
+const CheckCircleIcon = () => (
+    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+);
 
- const CalendarIcon = () => (
-     <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-               d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-     </svg>
- );
-
- const CheckCircleIcon = () => (
-     <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-               d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-     </svg>
- );
-
- const PlusIcon = () => (
-     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
-     </svg>
- );
+const PlusIcon = () => (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
+    </svg>
+);
 
 export default function ElectionsPage() {
-    const [elections, setElections] = useState<Election[]>([]);
-    const [loading, setLoading] = useState(false);
+    // Queries
+    const {data: elections = [], isLoading: electionsLoading} = useElections();
 
-     const [showCreateForm, setShowCreateForm] = useState(false);
-     const [searchTerm, setSearchTerm] = useState('');
+    // Mutations
+    const createElection = useCreateElection();
+
+    const loading = electionsLoading || createElection.isPending;
+
+    const [showCreateForm, setShowCreateForm] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
 
     const [name, setName] = useState('');
     const [year, setYear] = useState<string>('');
@@ -49,31 +41,6 @@ export default function ElectionsPage() {
     const [endTime, setEndTime] = useState('');
     const [isActive, setIsActive] = useState(false);
 
-    const fetchElections = async () => {
-        setLoading(true);
-        try {
-            const res = await
-                api.get<Election[] | ListResponse<Election>>('api/elections/');
-            const data = res.data;
-
-            if (Array.isArray(data)) {
-                setElections(data);
-            } else if (Array.isArray(data.results)) {
-                setElections(data.results);
-            } else {
-                setElections([]);
-            }
-        } catch (err) {
-            console.error(err);
-            showError('Failed to load elections.');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchElections();
-    }, []);
 
     const handleCreateElection = async (e: FormEvent) => {
         e.preventDefault();
@@ -83,33 +50,20 @@ export default function ElectionsPage() {
             return;
         }
 
-        try {
-            setLoading(true);
-            await api.post('api/elections/create/', {
-                name: name.trim(),
-                year: Number(year),
-                start_time: new Date(startTime).toISOString(),
-                end_time: new Date(endTime).toISOString(),
-                is_active: isActive,
-            });
+        createElection.mutate({
+            name: name.trim(),
+            year: Number(year),
+            start_time: new Date(startTime).toISOString(),
+            end_time: new Date(endTime).toISOString(),
+            is_active: isActive,
+        });
 
-            showSuccess('Election created successfully.');
-            setName('');
-            setYear('');
-            setStartTime('');
-            setEndTime('');
-            setIsActive(false);
-
-            setShowCreateForm(false);
-
-            await fetchElections();
-        } catch (err: any) {
-            console.error(err);
-            const detail = err.response?.data?.detail;
-            showError(detail || 'Failed to create election.');
-        } finally {
-            setLoading(false);
-        }
+        setName('');
+        setYear('');
+        setStartTime('');
+        setEndTime('');
+        setIsActive(false);
+        setShowCreateForm(false);
     };
 
     const formatDateTime = (value: string) =>
@@ -121,24 +75,73 @@ export default function ElectionsPage() {
             minute: '2-digit',
         });
 
-     const activeCount = elections.filter(e => e.is_active).length;
-     const inactiveCount = elections.length - activeCount;
+    const activeCount = elections.filter(e => e.is_active).length;
+    const inactiveCount = elections.length - activeCount;
 
-     const filteredElections = elections.filter(e =>
-         e.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-         String(e.year).includes(searchTerm.trim())
-     );
+    const filteredElections = elections.filter(e =>
+        e.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        String(e.year).includes(searchTerm.trim())
+    );
 
     return (
-        <div className="space-y-6">
-            {/* Page Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <h1 className="text-xl font-semibold text-gray-900">Elections</h1>
+        <div className="space-y-6 relative">
+            {/* Loading Overlay */}
+            {loading && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center  rounded-xl">
+                    <div className="bg-white/20 px-6 py-4 rounded-lg shadow-md flex items-center gap-3">
+                        <div
+                            className="w-6 h-6 border-2 border-gray-300 border-t-green-600 rounded-full animate-spin"></div>
+                        <span className="text-sm text-gray-700">Loading elections…</span>
+                    </div>
+                </div>
+            )}
+
+            {/* Stat Cards */}
+            <section>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div
+                        className="bg-gradient-to-br h-35 from-blue-600 to-blue-600 rounded-xl p-5 text-white relative overflow-hidden">
+                        <div className="absolute top-4 right-4 opacity-20">
+                            <CalendarIcon/>
+                        </div>
+                        <div className="flex items-center gap-3 mb-3">
+                            <p className="text-sm text-white/80">All elections created</p>
+                        </div>
+                        <h3 className="font-semibold text-lg">Total Elections</h3>
+                        <p className="text-3xl font-bold mt-2">{elections.length}</p>
+                    </div>
+
+                    <div
+                        className="bg-gradient-to-br h-35 from-cyan-600 to-cyan-600 rounded-xl p-5 text-white relative overflow-hidden">
+                        <div className="absolute top-4 right-4 opacity-20">
+                            <CheckCircleIcon/>
+                        </div>
+                        <div className="flex items-center gap-3 mb-3">
+                            <p className="text-sm text-white/80">Currently active</p>
+                        </div>
+                        <h3 className="font-semibold text-lg">Active</h3>
+                        <p className="text-3xl font-bold mt-2">{activeCount}</p>
+                    </div>
+
+                    <div
+                        className="bg-gradient-to-br h-35 from-blue-900 to-blue-900 rounded-xl p-5 text-white relative overflow-hidden">
+                        <div className="absolute top-4 right-4 opacity-20">
+                            <CalendarIcon/>
+                        </div>
+                        <div className="flex items-center gap-3 mb-3">
+                            <p className="text-sm text-white/80">Not active</p>
+                        </div>
+                        <h3 className="font-semibold text-lg">Inactive</h3>
+                        <p className="text-3xl font-bold mt-2">{inactiveCount}</p>
+                    </div>
+                </div>
+            </section>
+            <div className="flex justify-end">
                 <button
                     onClick={() => setShowCreateForm(!showCreateForm)}
-                    className="flex w-full sm:w-auto justify-center items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition"
+                    className="flex w-full sm:w-auto items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition"
                 >
-                    <PlusIcon />
+                    <PlusIcon/>
                     Create Election
                 </button>
             </div>
@@ -148,7 +151,8 @@ export default function ElectionsPage() {
             {showCreateForm && (
                 <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
                     <h2 className="text-base font-medium text-gray-900 mb-4">Create New Election</h2>
-                    <form onSubmit={handleCreateElection} className="flex flex-col lg:flex-row gap-4 items-end flex-wrap">
+                    <form onSubmit={handleCreateElection}
+                          className="flex flex-col lg:flex-row gap-4 items-end flex-wrap">
                         <div className="flex-1 min-w-[220px]">
                             <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="election_name">
                                 Election Name
@@ -231,47 +235,11 @@ export default function ElectionsPage() {
                 </section>
             )}
 
-            {/* Stat Cards */}
-            <section>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div className="bg-gradient-to-br h-35 from-blue-600 to-blue-600 rounded-xl p-5 text-white relative overflow-hidden">
-                        <div className="absolute top-4 right-4 opacity-20">
-                            <CalendarIcon />
-                        </div>
-                        <div className="flex items-center gap-3 mb-3">
-                            <p className="text-sm text-white/80">All elections created</p>
-                        </div>
-                        <h3 className="font-semibold text-lg">Total Elections</h3>
-                        <p className="text-3xl font-bold mt-2">{elections.length}</p>
-                    </div>
-
-                    <div className="bg-gradient-to-br h-35 from-cyan-600 to-cyan-600 rounded-xl p-5 text-white relative overflow-hidden">
-                        <div className="absolute top-4 right-4 opacity-20">
-                            <CheckCircleIcon />
-                        </div>
-                        <div className="flex items-center gap-3 mb-3">
-                            <p className="text-sm text-white/80">Currently active</p>
-                        </div>
-                        <h3 className="font-semibold text-lg">Active</h3>
-                        <p className="text-3xl font-bold mt-2">{activeCount}</p>
-                    </div>
-
-                    <div className="bg-gradient-to-br h-35 from-blue-900 to-blue-900 rounded-xl p-5 text-white relative overflow-hidden">
-                        <div className="absolute top-4 right-4 opacity-20">
-                            <CalendarIcon />
-                        </div>
-                        <div className="flex items-center gap-3 mb-3">
-                            <p className="text-sm text-white/80">Not active</p>
-                        </div>
-                        <h3 className="font-semibold text-lg">Inactive</h3>
-                        <p className="text-3xl font-bold mt-2">{inactiveCount}</p>
-                    </div>
-                </div>
-            </section>
 
             {/* Elections table */}
             <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-5 border-b border-gray-100">
+                <div
+                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-5 border-b border-gray-100">
                     <div className="flex items-center gap-4">
                         <h2 className="text-base font-medium text-gray-900">All Elections</h2>
                         {loading && <span className="text-xs text-gray-500">Loading…</span>}
@@ -295,41 +263,43 @@ export default function ElectionsPage() {
                 <div className="overflow-x-auto">
                     <table className="min-w-full text-sm">
                         <thead>
-                            <tr className="bg-blue-100 border-b border-gray-100">
-                                <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                                <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Year</th>
-                                <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Start</th>
-                                <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">End</th>
-                                <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                            </tr>
+                        <tr className="bg-blue-100 border-b border-gray-100">
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Year</th>
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Start</th>
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">End</th>
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {filteredElections.map((election) => (
-                                <tr key={election.id} className="hover:bg-gray-50 transition odd:bg-white even:bg-blue-50">
-                                    <td className="px-5 py-2 font-medium text-gray-900">{election.name}</td>
-                                    <td className="px-5 py-2 text-gray-700">{election.year}</td>
-                                    <td className="px-5 py-2 text-gray-700">{formatDateTime(election.start_time)}</td>
-                                    <td className="px-5 py-2 text-gray-700">{formatDateTime(election.end_time)}</td>
-                                    <td className="px-5 py-2">
-                                        {election.is_active ? (
-                                            <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                        {filteredElections.map((election) => (
+                            <tr key={election.id} className="hover:bg-gray-50 transition odd:bg-white even:bg-blue-50">
+                                <td className="px-5 py-2 font-medium text-gray-900">{election.name}</td>
+                                <td className="px-5 py-2 text-gray-700">{election.year}</td>
+                                <td className="px-5 py-2 text-gray-700">{formatDateTime(election.start_time)}</td>
+                                <td className="px-5 py-2 text-gray-700">{formatDateTime(election.end_time)}</td>
+                                <td className="px-5 py-2">
+                                    {election.is_active ? (
+                                        <span
+                                            className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
                                                 Active
                                             </span>
-                                        ) : (
-                                            <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
+                                    ) : (
+                                        <span
+                                            className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
                                                 Inactive
                                             </span>
-                                        )}
-                                    </td>
-                                </tr>
-                            ))}
-                            {!loading && filteredElections.length === 0 && (
-                                <tr>
-                                    <td colSpan={5} className="px-5 py-8 text-center text-gray-400">
-                                        {searchTerm ? 'No elections match your search.' : 'No elections created yet.'}
-                                    </td>
-                                </tr>
-                            )}
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                        {!loading && filteredElections.length === 0 && (
+                            <tr>
+                                <td colSpan={5} className="px-5 py-8 text-center text-gray-400">
+                                    {searchTerm ? 'No elections match your search.' : 'No elections created yet.'}
+                                </td>
+                            </tr>
+                        )}
                         </tbody>
                     </table>
                 </div>

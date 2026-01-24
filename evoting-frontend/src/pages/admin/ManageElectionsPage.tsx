@@ -1,20 +1,5 @@
-import {useEffect, useState} from 'react';
-import api from '../../apiConfig';
-import {showError, showSuccess} from '../../utils/toast';
-
-interface Election {
-    id: number;
-    name: string;
-    year: number;
-    start_time: string;
-    end_time: string;
-    is_active: boolean;
-}
-
-interface ListResponse<T> {
-    count?: number;
-    results?: T[];
-}
+import {useState} from 'react';
+import {useManageElections, useToggleElection, type Election} from '../../queries/useManageElections';
 
  const CalendarIcon = () => (
      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -31,57 +16,33 @@ interface ListResponse<T> {
  );
 
 export default function ManageElectionsPage() {
-    const [elections, setElections] = useState<Election[]>([]);
-    const [loading, setLoading] = useState(false);
+    // Queries
+    const {data: elections = [], isLoading: electionsLoading} = useManageElections();
+    
+    // Mutations
+    const toggleElection = useToggleElection();
+    
+    // State
     const [actionElectionId, setActionElectionId] = useState<number | null>(null);
 
-     const [searchTerm, setSearchTerm] = useState('');
+    const loading = electionsLoading || toggleElection.isPending;
 
     const activeElection = elections.find((e) => e.is_active) ?? null;
 
-    const fetchElections = async () => {
-        setLoading(true);
-        try {
-            const res = await api.get<ListResponse<Election> | Election[]>('api/elections/manage/');
-            const data = res.data;
-            const list = Array.isArray(data) ? data : (data.results ?? []);
-            setElections(list);
-        } catch (err) {
-            console.error(err);
-            showError('Failed to load elections.');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchElections();
-    }, []);
 
     const handleToggle = async (election: Election, nextActive: boolean) => {
         const verb = nextActive ? 'set active' : 'stop';
         const ok = window.confirm(`Are you sure you want to ${verb} "${election.name}"?`);
         if (!ok) return;
 
-        try {
-            setActionElectionId(election.id);
-            await api.patch('api/elections/manage/', {
-                election_id: election.id,
-                is_active: nextActive,
-            });
-            showSuccess(
-                nextActive
-                    ? `Election "${election.name}" is now active.`
-                    : `Election "${election.name}" has been stopped.`
-            );
-            await fetchElections();
-        } catch (err: any) {
-            console.error(err);
-            const detail = err.response?.data?.detail;
-            showError(detail || 'Failed to update election status.');
-        } finally {
-            setActionElectionId(null);
-        }
+        setActionElectionId(election.id);
+        
+        toggleElection.mutate({
+            election_id: election.id,
+            is_active: nextActive,
+        });
+        
+        setActionElectionId(null);
     };
 
     const formatDateTime = (value: string) =>
@@ -96,22 +57,19 @@ export default function ManageElectionsPage() {
      const activeCount = elections.filter(e => e.is_active).length;
      const inactiveCount = elections.length - activeCount;
 
-     const filteredElections = elections.filter(e =>
-         e.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-         String(e.year).includes(searchTerm.trim())
-     );
-
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 relative">
+            {/* Loading Overlay */}
+            {loading && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center rounded-xl">
+                    <div className="bg-white/20 px-6 py-4 rounded-lg shadow-md flex items-center gap-3">
+                        <div
+                            className="w-6 h-6 border-2 border-gray-300 border-t-green-600 rounded-full animate-spin"></div>
+                        <span className="text-sm text-gray-700">Loading elections…</span>
+                    </div>
+                </div>
+            )}
             {/* Page Header */}
-            <div>
-                <h1 className="text-xl font-semibold text-gray-900">Manage Elections</h1>
-                <p className="text-sm text-gray-500 mt-1">
-                    Start or stop elections. Only one election can be active at a time.
-                </p>
-            </div>
-
-
             {/* Stat Cards */}
             <section>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -151,10 +109,9 @@ export default function ManageElectionsPage() {
             </section>
 
             {/* Currently Active */}
-            <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <section className="bg-white/50 rounded-xl border border-gray-100  p-5">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div>
-                        <p className="text-xs uppercase tracking-wide text-gray-500">Currently Active</p>
+                    <div className="flex items-center gap-3 ">
                         <p className="text-lg font-semibold text-gray-900">
                             {activeElection ? activeElection.name : 'No active election'}
                         </p>
@@ -178,25 +135,11 @@ export default function ManageElectionsPage() {
             </section>
 
             {/* Elections Table */}
-            <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-5 border-b border-gray-100">
+            <section className="bg-white/80 rounded-xl border border-gray-200  overflow-hidden">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 py-2 px-5 border-b border-gray-100">
                     <div className="flex items-center gap-4">
                         <h2 className="text-base font-medium text-gray-900">All Elections</h2>
                         {loading && <span className="text-xs text-gray-500">Loading…</span>}
-                    </div>
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
-                        <input
-                            type="text"
-                            placeholder="Search by name or year..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full sm:w-64 border border-blue-200 border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        {searchTerm && (
-                            <span className="text-xs text-gray-500">
-                                {filteredElections.length} of {elections.length}
-                            </span>
-                        )}
                     </div>
                 </div>
 
@@ -213,7 +156,7 @@ export default function ManageElectionsPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {filteredElections.map((election) => (
+                            {elections.map((election) => (
                                 <tr
                                     key={election.id}
                                     className="hover:bg-gray-50 transition odd:bg-white even:bg-blue-50"
@@ -251,15 +194,6 @@ export default function ManageElectionsPage() {
                                     </td>
                                 </tr>
                             ))}
-                            {!loading && filteredElections.length === 0 && (
-                                <tr>
-                                    <td colSpan={6} className="px-5 py-8 text-center text-gray-400">
-                                        {searchTerm
-                                            ? 'No elections match your search.'
-                                            : 'No elections found. Create an election first on the Elections page.'}
-                                    </td>
-                                </tr>
-                            )}
                         </tbody>
                     </table>
                 </div>

@@ -19,16 +19,19 @@ import StudentLoginPage from "./pages/StudentLoginPage";
 import VotingPage from "./pages/VotingPage";
 import ResultsPage from "./pages/admin/ResultsPage";
 
-// Create a client with caching configuration for voting data
+// Create a client with real-time configuration for admin data
 const queryClient = new QueryClient({
     defaultOptions: {
         queries: {
-            staleTime: Infinity, // Data never becomes stale during the session
-            gcTime: Infinity, // Keep data in cache indefinitely
-            refetchOnWindowFocus: false, // Don't refetch when window regains focus
-            refetchOnReconnect: false, // Don't refetch on reconnect
-            refetchOnMount: false, // Don't refetch when component mounts
-            retry: 1, // Only retry once on failure
+            staleTime: 30 * 1000, // 30 seconds for admin data
+            gcTime: 5 * 60 * 1000, // 5 minutes
+            refetchOnWindowFocus: true, // Refresh when user returns to tab
+            refetchOnReconnect: true, // Refresh on reconnect
+            refetchOnMount: true, // Refresh when component mounts
+            retry: 2, // Retry failed requests
+        },
+        mutations: {
+            retry: 1,
         },
     },
 });

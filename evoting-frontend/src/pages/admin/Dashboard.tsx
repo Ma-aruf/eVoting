@@ -1,22 +1,7 @@
 // pages/admin/Dashboard.tsx
-import {useEffect, useState} from 'react';
 import {useAuth} from '../../hooks/useAuth';
-import api from '../../apiConfig';
-import {showError} from '../../utils/toast';
-
-interface Election {
-    id: number;
-    name: string;
-    year: number;
-    start_time: string;
-    end_time: string;
-    is_active: boolean;
-}
-
-interface ListResponse<T> {
-    count?: number;
-    results?: T[];
-}
+import {useElections} from '../../queries/useElections';
+import {useDashboardStats} from "../../queries/useDashboard.ts";
 
 const FolderIcon = () => (
     <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -48,86 +33,13 @@ const CalendarIcon = () => (
 export default function Dashboard() {
     useAuth();
 
-    const [totalStudents, setTotalStudents] = useState<number>(0);
-    const [totalCandidates, setTotalCandidates] = useState<number>(0);
-    const [totalPositions, setTotalPositions] = useState<number>(0);
-    const [totalElections, setTotalElections] = useState<number>(0);
-    const [activeElection, setActiveElection] = useState<Election | null>(null);
-    const [loading, setLoading] = useState<boolean>(true);
+    // Queries
+    const {data: elections = [], isLoading: electionsLoading} = useElections();
+    const activeElection = elections.find(e => e.is_active) || null;
+    const {data: stats, isLoading: statsLoading} = useDashboardStats(activeElection?.id || null);
 
-    useEffect(() => {
-        const fetchStats = async () => {
-            try {
-                setLoading(true);
-
-                const [electionsRes, studentsRes] = await Promise.all([
-                    api.get<ListResponse<Election> | Election[]>('api/elections/'),
-                    api.get<ListResponse<unknown> | unknown[]>('api/students/'),
-                ]);
-
-                const extractCount = <T, >(data: ListResponse<T> | T[]): number => {
-                    if (Array.isArray(data)) return data.length;
-                    if (typeof data.count === 'number') return data.count;
-                    if (Array.isArray(data.results)) return data.results.length;
-                    return 0;
-                };
-
-                const electionsData = electionsRes.data;
-                const studentsData = studentsRes.data;
-
-                setTotalElections(extractCount<Election>(electionsData));
-                setTotalStudents(extractCount(studentsData));
-
-                let active: Election | null = null;
-                if (Array.isArray(electionsData)) {
-                    active = electionsData.find(e => (e as Election).is_active) as Election | undefined ?? null;
-                } else if (Array.isArray((electionsData as ListResponse<Election>).results)) {
-                    active = (electionsData as ListResponse<Election>).results!.find(e => e.is_active) ?? null;
-                }
-
-                setActiveElection(active);
-
-                if (active) {
-                    const positionsRes = await api.get<ListResponse<unknown> | unknown[]>('api/positions/', {
-                        params: {election_id: active.id}
-                    });
-
-                    const positionsData = positionsRes.data;
-                    setTotalPositions(extractCount(positionsData));
-
-                    let positionIds: number[] = [];
-                    if (Array.isArray(positionsData)) {
-                        positionIds = positionsData.map((p: any) => p.id);
-                    } else if (Array.isArray(positionsData.results)) {
-                        positionIds = positionsData.results.map((p: any) => p.id);
-                    }
-
-                    const candidateCountResponses = await Promise.all(
-                        positionIds.map((positionId) =>
-                            api.get<ListResponse<unknown> | unknown[]>('api/candidates/', {
-                                params: {position_id: positionId}
-                            })
-                        )
-                    );
-
-                    const activeCandidatesCount = candidateCountResponses.reduce((sum, res) => {
-                        return sum + extractCount(res.data as any);
-                    }, 0);
-
-                    setTotalCandidates(activeCandidatesCount);
-                } else {
-                    setTotalPositions(0);
-                    setTotalCandidates(0);
-                }
-            } catch (err) {
-                showError('Failed to load dashboard statistics');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchStats();
-    }, []);
+    // Loading state
+    const loading = electionsLoading || statsLoading;
 
     const formatDateTime = (value: string | undefined) => {
         if (!value) return '';
@@ -140,19 +52,17 @@ export default function Dashboard() {
 
     return (
         <div className="space-y-6">
-            {/* Page Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                    <h1 className="text-xl font-semibold text-gray-900">Dashboard</h1>
-                </div>
-            </div>
-
-            {/* Loading / Error States */}
+                 {/* Loading / Error States */}
             {loading && (
-                <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                    <p className="text-sm text-gray-500">Loading statistics...</p>
+                <div className="absolute inset-0 z-50 flex items-center justify-center rounded-xl">
+                    <div className="bg-white/20 px-6 py-4 rounded-lg shadow-md flex items-center gap-3">
+                        <div
+                            className="w-6 h-6 border-2 border-gray-300 border-t-green-600 rounded-full animate-spin"></div>
+                        <span className="text-sm text-gray-700">Fetching statistics…</span>
+                    </div>
                 </div>
             )}
+
 
             {/* Stat Cards - Folder Style */}
             <section>
@@ -190,7 +100,7 @@ export default function Dashboard() {
                             <p className="text-sm text-white/80 mt-1">Total registered voters</p>
                         </div>
                         <h3 className="font-semibold text-lg">Students</h3>
-                        <p className="text-3xl font-bold mt-2">{totalStudents}</p>
+                        <p className="text-3xl font-bold mt-2">{stats?.total_students || 0}</p>
 
                     </div>
 
@@ -204,7 +114,7 @@ export default function Dashboard() {
                             <p className="text-sm text-white/80 mt-1">Total elections created</p>
                         </div>
                         <h3 className="font-semibold text-lg">Elections</h3>
-                        <p className="text-3xl font-bold mt-2">{totalElections}</p>
+                        <p className="text-3xl font-bold mt-2">{elections.length}</p>
                     </div>
                 </div>
             </section>
@@ -214,7 +124,7 @@ export default function Dashboard() {
             {activeElection && (
                 <section>
                     <h2 className="text-base font-medium text-gray-900 mb-4">Active Election Details</h2>
-                    <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                         <div className="p-5">
                             <div className="flex items-start justify-between">
                                 <div className="flex gap-4">
@@ -227,19 +137,19 @@ export default function Dashboard() {
                                 </span>
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5">
-                                <div className="bg-gray-50 rounded-lg p-3">
+                                <div className="bg-green-200/40 rounded-lg p-3">
                                     <p className="text-xs text-gray-500 uppercase">Positions</p>
-                                    <p className="text-xl font-bold text-blue-600">{totalPositions}</p>
+                                    <p className="text-xl font-bold text-blue-600">{stats?.total_positions || 0}</p>
                                 </div>
-                                <div className="bg-gray-50 rounded-lg p-3">
+                                <div className="bg-green-200/50 rounded-lg p-3">
                                     <p className="text-xs text-gray-500 uppercase">Candidates</p>
-                                    <p className="text-xl font-bold text-blue-600">{totalCandidates}</p>
+                                    <p className="text-xl font-bold text-blue-600">{stats?.total_candidates || 0}</p>
                                 </div>
-                                <div className="bg-gray-50 rounded-lg p-3">
+                                <div className="bg-green-200/60 rounded-lg p-3">
                                     <p className="text-xs text-gray-500 uppercase">Start</p>
                                     <p className="text-sm font-medium text-gray-900">{formatDateTime(activeElection.start_time)}</p>
                                 </div>
-                                <div className="bg-gray-50 rounded-lg p-3">
+                                <div className="bg-green-200/70 rounded-lg p-3">
                                     <p className="text-xs text-gray-500 uppercase">End</p>
                                     <p className="text-sm font-medium text-gray-900">{formatDateTime(activeElection.end_time)}</p>
                                 </div>

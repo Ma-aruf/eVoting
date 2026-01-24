@@ -1,6 +1,7 @@
-import {type FormEvent, useEffect, useState} from 'react';
-import api from '../../apiConfig';
-import {showError, showSuccess} from '../../utils/toast';
+import {type FormEvent, useState, useEffect} from 'react';
+import {useElections} from '../../queries/useElections';
+import {useStudents, useCreateStudent, useUpdateStudent, useDeleteStudent, useBulkUploadStudents} from '../../queries/useStudents';
+import {showError} from '../../utils/toast';
 
 interface Student {
     id: number;
@@ -14,12 +15,6 @@ interface Student {
         name: string;
         year: number;
     };
-}
-
-interface Election {
-    id: number;
-    name: string;
-    year: number;
 }
 
 const CLASS_OPTIONS = ['Form 1', 'Form 2', 'Form 3'];
@@ -66,10 +61,20 @@ const TrashIcon = () => (
 );
 
 export default function StudentsPage() {
-    const [students, setStudents] = useState<Student[]>([]);
-    const [elections, setElections] = useState<Election[]>([]);
+    // State
     const [selectedElectionId, setSelectedElectionId] = useState<number | null>(null);
-    const [loading, setLoading] = useState(false);
+    
+    // Queries
+    const {data: elections = [], isLoading: electionsLoading} = useElections();
+    const {data: students = [], isLoading: studentsLoading} = useStudents(selectedElectionId);
+    
+    // Mutations
+    const createStudent = useCreateStudent();
+    const updateStudent = useUpdateStudent();
+    const deleteStudent = useDeleteStudent();
+    const bulkUploadStudents = useBulkUploadStudents();
+    
+    const loading = electionsLoading || studentsLoading || createStudent.isPending || updateStudent.isPending || deleteStudent.isPending || bulkUploadStudents.isPending;
 
     // Toggle for add student form
     const [showAddForm, setShowAddForm] = useState(false);
@@ -85,53 +90,19 @@ export default function StudentsPage() {
     const [editClassName, setEditClassName] = useState('');
 
     const [file, setFile] = useState<File | null>(null);
-    const [uploadResult, setUploadResult] = useState<string | null>(null);
 
     // Search state
     const [searchTerm, setSearchTerm] = useState('');
 
-    const fetchStudents = async (electionId?: number | null) => {
-        setLoading(true);
-        try {
-            const params = electionId ? { election_id: electionId } : {};
-            const res = await api.get<Student[] | { results?: Student[] }>('api/students/', { params });
-            const data = res.data;
-            if (Array.isArray(data)) {
-                setStudents(data);
-            } else if (Array.isArray(data.results)) {
-                setStudents(data.results);
-            } else {
-                setStudents([]);
-            }
-        } catch (err) {
-            showError('Failed to load students');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const fetchElections = async () => {
-        try {
-            const res = await api.get('api/elections/');
-            const items = Array.isArray(res.data) ? res.data : (res.data.results || []);
-            setElections(items);
-            if (!selectedElectionId && items.length > 0) {
-                setSelectedElectionId(items[0].id);
-            }
-        } catch (err) {
-            console.error(err);
-        }
-    };
-
+    // Set initial election
     useEffect(() => {
-        fetchElections();
-    }, []);
-
-    useEffect(() => {
-        if (selectedElectionId !== null) {
-            fetchStudents(selectedElectionId);
+        if (elections.length > 0 && selectedElectionId === null) {
+            const firstElectionId = elections[0].id;
+            if (firstElectionId !== selectedElectionId) {
+                setSelectedElectionId(firstElectionId);
+            }
         }
-    }, [selectedElectionId]);
+    }, [elections, selectedElectionId]);
 
     const handleCreateStudent = async (e: FormEvent) => {
         e.preventDefault();
@@ -145,27 +116,18 @@ export default function StudentsPage() {
             showError('Please select an election.');
             return;
         }
-        try {
-            setLoading(true);
-            await api.post('api/students/', {
-                student_id: studentId.trim(),
-                full_name: fullName.trim(),
-                class_name: className,
-                election: selectedElectionId,
-            });
-
-            showSuccess('Student added successfully.');
-            setStudentId('');
-            setFullName('');
-            setClassName('');
-            setShowAddForm(false);
-            await fetchStudents(selectedElectionId);
-        } catch (err: any) {
-            const detail = err.response?.data?.detail;
-            showError(detail || 'Failed to add student. Make sure the ID is unique.');
-        } finally {
-            setLoading(false);
-        }
+        
+        createStudent.mutate({
+            student_id: studentId.trim(),
+            full_name: fullName.trim(),
+            class_name: className,
+            election: selectedElectionId,
+        });
+        
+        setStudentId('');
+        setFullName('');
+        setClassName('');
+        setShowAddForm(false);
     };
 
     const handleUpload = async (e: FormEvent) => {
@@ -175,20 +137,13 @@ export default function StudentsPage() {
             showError('Please select an election before uploading.');
             return;
         }
-        setUploadResult(null);
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('election_id', selectedElectionId.toString());
-        try {
-            const res = await api.post('api/students/bulk-upload/', formData, {
-                headers: {'Content-Type': 'multipart/form-data'},
-            });
-            setUploadResult(res.data.detail || 'Upload completed');
-            setFile(null);
-            await fetchStudents(selectedElectionId);
-        } catch (err: any) {
-            showError(err.response?.data?.detail || 'Bulk upload failed');
-        }
+        
+        bulkUploadStudents.mutate({
+            file,
+            election_id: selectedElectionId,
+        });
+        
+        setFile(null);
     };
 
     const openEditModal = (student: Student) => {
@@ -201,26 +156,13 @@ export default function StudentsPage() {
         e.preventDefault();
         if (!editingStudent) return;
 
-        try {
-            setLoading(true);
-            await api.patch(`api/students/${editingStudent.id}/`, {
-                full_name: editFullName.trim(),
-                class_name: editClassName,
-            });
-            // Update student in place to maintain order
-            setStudents(prev => prev.map(s =>
-                s.id === editingStudent.id
-                    ? { ...s, full_name: editFullName.trim(), class_name: editClassName }
-                    : s
-            ));
-            showSuccess('Student updated successfully.');
-            setEditingStudent(null);
-        } catch (err: any) {
-            const detail = err.response?.data?.detail;
-            showError(detail || 'Failed to update student.');
-        } finally {
-            setLoading(false);
-        }
+        updateStudent.mutate({
+            id: editingStudent.id,
+            full_name: editFullName.trim(),
+            class_name: editClassName,
+        });
+        
+        setEditingStudent(null);
     };
 
     const handleDeleteStudent = async (student: Student) => {
@@ -229,17 +171,8 @@ export default function StudentsPage() {
             return;
         }
         if (!confirm(`Are you sure you want to delete ${student.full_name}?`)) return;
-        try {
-            setLoading(true);
-            await api.delete(`api/students/${student.id}/`);
-            showSuccess('Student deleted successfully.');
-            await fetchStudents(selectedElectionId);
-        } catch (err: any) {
-            const detail = err.response?.data?.detail;
-            showError(detail || 'Failed to delete student.');
-        } finally {
-            setLoading(false);
-        }
+        
+        deleteStudent.mutate(student);
     };
 
     const selectedElection = elections.find(e => e.id === selectedElectionId) || null;
@@ -251,7 +184,17 @@ export default function StudentsPage() {
     );
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 relative">
+            {/* Loading Overlay */}
+            {loading && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center  rounded-xl">
+                    <div className="bg-white/20 px-6 py-4 rounded-lg shadow-md flex items-center gap-3">
+                        <div
+                            className="w-6 h-6 border-2 border-gray-300 border-t-green-600 rounded-full animate-spin"></div>
+                        <span className="text-sm text-gray-700">Loading students…</span>
+                    </div>
+                </div>
+            )}
             {/* Page Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
@@ -394,7 +337,6 @@ export default function StudentsPage() {
                         Select an election above before uploading students.
                     </p>
                 )}
-                {uploadResult && <p className="text-sm text-green-600 mt-3">{uploadResult}</p>}
             </section>
 
             {/* Students Table */}
