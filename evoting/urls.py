@@ -1,22 +1,9 @@
-"""
-URL configuration for evoting project.
 
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/5.2/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
 from django.contrib import admin
 from django.urls import path, include
 from django.http import JsonResponse
+from django.utils.timezone import now
+
 
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
@@ -24,56 +11,21 @@ from rest_framework_simplejwt.views import (
 )
 
 def health_check(request):
+    response_data = {
+        "status": "ok",
+        "service": "evoting-api",
+        "timestamp": now().isoformat(),
+    }
+
+    # Optional: database check (non-fatal)
     try:
-        import sys
-        response_data = {
-            "status": "healthy", 
-            "service": "evoting-api",
-            "python_version": sys.version.split()[0],
-            "message": "Django app is running",
-            "timestamp": __import__('datetime').datetime.now().isoformat()
-        }
-        
-        # Try to test database connection but don't fail if it's not ready
-        try:
-            from django.db import connection
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT 1")
-            response_data["database"] = "connected"
-        except Exception as db_error:
-            response_data["database"] = "disconnected"
-            response_data["database_error"] = str(db_error)
-        
-        response = JsonResponse(response_data)
-        response['Access-Control-Allow-Origin'] = '*'
-        response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
-        response['Access-Control-Allow-Headers'] = 'Content-Type'
-        return response
-    except Exception as e:
-        response = JsonResponse({
-            "status": "unhealthy", 
-            "service": "evoting-api",
-            "error": str(e),
-            "type": type(e).__name__,
-            "timestamp": __import__('datetime').datetime.now().isoformat()
-        }, status=500)
-        response['Access-Control-Allow-Origin'] = '*'
-        return response
+        from django.db import connections
+        connections["default"].cursor()
+        response_data["database"] = "connected"
+    except Exception:
+        response_data["database"] = "not_ready"
 
-def create_superuser_view(request):
-    from django.contrib.auth import get_user_model
-    from django.http import HttpResponse
-    
-    User = get_user_model()
-
-    username = "meek"
-    email = "admin@kosa.com"
-    password = "@kosaAdmin23"
-
-    if not User.objects.filter(username=username).exists():
-        User.objects.create_superuser(username=username, email=email, password=password)
-        return HttpResponse("Superuser created successfully!")
-    return HttpResponse("Superuser already exists.")
+    return JsonResponse(response_data, status=200)
 
 urlpatterns = [
     path('', health_check, name='health_check'),
