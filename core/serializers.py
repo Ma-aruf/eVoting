@@ -30,12 +30,13 @@ class UserSerializer(serializers.ModelSerializer):
 class StudentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Student
-        fields = ["id", "student_id", "full_name", "class_name", "has_voted", "is_active"]
+        fields = ["id", "student_id", "full_name", "class_name", "has_voted", "is_active", "election"]
         read_only_fields = ["has_voted"]
 
 
 class BulkStudentUploadSerializer(serializers.Serializer):
     file = serializers.FileField()
+    election_id = serializers.IntegerField()
 
 
 class ElectionSerializer(serializers.ModelSerializer):

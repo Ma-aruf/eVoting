@@ -9,6 +9,17 @@ interface Student {
     class_name: string;
     has_voted: boolean;
     is_active: boolean;
+    election?: {
+        id: number;
+        name: string;
+        year: number;
+    };
+}
+
+interface Election {
+    id: number;
+    name: string;
+    year: number;
 }
 
 interface ListResponse<T> {
@@ -18,16 +29,19 @@ interface ListResponse<T> {
 
 export default function ActivationsPage() {
     const [students, setStudents] = useState<Student[]>([]);
+    const [elections, setElections] = useState<Election[]>([]);
+    const [selectedElectionId, setSelectedElectionId] = useState<number | null>(null);
     const [loading, setLoading] = useState(false);
 
     const [studentQuery, setStudentQuery] = useState('');
     const [studentDropdownOpen, setStudentDropdownOpen] = useState(false);
     const [studentId, setStudentId] = useState('');
 
-    const fetchStudents = async () => {
+    const fetchStudents = async (electionId?: number | null) => {
         setLoading(true);
         try {
-            const res = await api.get<Student[] | ListResponse<Student>>('api/students/');
+            const params = electionId ? { election_id: electionId } : {};
+            const res = await api.get<Student[] | ListResponse<Student>>('api/students/', { params });
             const data = res.data;
             if (Array.isArray(data)) {
                 setStudents(data);
@@ -43,9 +57,28 @@ export default function ActivationsPage() {
         }
     };
 
+    const fetchElections = async () => {
+        try {
+            const res = await api.get('api/elections/');
+            const items = Array.isArray(res.data) ? res.data : (res.data.results || []);
+            setElections(items);
+            if (!selectedElectionId && items.length > 0) {
+                setSelectedElectionId(items[0].id);
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
     useEffect(() => {
-        fetchStudents();
+        fetchElections();
     }, []);
+
+    useEffect(() => {
+        if (selectedElectionId !== null) {
+            fetchStudents(selectedElectionId);
+        }
+    }, [selectedElectionId]);
 
     const handleToggle = async (nextActive: boolean, targetStudentId?: string) => {
         const id = (targetStudentId ?? studentId).trim();
@@ -61,7 +94,7 @@ export default function ActivationsPage() {
             showSuccess(nextActive ? 'Student activated successfully' : 'Student deactivated successfully');
             setStudentId('');
             setStudentQuery('');
-            await fetchStudents();
+            await fetchStudents(selectedElectionId);
         } catch (err: any) {
             showError(err.response?.data?.detail || (nextActive ? 'Activation failed. Please try again.' : 'Deactivation failed. Please try again.'));
         } finally {
@@ -79,6 +112,7 @@ export default function ActivationsPage() {
         await handleToggle(false);
     };
 
+    const selectedElection = elections.find(e => e.id === selectedElectionId) || null;
     const selectedStudent = students.find(s => s.student_id.toLowerCase() === studentId.toLowerCase()) ?? null;
 
     const filteredStudentOptions = students.filter((s) => {
@@ -91,7 +125,37 @@ export default function ActivationsPage() {
         <div className="space-y-6">
             {/* Page Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <h1 className="text-xl font-semibold text-gray-900">Voter Activation</h1>
+                <div>
+                    <h1 className="text-xl font-semibold text-gray-900">Voter Activation</h1>
+                    {selectedElection && (
+                        <p className="text-sm text-gray-500 mt-1">
+                            Activating students for {selectedElection.name} ({selectedElection.year})
+                        </p>
+                    )}
+                </div>
+            </div>
+
+            {/* Election Selector */}
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                <div className="flex flex-col md:flex-row md:items-center gap-4">
+                    <div className="flex-1">
+                        <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="election-select">
+                            Select Election
+                        </label>
+                        <select
+                            id="election-select"
+                            value={selectedElectionId ?? ''}
+                            onChange={(e) => setSelectedElectionId(e.target.value ? Number(e.target.value) : null)}
+                            className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full md:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                            {elections.length === 0 && <option value="">No elections available</option>}
+                            {elections.map(e => (
+                                <option key={e.id} value={e.id}>{e.name} ({e.year})</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Activations are scoped to the selected election.</p>
             </div>
 
             {/* Activate/Deactivate Card */}

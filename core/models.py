@@ -31,6 +31,7 @@ class Student(models.Model):
     class_name = models.CharField(max_length=50)
     has_voted = models.BooleanField(default=False)
     is_active = models.BooleanField(default=False)
+    election = models.ForeignKey(Election, on_delete=models.SET_NULL, null=True, blank=True)
 
 
     def __str__(self):

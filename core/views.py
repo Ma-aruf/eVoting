@@ -69,6 +69,12 @@ class StudentViewSet(viewsets.ModelViewSet):
     serializer_class = StudentSerializer
     permission_classes = [IsStaffOrSuperUserOrReadOnlyActivator]
 
+    def get_queryset(self):
+        election_id = self.request.query_params.get("election_id")
+        if election_id:
+            return Student.objects.filter(election_id=election_id)
+        return Student.objects.all()
+
     def destroy(self, request, *args, **kwargs):
         student = self.get_object()
         if student.has_voted:
@@ -92,6 +98,21 @@ class BulkStudentUploadView(APIView):
         serializer = BulkStudentUploadSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         upload = serializer.validated_data["file"]
+
+        # Accept optional election_id from request; if not provided, reject
+        election_id = request.data.get("election_id")
+        if not election_id:
+            return Response(
+                {"detail": "election_id is required for bulk upload."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            election = Election.objects.get(pk=election_id)
+        except Election.DoesNotExist:
+            return Response(
+                {"detail": "Invalid election_id."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         try:
             wb = load_workbook(filename=BytesIO(upload.read()), read_only=True)
@@ -136,6 +157,7 @@ class BulkStudentUploadView(APIView):
                     student_id=student_id,
                     full_name=full_name,
                     class_name=class_name,
+                    election=election,
                 )
             )
 
@@ -526,6 +548,14 @@ class StudentActivationView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        # Optional: ensure student belongs to the currently active election
+        active_election = Election.objects.filter(is_active=True).first()
+        if active_election and student.election != active_election:
+            return Response(
+                {"detail": "Student does not belong to the active election."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         # Check current status for better message
         current_status = student.is_active
         new_status = bool(is_active)
@@ -598,11 +628,11 @@ class StudentVoterLoginView(APIView):
             )
 
         try:
-            student = Student.objects.get(student_id=student_id)
+            student = Student.objects.get(student_id=student_id, election=active_election)
             print("Student found:", student)
         except Student.DoesNotExist:
             return Response(
-                {"detail": "Student not found."},
+                {"detail": "Student not found for this election."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -653,8 +683,8 @@ class ElectionStatsView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        total_voters = Student.objects.count()
-        voters_voted = Student.objects.filter(has_voted=True).count()
+        total_voters = Student.objects.filter(election=election).count()
+        voters_voted = Student.objects.filter(election=election, has_voted=True).count()
 
         return Response({
             "election_id": election.id,
@@ -772,8 +802,8 @@ class ElectionResultsView(APIView):
             })
 
         # Overall election stats
-        total_students = Student.objects.count()
-        students_who_voted = Student.objects.filter(has_voted=True).count()
+        total_students = Student.objects.filter(election=election).count()
+        students_who_voted = Student.objects.filter(election=election, has_voted=True).count()
 
         return Response({
             "election_id": election.id,

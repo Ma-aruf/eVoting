@@ -9,6 +9,17 @@ interface Student {
     class_name: string;
     has_voted: boolean;
     is_active: boolean;
+    election?: {
+        id: number;
+        name: string;
+        year: number;
+    };
+}
+
+interface Election {
+    id: number;
+    name: string;
+    year: number;
 }
 
 const CLASS_OPTIONS = ['Form 1', 'Form 2', 'Form 3'];
@@ -56,6 +67,8 @@ const TrashIcon = () => (
 
 export default function StudentsPage() {
     const [students, setStudents] = useState<Student[]>([]);
+    const [elections, setElections] = useState<Election[]>([]);
+    const [selectedElectionId, setSelectedElectionId] = useState<number | null>(null);
     const [loading, setLoading] = useState(false);
 
     // Toggle for add student form
@@ -77,10 +90,11 @@ export default function StudentsPage() {
     // Search state
     const [searchTerm, setSearchTerm] = useState('');
 
-    const fetchStudents = async () => {
+    const fetchStudents = async (electionId?: number | null) => {
         setLoading(true);
         try {
-            const res = await api.get<Student[] | { results?: Student[] }>('api/students/');
+            const params = electionId ? { election_id: electionId } : {};
+            const res = await api.get<Student[] | { results?: Student[] }>('api/students/', { params });
             const data = res.data;
             if (Array.isArray(data)) {
                 setStudents(data);
@@ -96,9 +110,28 @@ export default function StudentsPage() {
         }
     };
 
+    const fetchElections = async () => {
+        try {
+            const res = await api.get('api/elections/');
+            const items = Array.isArray(res.data) ? res.data : (res.data.results || []);
+            setElections(items);
+            if (!selectedElectionId && items.length > 0) {
+                setSelectedElectionId(items[0].id);
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
     useEffect(() => {
-        fetchStudents();
+        fetchElections();
     }, []);
+
+    useEffect(() => {
+        if (selectedElectionId !== null) {
+            fetchStudents(selectedElectionId);
+        }
+    }, [selectedElectionId]);
 
     const handleCreateStudent = async (e: FormEvent) => {
         e.preventDefault();
@@ -108,12 +141,17 @@ export default function StudentsPage() {
             return;
         }
 
+        if (!selectedElectionId) {
+            showError('Please select an election.');
+            return;
+        }
         try {
             setLoading(true);
             await api.post('api/students/', {
                 student_id: studentId.trim(),
                 full_name: fullName.trim(),
                 class_name: className,
+                election: selectedElectionId,
             });
 
             showSuccess('Student added successfully.');
@@ -121,7 +159,7 @@ export default function StudentsPage() {
             setFullName('');
             setClassName('');
             setShowAddForm(false);
-            await fetchStudents();
+            await fetchStudents(selectedElectionId);
         } catch (err: any) {
             const detail = err.response?.data?.detail;
             showError(detail || 'Failed to add student. Make sure the ID is unique.');
@@ -133,16 +171,21 @@ export default function StudentsPage() {
     const handleUpload = async (e: FormEvent) => {
         e.preventDefault();
         if (!file) return;
+        if (!selectedElectionId) {
+            showError('Please select an election before uploading.');
+            return;
+        }
         setUploadResult(null);
         const formData = new FormData();
         formData.append('file', file);
+        formData.append('election_id', selectedElectionId.toString());
         try {
             const res = await api.post('api/students/bulk-upload/', formData, {
                 headers: {'Content-Type': 'multipart/form-data'},
             });
             setUploadResult(res.data.detail || 'Upload completed');
             setFile(null);
-            await fetchStudents();
+            await fetchStudents(selectedElectionId);
         } catch (err: any) {
             showError(err.response?.data?.detail || 'Bulk upload failed');
         }
@@ -190,7 +233,7 @@ export default function StudentsPage() {
             setLoading(true);
             await api.delete(`api/students/${student.id}/`);
             showSuccess('Student deleted successfully.');
-            await fetchStudents();
+            await fetchStudents(selectedElectionId);
         } catch (err: any) {
             const detail = err.response?.data?.detail;
             showError(detail || 'Failed to delete student.');
@@ -199,8 +242,7 @@ export default function StudentsPage() {
         }
     };
 
-    const activeCount = students.filter(s => s.is_active).length;
-    const votedCount = students.filter(s => s.has_voted).length;
+    const selectedElection = elections.find(e => e.id === selectedElectionId) || null;
 
     // Filter students by search term
     const filteredStudents = students.filter(s =>
@@ -212,7 +254,14 @@ export default function StudentsPage() {
         <div className="space-y-6">
             {/* Page Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <h1 className="text-xl font-semibold text-gray-900">Students</h1>
+                <div>
+                    <h1 className="text-xl font-semibold text-gray-900">Students</h1>
+                    {selectedElection && (
+                        <p className="text-sm text-gray-500 mt-1">
+                            Showing students for {selectedElection.name} ({selectedElection.year})
+                        </p>
+                    )}
+                </div>
                 <button
                     onClick={() => setShowAddForm(!showAddForm)}
                     className="flex w-full sm:w-auto justify-center items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition"
@@ -220,6 +269,29 @@ export default function StudentsPage() {
                     <PlusIcon />
                     Add Student
                 </button>
+            </div>
+
+            {/* Election Selector */}
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                <div className="flex flex-col md:flex-row md:items-center gap-4">
+                    <div className="flex-1">
+                        <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="election-select">
+                            Select Election
+                        </label>
+                        <select
+                            id="election-select"
+                            value={selectedElectionId ?? ''}
+                            onChange={(e) => setSelectedElectionId(e.target.value ? Number(e.target.value) : null)}
+                            className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full md:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                            {elections.length === 0 && <option value="">No elections available</option>}
+                            {elections.map(e => (
+                                <option key={e.id} value={e.id}>{e.name} ({e.year})</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Students are always tied to a specific election.</p>
             </div>
 
 
@@ -275,55 +347,19 @@ export default function StudentsPage() {
                         </div>
                         <button
                             type="submit"
-                            disabled={loading}
-                            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-60 transition"
+                            disabled={loading || !selectedElectionId}
+                            className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg disabled:opacity-60 transition"
                         >
                             {loading ? 'Saving…' : 'Submit'}
                         </button>
                     </form>
+                    {!selectedElection && elections.length > 0 && (
+                        <p className="text-xs text-gray-500 mt-2">
+                            Select an election above before adding a student.
+                        </p>
+                    )}
                 </div>
             )}
-
-            {/* Stat Cards */}
-            <section>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {/* Total Students Card */}
-                    <div className="bg-gradient-to-br h-35 from-blue-600 to-blue-600 rounded-xl p-5 text-white relative overflow-hidden">
-                        <div className="absolute top-4 right-4 opacity-20">
-                            <UsersIcon />
-                        </div>
-                        <div className="flex items-center gap-3 mb-3">
-                            <p className="text-sm text-white/80">Total registered students</p>
-                        </div>
-                        <h3 className="font-semibold text-lg">Total Students</h3>
-                        <p className="text-3xl font-bold mt-2">{students.length}</p>
-                    </div>
-
-                    {/* Active Students Card */}
-                    <div className="bg-gradient-to-br h-35 from-cyan-600 to-cyan-600 rounded-xl p-5 text-white relative overflow-hidden">
-                        <div className="absolute top-4 right-4 opacity-20">
-                            <CheckCircleIcon />
-                        </div>
-                        <div className="flex items-center gap-3 mb-3">
-                            <p className="text-sm text-white/80">Activated for voting</p>
-                        </div>
-                        <h3 className="font-semibold text-lg">Active Students</h3>
-                        <p className="text-3xl font-bold mt-2">{activeCount}</p>
-                    </div>
-
-                    {/* Voted Students Card */}
-                    <div className="bg-gradient-to-br h-35 from-blue-900 to-blue-900 rounded-xl p-5 text-white relative overflow-hidden">
-                        <div className="absolute top-4 right-4 opacity-20">
-                            <CheckCircleIcon />
-                        </div>
-                        <div className="flex items-center gap-3 mb-3">
-                            <p className="text-sm text-white/80">Already cast their vote</p>
-                        </div>
-                        <h3 className="font-semibold text-lg">Have Voted</h3>
-                        <p className="text-3xl font-bold mt-2">{votedCount}</p>
-                    </div>
-                </div>
-            </section>
 
             {/* Bulk Upload Section */}
             <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
@@ -347,12 +383,17 @@ export default function StudentsPage() {
                     />
                     <button
                         type="submit"
-                        disabled={!file}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-60 transition"
+                        disabled={!file || !selectedElectionId}
+                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg disabled:opacity-60 transition"
                     >
-                        Upload
+                        {loading ? 'Uploading…' : 'Upload'}
                     </button>
                 </form>
+                {!selectedElection && elections.length > 0 && (
+                    <p className="text-xs text-gray-500 mt-2">
+                        Select an election above before uploading students.
+                    </p>
+                )}
                 {uploadResult && <p className="text-sm text-green-600 mt-3">{uploadResult}</p>}
             </section>
 
@@ -360,7 +401,9 @@ export default function StudentsPage() {
             <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-5 border-b border-gray-100">
                     <div className="flex items-center gap-4">
-                        <h2 className="text-base font-medium text-gray-900">All Students</h2>
+                        <h2 className="text-base font-medium text-gray-900">
+                            Students {selectedElection ? `for ${selectedElection.name} (${selectedElection.year})` : ''}
+                        </h2>
                         {loading && <span className="text-xs text-gray-500">Loading…</span>}
                     </div>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
@@ -430,7 +473,11 @@ export default function StudentsPage() {
                             {!loading && filteredStudents.length === 0 && (
                                 <tr>
                                     <td colSpan={6} className="px-5 py-8 text-center text-gray-400">
-                                        {searchTerm ? 'No students match your search.' : 'No students found.'}
+                                        {searchTerm
+                                            ? 'No students match your search.'
+                                            : (selectedElection
+                                                ? 'No students added for this election yet.'
+                                                : 'Select an election to view its students.')}
                                     </td>
                                 </tr>
                             )}
