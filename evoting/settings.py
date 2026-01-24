@@ -170,6 +170,18 @@ CORS_ALLOWED_ORIGINS = [
     "https://kasec-evoting-7lkj.onrender.com"
 ]
 
+# Add Railway domain dynamically
+if get_env("RAILWAY_PUBLIC_DOMAIN"):
+    railway_domain = get_env("RAILWAY_PUBLIC_DOMAIN")
+    CORS_ALLOWED_ORIGINS.extend([
+        f"https://{railway_domain}",
+        f"http://{railway_domain}",
+    ])
+
+# For development, allow all origins
+if get_env("DEBUG", default=False, cast=bool):
+    CORS_ALLOW_ALL_ORIGINS = True
+
 
 
 CORS_ALLOW_HEADERS = [
@@ -188,8 +200,16 @@ CORS_ALLOW_HEADERS = [
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5175",
-    # "https://kasec-evoting-7lkj.onrender.com"
+    "https://kasec-evoting-7lkj.onrender.com"
 ]
+
+# Add Railway domain dynamically for CSRF
+if get_env("RAILWAY_PUBLIC_DOMAIN"):
+    railway_domain = get_env("RAILWAY_PUBLIC_DOMAIN")
+    CSRF_TRUSTED_ORIGINS.extend([
+        f"https://{railway_domain}",
+        f"http://{railway_domain}",
+    ])
 
 
 REST_FRAMEWORK = {
