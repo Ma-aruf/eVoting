@@ -244,8 +244,7 @@ export default function ResultsPage() {
                                     <div className="flex justify-center">
                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6  w-full">
                                             {currentPosition.candidates.map((candidate, index) => {
-                                                const maxVotes = Math.max(...currentPosition.candidates.map(c => c.vote_count));
-                                                const barWidth = maxVotes > 0 ? (candidate.vote_count / maxVotes) * 100 : 0;
+                                                const barWidth = candidate.percentage; // Use the actual percentage from data
                                                 const isWinner = index === 0 && candidate.vote_count > 0;
 
                                                 return (
