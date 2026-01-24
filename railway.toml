@@ -1,5 +1,5 @@
 [deploy]
-startCommand = "./start.sh"
+startCommand = "bash start.sh"
 healthcheckPath = "/"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"
