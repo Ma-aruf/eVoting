@@ -60,20 +60,42 @@ const TrashIcon = () => (
     </svg>
 );
 
+const UsersIcon = () => (
+    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+              d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+    </svg>
+);
+
+const CheckCircleIcon = () => (
+    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+);
+
+const VoteIcon = () => (
+    <svg xmlns="http://www.w3.org" viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="#2ecc71"
+         stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+    </svg>
+);
+
 export default function StudentsPage() {
     // State
     const [selectedElectionId, setSelectedElectionId] = useState<number | null>(null);
-    
+
     // Queries
     const {data: elections = [], isLoading: electionsLoading} = useElections();
     const {data: students = [], isLoading: studentsLoading} = useStudents(selectedElectionId);
-    
+
     // Mutations
     const createStudent = useCreateStudent();
     const updateStudent = useUpdateStudent();
     const deleteStudent = useDeleteStudent();
     const bulkUploadStudents = useBulkUploadStudents();
-    
+
     const loading = electionsLoading || studentsLoading || createStudent.isPending || updateStudent.isPending || deleteStudent.isPending || bulkUploadStudents.isPending;
 
     // Toggle for add student form
@@ -116,14 +138,14 @@ export default function StudentsPage() {
             showError('Please select an election.');
             return;
         }
-        
+
         createStudent.mutate({
             student_id: studentId.trim(),
             full_name: fullName.trim(),
             class_name: className,
             election: selectedElectionId,
         });
-        
+
         setStudentId('');
         setFullName('');
         setClassName('');
@@ -137,12 +159,12 @@ export default function StudentsPage() {
             showError('Please select an election before uploading.');
             return;
         }
-        
+
         bulkUploadStudents.mutate({
             file,
             election_id: selectedElectionId,
         });
-        
+
         setFile(null);
     };
 
@@ -161,7 +183,7 @@ export default function StudentsPage() {
             full_name: editFullName.trim(),
             class_name: editClassName,
         });
-        
+
         setEditingStudent(null);
     };
 
@@ -171,7 +193,7 @@ export default function StudentsPage() {
             return;
         }
         if (!confirm(`Are you sure you want to delete ${student.full_name}?`)) return;
-        
+
         deleteStudent.mutate(student);
     };
 
@@ -195,15 +217,69 @@ export default function StudentsPage() {
                     </div>
                 </div>
             )}
+
+            {/* Stat Cards */}
+            <section>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div
+                        className="bg-gradient-to-br h-35 from-blue-600 to-blue-600 rounded-xl p-5 text-white relative overflow-hidden">
+                        <div className="absolute top-4 right-4 opacity-20">
+                            <UsersIcon/>
+                        </div>
+                        <div className="flex items-center gap-3 mb-3">
+                            <p className="text-sm text-white/80">All students</p>
+                        </div>
+                        <h3 className="font-semibold text-lg">Total Students</h3>
+                        <p className="text-3xl font-bold mt-2">{students.length}</p>
+                    </div>
+
+                    <div
+                        className="bg-gradient-to-br h-35 from-cyan-600 to-cyan-600 rounded-xl p-5 text-white relative overflow-hidden">
+                        <div className="absolute top-4 right-4 opacity-20">
+                            <CheckCircleIcon/>
+                        </div>
+                        <div className="flex items-center gap-3 mb-3">
+                            <p className="text-sm text-white/80">Currently active</p>
+                        </div>
+                        <h3 className="font-semibold text-lg">Active</h3>
+                        <p className="text-3xl font-bold mt-2">{students.filter(s => s.is_active).length}</p>
+                    </div>
+
+                    <div
+                        className="bg-gradient-to-br h-35 from-blue-900 to-blue-900 rounded-xl p-5 text-white relative overflow-hidden">
+                        <div className="absolute top-4 right-4 opacity-20">
+                            <VoteIcon/>
+                        </div>
+                        <div className="flex items-center gap-3 mb-3">
+                            <p className="text-sm text-white/80">Already voted</p>
+                        </div>
+                        <h3 className="font-semibold text-lg">Voted</h3>
+                        <p className="text-3xl font-bold mt-2">{students.filter(s => s.has_voted).length}</p>
+                    </div>
+                </div>
+            </section>
+
+
+
             {/* Page Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                    <h1 className="text-xl font-semibold text-gray-900">Students</h1>
-                    {selectedElection && (
-                        <p className="text-sm text-gray-500 mt-1">
-                            Showing students for {selectedElection.name} ({selectedElection.year})
-                        </p>
-                    )}
+            <div className="flex justify-between">
+                <div className="flex flex-col md:flex-row md:items-center gap-4">
+                    <div className="flex-1">
+                        {/*<label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="election-select">*/}
+                        {/*    Select Election*/}
+                        {/*</label>*/}
+                        <select
+                            id="election-select"
+                            value={selectedElectionId ?? ''}
+                            onChange={(e) => setSelectedElectionId(e.target.value ? Number(e.target.value) : null)}
+                            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full md:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                            {elections.length === 0 && <option value="">No elections available</option>}
+                            {elections.map(e => (
+                                <option key={e.id} value={e.id}>{e.name} ({e.year})</option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
                 <button
                     onClick={() => setShowAddForm(!showAddForm)}
@@ -215,32 +291,12 @@ export default function StudentsPage() {
             </div>
 
             {/* Election Selector */}
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-                <div className="flex flex-col md:flex-row md:items-center gap-4">
-                    <div className="flex-1">
-                        <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="election-select">
-                            Select Election
-                        </label>
-                        <select
-                            id="election-select"
-                            value={selectedElectionId ?? ''}
-                            onChange={(e) => setSelectedElectionId(e.target.value ? Number(e.target.value) : null)}
-                            className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full md:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                            {elections.length === 0 && <option value="">No elections available</option>}
-                            {elections.map(e => (
-                                <option key={e.id} value={e.id}>{e.name} ({e.year})</option>
-                            ))}
-                        </select>
-                    </div>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Students are always tied to a specific election.</p>
-            </div>
+
 
 
             {/* Add Student Form - Collapsible */}
             {showAddForm && (
-                <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
                     <h2 className="text-base font-medium text-gray-900 mb-4">Add New Student</h2>
                     <form onSubmit={handleCreateStudent} className="flex flex-col md:flex-row gap-4 items-end">
                         <div className="flex-1">
@@ -305,9 +361,9 @@ export default function StudentsPage() {
             )}
 
             {/* Bulk Upload Section */}
-            <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
+            <section className=" flex justify-between bg-white rounded-xl border border-gray-200 py-2 px-5">
+                <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
                         <UploadIcon />
                     </div>
                     <div>
@@ -340,7 +396,7 @@ export default function StudentsPage() {
             </section>
 
             {/* Students Table */}
-            <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <section className="bg-white rounded-xl border border-gray-200  overflow-hidden">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-5 border-b border-gray-100">
                     <div className="flex items-center gap-4">
                         <h2 className="text-base font-medium text-gray-900">
