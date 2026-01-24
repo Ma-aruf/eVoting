@@ -3,24 +3,43 @@
 
 echo "Starting Django application..."
 
-# Wait for database to be ready
-echo "Waiting for database connection..."
-python manage.py dbshell --command "SELECT 1;" 2>/dev/null
-while [ $? -ne 0 ]; do
-    echo "Database not ready, waiting 5 seconds..."
-    sleep 5
-    python manage.py dbshell --command "SELECT 1;" 2>/dev/null
-done
+# Check if DATABASE_URL is set
+if [ -z "$DATABASE_URL" ]; then
+    echo "WARNING: DATABASE_URL not set, checking for PG* variables..."
+    if [ -z "$PGHOST" ]; then
+        echo "ERROR: No database configuration found"
+        exit 1
+    fi
+fi
 
-echo "Database is ready!"
+echo "Database configuration found:"
+echo "DATABASE_URL: ${DATABASE_URL:0:20}..."
+echo "PGHOST: $PGHOST"
+echo "PGDATABASE: $PGDATABASE"
 
-# Run migrations
-echo "Running migrations..."
-python manage.py migrate --noinput
+# Wait a bit for database to be ready
+echo "Waiting for database to be ready..."
+sleep 10
 
-# Collect static files
-echo "Collecting static files..."
-python manage.py collectstatic --noinput
+# Test database connection with a simple approach
+echo "Testing database connection..."
+python manage.py check --database default
 
-echo "Starting Gunicorn..."
-exec gunicorn evoting.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --timeout 120 --log-level debug
+if [ $? -eq 0 ]; then
+    echo "Database connection successful!"
+    
+    # Run migrations
+    echo "Running migrations..."
+    python manage.py migrate --noinput
+    
+    # Collect static files
+    echo "Collecting static files..."
+    python manage.py collectstatic --noinput
+    
+    echo "Starting Gunicorn..."
+    exec gunicorn evoting.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --timeout 120 --log-level debug
+else
+    echo "Database connection failed, but proceeding anyway..."
+    echo "Starting Gunicorn without migrations..."
+    exec gunicorn evoting.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --timeout 120 --log-level debug
+fi

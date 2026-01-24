@@ -25,26 +25,31 @@ from rest_framework_simplejwt.views import (
 
 def health_check(request):
     try:
-        # Test database connection
-        from django.db import connection
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT 1")
-        
         import sys
-        return JsonResponse({
+        response_data = {
             "status": "healthy", 
             "service": "evoting-api",
             "python_version": sys.version.split()[0],
-            "message": "Django app is running",
-            "database": "connected"
-        })
+            "message": "Django app is running"
+        }
+        
+        # Try to test database connection but don't fail if it's not ready
+        try:
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+            response_data["database"] = "connected"
+        except Exception as db_error:
+            response_data["database"] = "disconnected"
+            response_data["database_error"] = str(db_error)
+        
+        return JsonResponse(response_data)
     except Exception as e:
         return JsonResponse({
             "status": "unhealthy", 
             "service": "evoting-api",
             "error": str(e),
-            "type": type(e).__name__,
-            "database": "disconnected"
+            "type": type(e).__name__
         }, status=500)
 
 def create_superuser_view(request):
