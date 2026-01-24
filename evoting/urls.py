@@ -11,16 +11,25 @@ from rest_framework_simplejwt.views import (
 )
 
 def health_check(request):
+    import sys
+    print(f"Health check accessed: {request.method} {request.get_full_path()}", file=sys.stderr)
+    print(f"Headers: {dict(request.headers)}", file=sys.stderr)
+    print(f"ALLOWED_HOSTS: {getattr(__import__('django.conf').settings, 'ALLOWED_HOSTS', 'Not set')}", file=sys.stderr)
+    
     # Simple, fast health check that always returns 200
     # Railway just needs to see the app is running, not database status
-    return JsonResponse({
+    response = JsonResponse({
         "status": "ok",
         "service": "evoting-api",
         "timestamp": now().isoformat(),
     }, status=200)
+    
+    print(f"Response status: {response.status_code}", file=sys.stderr)
+    return response
 
 urlpatterns = [
     path('', health_check, name='health_check'),
+    path('test/', lambda request: JsonResponse({"message": "Django is working!"}), name='test'),
     # path('create-superuser/', create_superuser_view, name='create-superuser'),
     path('admin/', admin.site.urls),
     path("api/", include("core.urls")),

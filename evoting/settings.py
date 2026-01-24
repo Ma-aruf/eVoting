@@ -56,8 +56,13 @@ DEBUG = get_env('DEBUG', default=False, cast=bool)
 if get_env("RAILWAY_ENVIRONMENT") or get_env("RAILWAY_PUBLIC_DOMAIN"):
     DEBUG = False
 
-ALLOWED_HOSTS = get_env("ALLOWED_HOSTS", "*").split(",")
+# Start with wildcard so everything works by default
+ALLOWED_HOSTS = ["*"]
 
+# Always allow localhost for local dev / health checks
+ALLOWED_HOSTS += ["localhost", "127.0.0.1", "0.0.0.0"]
+
+# Add Railway-specific domains if running in Railway
 if get_env("RAILWAY_ENVIRONMENT"):
     railway_domain = get_env("RAILWAY_PUBLIC_DOMAIN")
     if railway_domain and "*" not in ALLOWED_HOSTS:
@@ -65,6 +70,11 @@ if get_env("RAILWAY_ENVIRONMENT"):
             railway_domain,
             f"*.{railway_domain}",
         ])
+
+
+# Remove duplicates while preserving order
+seen = set()
+ALLOWED_HOSTS = [host for host in ALLOWED_HOSTS if not (host in seen or seen.add(host))]
 
 
 # Application definition
