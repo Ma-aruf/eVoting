@@ -30,7 +30,8 @@ def health_check(request):
             "status": "healthy", 
             "service": "evoting-api",
             "python_version": sys.version.split()[0],
-            "message": "Django app is running"
+            "message": "Django app is running",
+            "timestamp": __import__('datetime').datetime.now().isoformat()
         }
         
         # Try to test database connection but don't fail if it's not ready
@@ -43,14 +44,21 @@ def health_check(request):
             response_data["database"] = "disconnected"
             response_data["database_error"] = str(db_error)
         
-        return JsonResponse(response_data)
+        response = JsonResponse(response_data)
+        response['Access-Control-Allow-Origin'] = '*'
+        response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
     except Exception as e:
-        return JsonResponse({
+        response = JsonResponse({
             "status": "unhealthy", 
             "service": "evoting-api",
             "error": str(e),
-            "type": type(e).__name__
+            "type": type(e).__name__,
+            "timestamp": __import__('datetime').datetime.now().isoformat()
         }, status=500)
+        response['Access-Control-Allow-Origin'] = '*'
+        return response
 
 def create_superuser_view(request):
     from django.contrib.auth import get_user_model
