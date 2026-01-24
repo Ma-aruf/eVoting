@@ -52,6 +52,10 @@ SECRET_KEY = get_env('DJANGO_SECRETE_KEY', 'a=84(-blt_b=$hn)-d1qcuh0*cd!13!92c0)
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = get_env('DEBUG', default=False, cast=bool)
 
+# Force DEBUG=False in production environments
+if get_env("RAILWAY_ENVIRONMENT") or get_env("RAILWAY_PUBLIC_DOMAIN"):
+    DEBUG = False
+
 ALLOWED_HOSTS = get_env("ALLOWED_HOSTS", "*").split(",")
 
 if get_env("RAILWAY_ENVIRONMENT"):
