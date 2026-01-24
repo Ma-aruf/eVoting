@@ -52,13 +52,16 @@ SECRET_KEY = get_env('DJANGO_SECRETE_KEY', 'a=84(-blt_b=$hn)-d1qcuh0*cd!13!92c0)
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = get_env('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = ["*"]
-# Add Railway dynamic host
-if get_env('RAILWAY_ENVIRONMENT'):
-    railway_domain = get_env('RAILWAY_PUBLIC_DOMAIN')
-    if railway_domain:
-        ALLOWED_HOSTS.append(railway_domain)
-        ALLOWED_HOSTS.append(f"*.{railway_domain}")
+ALLOWED_HOSTS = get_env("ALLOWED_HOSTS", "*").split(",")
+
+if get_env("RAILWAY_ENVIRONMENT"):
+    railway_domain = get_env("RAILWAY_PUBLIC_DOMAIN")
+    if railway_domain and "*" not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.extend([
+            railway_domain,
+            f"*.{railway_domain}",
+        ])
+
 
 # Application definition
 
@@ -110,24 +113,37 @@ WSGI_APPLICATION = 'evoting.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-database_url = os.environ.get("DATABASE_URL")
+# Priority: DATABASE_URL > PG* env vars > local defaults
+database_url = os.environ.get('DATABASE_URL')
 
 if database_url:
+    # Use DATABASE_URL if available (Railway provides this)
     DATABASES = {
-        "default": dj_database_url.parse(database_url, conn_max_age=600)
+        'default': dj_database_url.parse(database_url, conn_max_age=600)
     }
-else:
+elif os.environ.get('PGDATABASE') and os.environ.get('PGHOST'):
+    # Use individual PG* environment variables if set
     DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": get_env("NAME"),
-            "USER": get_env("USER"),
-            "PASSWORD": get_env("PASSWORD"),
-            "HOST": get_env("HOST", "localhost"),
-            "PORT": get_env("PORT", "5432"),
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.environ.get('PGDATABASE'),
+            'USER': os.environ.get('PGUSER', 'postgres'),
+            'PASSWORD': os.environ.get('PGPASSWORD', ''),
+            'HOST': os.environ.get('PGHOST', 'localhost'),
+            'PORT': os.environ.get('PGPORT', '5432'),
         }
     }
-
+else:
+    # Local development defaults
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': get_env('NAME'),
+            'USER': get_env('USER'),
+            'PASSWORD': get_env('PASSWORD'),
+            'HOST': get_env('HOST'),
+        }
+    }
 
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = True
@@ -158,6 +174,7 @@ CORS_ALLOW_HEADERS = [
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5175",
+    "https://kasec-evoting-7lkj.onrender.com"
 ]
 
 
