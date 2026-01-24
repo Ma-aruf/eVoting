@@ -1,105 +1,52 @@
-import {type FormEvent, type MouseEvent, useEffect, useState} from 'react';
-import api from '../../apiConfig';
+import {type FormEvent, type MouseEvent, useState, useEffect} from 'react';
+import {useElections} from '../../queries/useElections';
+import {useStudents} from '../../queries/useStudents';
+import {useDashboardStats} from '../../queries/useDashboard';
+import {useToggleStudentActivation} from '../../queries/useActivations';
 import {showError, showSuccess} from '../../utils/toast';
 
-interface Student {
-    id: number;
-    student_id: string;
-    full_name: string;
-    class_name: string;
-    has_voted: boolean;
-    is_active: boolean;
-    election?: {
-        id: number;
-        name: string;
-        year: number;
-    };
-}
-
-interface Election {
-    id: number;
-    name: string;
-    year: number;
-}
-
-interface ListResponse<T> {
-    count?: number;
-    results?: T[];
-}
-
 export default function ActivationsPage() {
-    const [students, setStudents] = useState<Student[]>([]);
-    const [elections, setElections] = useState<Election[]>([]);
     const [selectedElectionId, setSelectedElectionId] = useState<number | null>(null);
-    const [loading, setLoading] = useState(false);
+    
+    // Queries
+    const {data: elections = [], isLoading: electionsLoading} = useElections();
+    const {data: students = [], isLoading: studentsLoading} = useStudents(selectedElectionId);
+    const {data: stats, isLoading: statsLoading} = useDashboardStats(selectedElectionId);
+    
+    // Mutations
+    const toggleActivationMutation = useToggleStudentActivation();
+    
+    // Loading state
+    const loading = electionsLoading || studentsLoading || statsLoading || toggleActivationMutation.isPending;
+
+    // Auto-select first election when data loads
+    useEffect(() => {
+        if (elections.length > 0 && !selectedElectionId) {
+            setSelectedElectionId(elections[0].id);
+        }
+    }, [elections, selectedElectionId]);
 
     const [studentQuery, setStudentQuery] = useState('');
     const [studentDropdownOpen, setStudentDropdownOpen] = useState(false);
     const [studentId, setStudentId] = useState('');
 
-    const fetchStudents = async (electionId?: number | null) => {
-        setLoading(true);
-        try {
-            const params = electionId ? { election_id: electionId } : {};
-            const res = await api.get<Student[] | ListResponse<Student>>('api/students/', { params });
-            const data = res.data;
-            if (Array.isArray(data)) {
-                setStudents(data);
-            } else if (Array.isArray(data.results)) {
-                setStudents(data.results);
-            } else {
-                setStudents([]);
-            }
-        } catch (err) {
-            showError('Failed to load students.');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const fetchElections = async () => {
-        try {
-            const res = await api.get('api/elections/');
-            const items = Array.isArray(res.data) ? res.data : (res.data.results || []);
-            setElections(items);
-            if (!selectedElectionId && items.length > 0) {
-                setSelectedElectionId(items[0].id);
-            }
-        } catch (err) {
-            console.error(err);
-        }
-    };
-
-    useEffect(() => {
-        fetchElections();
-    }, []);
-
-    useEffect(() => {
-        if (selectedElectionId !== null) {
-            fetchStudents(selectedElectionId);
-        }
-    }, [selectedElectionId]);
-
     const handleToggle = async (nextActive: boolean, targetStudentId?: string) => {
         const id = (targetStudentId ?? studentId).trim();
         if (!id) return;
 
-        setLoading(true);
-        try {
-            await api.post('api/students/activate/', {
-                student_id: id,
-                is_active: nextActive,
-            });
-
-            showSuccess(nextActive ? 'Student activated successfully' : 'Student deactivated successfully');
-            setStudentId('');
-            setStudentQuery('');
-            await fetchStudents(selectedElectionId);
-        } catch (err: any) {
-            showError(err.response?.data?.detail || (nextActive ? 'Activation failed. Please try again.' : 'Deactivation failed. Please try again.'));
-        } finally {
-            setLoading(false);
-        }
+        toggleActivationMutation.mutate({
+            student_id: id,
+            is_active: nextActive,
+        }, {
+            onSuccess: () => {
+                setStudentId('');
+                setStudentQuery('');
+                showSuccess(nextActive ? 'Student activated successfully' : 'Student deactivated successfully');
+            },
+            onError: (err: any) => {
+                showError(err.response?.data?.detail || (nextActive ? 'Activation failed. Please try again.' : 'Deactivation failed. Please try again.'));
+            },
+        });
     };
 
     const handleActivate = async (e?: FormEvent | MouseEvent<HTMLButtonElement>) => {
@@ -109,11 +56,10 @@ export default function ActivationsPage() {
 
     const handleDeactivate = async (e?: FormEvent | MouseEvent<HTMLButtonElement>) => {
         e?.preventDefault();
-        await handleToggle(false);
+        await handleToggle(false, studentId);
     };
 
-    const selectedElection = elections.find(e => e.id === selectedElectionId) || null;
-    const selectedStudent = students.find(s => s.student_id.toLowerCase() === studentId.toLowerCase()) ?? null;
+        const selectedStudent = students.find(s => s.student_id.toLowerCase() === studentId.toLowerCase()) ?? null;
 
     const filteredStudentOptions = students.filter((s) => {
         const q = studentQuery.toLowerCase().trim();
@@ -123,43 +69,78 @@ export default function ActivationsPage() {
 
     return (
         <div className="space-y-6">
-            {/* Page Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                    <h1 className="text-xl font-semibold text-gray-900">Voter Activation</h1>
-                    {selectedElection && (
-                        <p className="text-sm text-gray-500 mt-1">
-                            Activating students for {selectedElection.name} ({selectedElection.year})
-                        </p>
-                    )}
-                </div>
-            </div>
+            {/* Stat Cards */}
+            <section>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {/* Active Students Card */}
+                    <div className="bg-gradient-to-br h-40 from-green-600 to-green-600 rounded-xl p-5 text-white relative overflow-hidden">
+                        <div className="absolute top-4 right-4 opacity-20">
+                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                        </div>
+                        <div className="flex items-center gap-3 mb-3">
+                            <p className="text-sm text-white/80">Total activated</p>
+                        </div>
+                        <h3 className="font-semibold text-lg">Active Students</h3>
+                        <p className="text-3xl font-bold mt-2">{stats?.active_students || 0}</p>
+                    </div>
 
-            {/* Election Selector */}
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-                <div className="flex flex-col md:flex-row md:items-center gap-4">
-                    <div className="flex-1">
-                        <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="election-select">
-                            Select Election
-                        </label>
-                        <select
-                            id="election-select"
-                            value={selectedElectionId ?? ''}
-                            onChange={(e) => setSelectedElectionId(e.target.value ? Number(e.target.value) : null)}
-                            className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full md:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                            {elections.length === 0 && <option value="">No elections available</option>}
-                            {elections.map(e => (
-                                <option key={e.id} value={e.id}>{e.name} ({e.year})</option>
-                            ))}
-                        </select>
+                    {/* Inactive Students Card */}
+                    <div className="bg-gradient-to-br h-40 from-orange-600 to-orange-600 rounded-xl p-5 text-white relative overflow-hidden">
+                        <div className="absolute top-4 right-4 opacity-20">
+                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                                      d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                        </div>
+                        <div className="flex items-center gap-3 mb-3">
+                            <p className="text-sm text-white/80">Total inactive</p>
+                        </div>
+                        <h3 className="font-semibold text-lg">Inactive Students</h3>
+                        <p className="text-3xl font-bold mt-2">{stats?.pending_activations || 0}</p>
+                    </div>
+
+                    {/* Total Students Card */}
+                    <div className="bg-gradient-to-br h-40 from-blue-600 to-blue-600 rounded-xl p-5 text-white relative overflow-hidden">
+                        <div className="absolute top-4 right-4 opacity-20">
+                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                                      d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+                            </svg>
+                        </div>
+                        <div className="flex items-center gap-3 mb-3">
+                            <p className="text-sm text-white/80">Total students</p>
+                        </div>
+                        <h3 className="font-semibold text-lg">All Students</h3>
+                        <p className="text-3xl font-bold mt-2">{stats?.total_students || 0}</p>
                     </div>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">Activations are scoped to the selected election.</p>
+            </section>
+
+            {/* Election Selector */}
+            <div className=" p-5">
+                <div className="flex-1">
+                    <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="election-select">
+                        Select Election
+                    </label>
+                    <select
+                        id="election-select"
+                        value={selectedElectionId ?? ''}
+                        onChange={(e) => setSelectedElectionId(e.target.value ? Number(e.target.value) : null)}
+                        className="border border-blue-300 rounded-lg px-3 py-2 text-sm w-full md:w-72 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    >
+                        {elections.length === 0 && <option value="">No elections available</option>}
+                        {elections.map(e => (
+                            <option key={e.id} value={e.id}>{e.name} ({e.year})</option>
+                        ))}
+                    </select>
+                </div>
             </div>
 
             {/* Activate/Deactivate Card */}
-            <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <section className="bg-white rounded-xl border border-gray-200 p-5">
                 <div className="flex flex-col md:flex-row md:items-end gap-4">
                     <div className="flex-1">
                         <h2 className="text-base font-medium text-gray-900">Activate / Deactivate Student</h2>
