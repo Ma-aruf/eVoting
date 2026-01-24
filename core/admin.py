@@ -4,7 +4,7 @@ from .models import Election, Student, Position, Candidate, Vote, User
 
 @admin.register(Election)
 class ElectionAdmin(admin.ModelAdmin):
-    list_display = ("name", "year", "start_time", "end_time", "is_active")
+    list_display = ("id","name", "year", "start_time", "end_time", "is_active")
     list_filter = ("year", "is_active")
     search_fields = ("name",)
 
