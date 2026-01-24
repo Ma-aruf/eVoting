@@ -33,7 +33,7 @@ export default function ElectionsPage() {
     const loading = electionsLoading || createElection.isPending;
 
     const [showCreateForm, setShowCreateForm] = useState(false);
-    const [searchTerm, setSearchTerm] = useState('');
+    // const [searchTerm, setSearchTerm] = useState('');
 
     const [name, setName] = useState('');
     const [year, setYear] = useState<string>('');
@@ -78,10 +78,10 @@ export default function ElectionsPage() {
     const activeCount = elections.filter(e => e.is_active).length;
     const inactiveCount = elections.length - activeCount;
 
-    const filteredElections = elections.filter(e =>
-        e.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        String(e.year).includes(searchTerm.trim())
-    );
+    // const filteredElections = elections.filter(e =>
+    //     e.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    //     String(e.year).includes(searchTerm.trim())
+    // );
 
     return (
         <div className="space-y-6 relative">
@@ -149,7 +149,7 @@ export default function ElectionsPage() {
 
             {/* Create election form */}
             {showCreateForm && (
-                <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                <section className="bg-white rounded-xl border border-gray-200 p-2 px-3">
                     <h2 className="text-base font-medium text-gray-900 mb-4">Create New Election</h2>
                     <form onSubmit={handleCreateElection}
                           className="flex flex-col lg:flex-row gap-4 items-end flex-wrap">
@@ -237,27 +237,26 @@ export default function ElectionsPage() {
 
 
             {/* Elections table */}
-            <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <section className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div
-                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-5 border-b border-gray-100">
+                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-1 px-3 border-b border-gray-100">
                     <div className="flex items-center gap-4">
                         <h2 className="text-base font-medium text-gray-900">All Elections</h2>
-                        {loading && <span className="text-xs text-gray-500">Loading…</span>}
                     </div>
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
-                        <input
-                            type="text"
-                            placeholder="Search by name or year..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full sm:w-64 border border-blue-200 border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        {searchTerm && (
-                            <span className="text-xs text-gray-500">
-                                {filteredElections.length} of {elections.length}
-                            </span>
-                        )}
-                    </div>
+                    {/*<div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">*/}
+                    {/*    <input*/}
+                    {/*        type="text"*/}
+                    {/*        placeholder="Search by name or year..."*/}
+                    {/*        value={searchTerm}*/}
+                    {/*        onChange={(e) => setSearchTerm(e.target.value)}*/}
+                    {/*        className="w-full sm:w-64 border border-blue-200 border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"*/}
+                    {/*    />*/}
+                    {/*    {searchTerm && (*/}
+                    {/*        <span className="text-xs text-gray-500">*/}
+                    {/*            {filteredElections.length} of {elections.length}*/}
+                    {/*        </span>*/}
+                    {/*    )}*/}
+                    {/*</div>*/}
                 </div>
 
                 <div className="overflow-x-auto">
@@ -272,7 +271,7 @@ export default function ElectionsPage() {
                         </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                        {filteredElections.map((election) => (
+                        {elections.map((election) => (
                             <tr key={election.id} className="hover:bg-gray-50 transition odd:bg-white even:bg-blue-50">
                                 <td className="px-5 py-2 font-medium text-gray-900">{election.name}</td>
                                 <td className="px-5 py-2 text-gray-700">{election.year}</td>
@@ -293,13 +292,6 @@ export default function ElectionsPage() {
                                 </td>
                             </tr>
                         ))}
-                        {!loading && filteredElections.length === 0 && (
-                            <tr>
-                                <td colSpan={5} className="px-5 py-8 text-center text-gray-400">
-                                    {searchTerm ? 'No elections match your search.' : 'No elections created yet.'}
-                                </td>
-                            </tr>
-                        )}
                         </tbody>
                     </table>
                 </div>
