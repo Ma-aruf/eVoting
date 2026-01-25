@@ -1,23 +1,28 @@
-import {type FormEvent, type MouseEvent, useState, useEffect} from 'react';
+import {type FormEvent, type MouseEvent, useEffect, useState} from 'react';
 import {useElections} from '../../queries/useElections';
 import {useStudents} from '../../queries/useStudents';
 import {useDashboardStats} from '../../queries/useDashboard';
-import {useToggleStudentActivation} from '../../queries/useActivations';
-import {showError, showSuccess} from '../../utils/toast';
+import {useActivateStudent} from '../../queries/useActivations';
+import {showError} from '../../utils/toast';
 
 export default function ActivationsPage() {
     const [selectedElectionId, setSelectedElectionId] = useState<number | null>(null);
-    
+
     // Queries
     const {data: elections = [], isLoading: electionsLoading} = useElections();
     const {data: students = [], isLoading: studentsLoading} = useStudents(selectedElectionId);
     const {data: stats, isLoading: statsLoading} = useDashboardStats(selectedElectionId);
-    
+    const [IsStudentActive, setIsStudentActive] = useState(false)
+    const [isActivating, setIsActivating] = useState(false)
+
+    // Unified filtering - only show inactive students for activation
+    const inactiveStudents = students.filter(student => !student.is_active)
+
     // Mutations
-    const toggleActivationMutation = useToggleStudentActivation();
-    
+    const activateStudentMutation = useActivateStudent();
+
     // Loading state
-    const loading = electionsLoading || studentsLoading || statsLoading || toggleActivationMutation.isPending;
+    const loading = electionsLoading || studentsLoading || statsLoading || activateStudentMutation.isPending;
 
     // Auto-select first election when data loads
     useEffect(() => {
@@ -30,50 +35,55 @@ export default function ActivationsPage() {
     const [studentDropdownOpen, setStudentDropdownOpen] = useState(false);
     const [studentId, setStudentId] = useState('');
 
-    const handleToggle = async (nextActive: boolean, targetStudentId?: string) => {
-        const id = (targetStudentId ?? studentId).trim();
+    const handleActivate = async (e?: FormEvent | MouseEvent<HTMLButtonElement>) => {
+        e?.preventDefault();
+        const id = studentId.trim();
         if (!id) return;
 
-        toggleActivationMutation.mutate({
-            student_id: id,
-            is_active: nextActive,
-        }, {
+        const activeStud = students.find(
+            (student) => student.student_id === id
+        );
+        setIsStudentActive(activeStud?.is_active ?? false)
+
+        if (IsStudentActive) {
+            showError('Student is already active');
+            return;
+        }
+
+        setIsActivating(true);
+
+        activateStudentMutation.mutate(id, {
             onSuccess: () => {
                 setStudentId('');
                 setStudentQuery('');
-                showSuccess(nextActive ? 'Student activated successfully' : 'Student deactivated successfully');
+                setIsStudentActive(false);
             },
             onError: (err: any) => {
-                showError(err.response?.data?.detail || (nextActive ? 'Activation failed. Please try again.' : 'Deactivation failed. Please try again.'));
+                showError(err.response?.data?.detail || 'Activation failed. Please try again.');
             },
+            onSettled: () => {
+                setIsActivating(false);
+            }
         });
     };
 
-    const handleActivate = async (e?: FormEvent | MouseEvent<HTMLButtonElement>) => {
-        e?.preventDefault();
-        await handleToggle(true);
-    };
+    const selectedStudent = students.find(s => s.student_id.toLowerCase() === studentId.toLowerCase()) ?? null;
 
-    const handleDeactivate = async (e?: FormEvent | MouseEvent<HTMLButtonElement>) => {
-        e?.preventDefault();
-        await handleToggle(false, studentId);
-    };
-
-        const selectedStudent = students.find(s => s.student_id.toLowerCase() === studentId.toLowerCase()) ?? null;
-
-    const filteredStudentOptions = students.filter((s) => {
+    // Unified filtering - search within inactive students only
+    const filteredStudentOptions = inactiveStudents.filter((s) => {
         const q = studentQuery.toLowerCase().trim();
         if (!q) return true;
         return s.full_name.toLowerCase().includes(q) || s.student_id.toLowerCase().includes(q);
     });
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-0">
             {/* Stat Cards */}
             <section>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {/* Active Students Card */}
-                    <div className="bg-gradient-to-br h-40 from-green-600 to-green-600 rounded-xl p-5 text-white relative overflow-hidden">
+                    <div
+                        className="bg-gradient-to-br h-30 py-2 px-4 from-blue-400 to-blue-600 rounded-xl p-5 text-white relative overflow-hidden">
                         <div className="absolute top-4 right-4 opacity-20">
                             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
@@ -88,7 +98,8 @@ export default function ActivationsPage() {
                     </div>
 
                     {/* Inactive Students Card */}
-                    <div className="bg-gradient-to-br h-40 from-orange-600 to-orange-600 rounded-xl p-5 text-white relative overflow-hidden">
+                    <div
+                        className="bg-gradient-to-br h-30 from-cyan-600 to-cyan-900 rounded-xl py-2 px-4 text-white relative overflow-hidden">
                         <div className="absolute top-4 right-4 opacity-20">
                             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
@@ -103,7 +114,8 @@ export default function ActivationsPage() {
                     </div>
 
                     {/* Total Students Card */}
-                    <div className="bg-gradient-to-br h-40 from-blue-600 to-blue-600 rounded-xl p-5 text-white relative overflow-hidden">
+                    <div
+                        className="bg-gradient-to-br h-30 py-2 px-4 from-blue-600 to-blue-900 rounded-xl p-5 text-white relative overflow-hidden">
                         <div className="absolute top-4 right-4 opacity-20">
                             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
@@ -139,12 +151,12 @@ export default function ActivationsPage() {
                 </div>
             </div>
 
-            {/* Activate/Deactivate Card */}
+            {/* Activate Card */}
             <section className="bg-white rounded-xl border border-gray-200 p-5">
                 <div className="flex flex-col md:flex-row md:items-end gap-4">
                     <div className="flex-1">
-                        <h2 className="text-base font-medium text-gray-900">Activate / Deactivate Student</h2>
-                        <p className="text-xs text-gray-500 mt-1">Type student name or ID, select from list, then activate or deactivate.</p>
+                        <h2 className="text-base font-medium text-gray-900">Activate Student</h2>
+                        <p className="text-xs text-gray-500 mt-1">Type student name or ID, select from list, then activate.</p>
                     </div>
                 </div>
 
@@ -168,12 +180,13 @@ export default function ActivationsPage() {
                                     window.setTimeout(() => setStudentDropdownOpen(false), 150);
                                 }}
                                 placeholder="Type student name or ID..."
-                                disabled={students.length === 0}
+                                disabled={inactiveStudents.length === 0}
                                 className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
                             />
 
                             {studentDropdownOpen && students.length > 0 && (
-                                <div className="absolute z-10 mt-2 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-64 overflow-auto">
+                                <div
+                                    className="absolute z-10 mt-2 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-64 overflow-auto">
                                     {filteredStudentOptions.length === 0 ? (
                                         <div className="px-3 py-2 text-sm text-gray-500">No matches</div>
                                     ) : (
@@ -189,7 +202,8 @@ export default function ActivationsPage() {
                                                 }}
                                                 className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition"
                                             >
-                                                <span className="font-medium text-gray-900">{student.full_name}</span>{' '}
+                                                <span
+                                                    className="font-medium text-gray-900">{student.full_name}</span>{' '}
                                                 <span className="text-gray-500">({student.student_id})</span>
                                             </button>
                                         ))
@@ -199,36 +213,32 @@ export default function ActivationsPage() {
                         </div>
                     </div>
 
-                    <div className="flex gap-3 w-full lg:w-auto">
+                    <div className="w-full lg:w-auto">
                         <button
                             type="submit"
-                            disabled={loading || !studentId.trim()}
-                            className="px-4 py-2 rounded-lg text-sm font-medium bg-cyan-600 hover:bg-cyan-700 text-white disabled:opacity-60 disabled:cursor-not-allowed transition flex-1"
+                            disabled={loading || !studentId.trim() || IsStudentActive || isActivating}
+                            className="w-full px-4 py-2 rounded-lg text-sm font-medium bg-cyan-600 hover:bg-cyan-700 text-white disabled:opacity-60 disabled:cursor-not-allowed transition"
+
                         >
-                            {loading ? 'Processing…' : 'Activate'}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={handleDeactivate}
-                            disabled={loading || !studentId.trim()}
-                            className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-800 hover:bg-red-800 text-white disabled:opacity-60 disabled:cursor-not-allowed transition flex-1"
-                        >
-                            {loading ? 'Processing…' : 'Deactivate'}
+                            {isActivating ? 'Processing…' : 'Activate'}
                         </button>
                     </div>
                 </form>
 
                 {selectedStudent && (
-                    <div className="mt-4 bg-gray-50 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div
+                        className="mt-4 bg-gray-50 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div>
                             <p className="text-sm font-medium text-gray-900">{selectedStudent.full_name}</p>
                             <p className="text-xs text-gray-500">{selectedStudent.student_id} • {selectedStudent.class_name}</p>
                         </div>
                         <div className="flex items-center gap-2">
-                            <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${selectedStudent.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                            <span
+                                className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${selectedStudent.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
                                 {selectedStudent.is_active ? 'Active' : 'Inactive'}
                             </span>
-                            <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${selectedStudent.has_voted ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                            <span
+                                className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${selectedStudent.has_voted ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
                                 {selectedStudent.has_voted ? 'Voted' : 'Not voted'}
                             </span>
                         </div>

@@ -1,6 +1,12 @@
-import {type FormEvent, useState, useEffect} from 'react';
+import {type FormEvent, useEffect, useState, useMemo, useCallback} from 'react';
 import {useElections} from '../../queries/useElections';
-import {useStudents, useCreateStudent, useUpdateStudent, useDeleteStudent, useBulkUploadStudents} from '../../queries/useStudents';
+import {
+    useBulkUploadStudents,
+    useCreateStudent,
+    useDeleteStudent,
+    useStudents,
+    useUpdateStudent
+} from '../../queries/useStudents';
 import {showError} from '../../utils/toast';
 
 interface Student {
@@ -110,11 +116,15 @@ export default function StudentsPage() {
     const [editingStudent, setEditingStudent] = useState<Student | null>(null);
     const [editFullName, setEditFullName] = useState('');
     const [editClassName, setEditClassName] = useState('');
+    const [isModalOpening, setIsModalOpening] = useState(false);
 
     const [file, setFile] = useState<File | null>(null);
 
-    // Search state
+    // Search and filter state
     const [searchTerm, setSearchTerm] = useState('');
+    const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
+    const [votedFilter, setVotedFilter] = useState<'all' | 'voted' | 'not-voted'>('all');
+    const [classFilter, setClassFilter] = useState<string>('');
 
     // Set initial election
     useEffect(() => {
@@ -168,11 +178,18 @@ export default function StudentsPage() {
         setFile(null);
     };
 
-    const openEditModal = (student: Student) => {
-        setEditingStudent(student);
-        setEditFullName(student.full_name);
-        setEditClassName(student.class_name);
-    };
+    const openEditModal = useCallback((student: Student) => {
+        // Set loading state immediately for instant feedback
+        setIsModalOpening(true);
+        
+        // Use requestAnimationFrame for smooth state updates
+        requestAnimationFrame(() => {
+            setEditingStudent(student);
+            setEditFullName(student.full_name);
+            setEditClassName(student.class_name);
+            setIsModalOpening(false);
+        });
+    }, []);
 
     const handleEditStudent = async (e: FormEvent) => {
         e.preventDefault();
@@ -199,11 +216,107 @@ export default function StudentsPage() {
 
     const selectedElection = elections.find(e => e.id === selectedElectionId) || null;
 
-    // Filter students by search term
-    const filteredStudents = students.filter(s =>
-        s.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        s.student_id.toLowerCase().includes(searchTerm.toLowerCase())
+    // Get unique classes for filter dropdown - memoized for performance
+    const uniqueClasses = useMemo(() => 
+        Array.from(new Set(students.map(s => s.class_name))).sort(),
+        [students]
     );
+
+    // Filter students by search term and filters - memoized for instant updates
+    const filteredStudents = useMemo(() => {
+        return students.filter(s => {
+            const matchesSearch = !searchTerm || (
+                s.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                s.student_id.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+            
+            const matchesActive = activeFilter === 'all' || 
+                                  (activeFilter === 'active' && s.is_active) ||
+                                  (activeFilter === 'inactive' && !s.is_active);
+            
+            const matchesVoted = votedFilter === 'all' ||
+                                 (votedFilter === 'voted' && s.has_voted) ||
+                                 (votedFilter === 'not-voted' && !s.has_voted);
+            
+            const matchesClass = !classFilter || s.class_name === classFilter;
+            
+            return matchesSearch && matchesActive && matchesVoted && matchesClass;
+        });
+    }, [students, searchTerm, activeFilter, votedFilter, classFilter]);
+
+    // Memoized edit modal to prevent unnecessary re-renders
+    const EditModal = useMemo(() => {
+        if (!editingStudent) return null;
+
+        return (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-fade-in">
+                <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-6 animate-scale-up">
+                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Edit Student</h2>
+                    <form onSubmit={handleEditStudent} className="space-y-4">
+                        <div>
+                            <label className="text-xs font-medium text-gray-600 mb-1 block">
+                                Student ID
+                            </label>
+                            <input
+                                type="text"
+                                value={editingStudent.student_id}
+                                disabled
+                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-500"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-xs font-medium text-gray-600 mb-1 block"
+                                   htmlFor="edit_full_name">
+                                Full Name
+                            </label>
+                            <input
+                                id="edit_full_name"
+                                type="text"
+                                value={editFullName}
+                                onChange={(e) => setEditFullName(e.target.value)}
+                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="text-xs font-medium text-gray-600 mb-1 block"
+                                   htmlFor="edit_class_name">
+                                Class
+                            </label>
+                            <select
+                                id="edit_class_name"
+                                value={editClassName}
+                                onChange={(e) => setEditClassName(e.target.value)}
+                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                required
+                            >
+                                <option value="">Select class...</option>
+                                {CLASS_OPTIONS.map(opt => (
+                                    <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="flex justify-end gap-3 pt-2">
+                            <button
+                                type="button"
+                                onClick={() => setEditingStudent(null)}
+                                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-60 transition"
+                            >
+                                {loading ? 'Saving…' : 'Save Changes'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        );
+    }, [editingStudent, editFullName, editClassName, loading, handleEditStudent]);
 
     return (
         <div className="space-y-6 relative">
@@ -260,32 +373,24 @@ export default function StudentsPage() {
             </section>
 
 
-
             {/* Page Header */}
-            <div className="flex justify-between">
-                <div className="flex flex-col md:flex-row md:items-center gap-4">
-                    <div className="flex-1">
-                        {/*<label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="election-select">*/}
-                        {/*    Select Election*/}
-                        {/*</label>*/}
-                        <select
-                            id="election-select"
-                            value={selectedElectionId ?? ''}
-                            onChange={(e) => setSelectedElectionId(e.target.value ? Number(e.target.value) : null)}
-                            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full md:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                            {elections.length === 0 && <option value="">No elections available</option>}
-                            {elections.map(e => (
-                                <option key={e.id} value={e.id}>{e.name} ({e.year})</option>
-                            ))}
-                        </select>
-                    </div>
-                </div>
+            <div className="flex justify-between gap-10">
+                <select
+                    id="election-select"
+                    value={selectedElectionId ?? ''}
+                    onChange={(e) => setSelectedElectionId(e.target.value ? Number(e.target.value) : null)}
+                    className="border border-gray-300 rounded-lg text-[13px] md:text-sm px-1 py-2  w-full md:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                    {elections.length === 0 && <option value="">No elections available</option>}
+                    {elections.map(e => (
+                        <option key={e.id} value={e.id} className="text-[6px] md:text-sm">{e.name} ({e.year})</option>
+                    ))}
+                </select>
                 <button
                     onClick={() => setShowAddForm(!showAddForm)}
                     className="flex w-full sm:w-auto justify-center items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition"
                 >
-                    <PlusIcon />
+                    <PlusIcon/>
                     Add Student
                 </button>
             </div>
@@ -293,12 +398,11 @@ export default function StudentsPage() {
             {/* Election Selector */}
 
 
-
             {/* Add Student Form - Collapsible */}
             {showAddForm && (
-                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <div className="bg-white rounded-xl flex flex-col  border border-gray-200 p-5">
                     <h2 className="text-base font-medium text-gray-900 mb-4">Add New Student</h2>
-                    <form onSubmit={handleCreateStudent} className="flex flex-col md:flex-row gap-4 items-end">
+                    <form onSubmit={handleCreateStudent} className="flex flex-col md:flex-row gap-4 ">
                         <div className="flex-1">
                             <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="student_id">
                                 Student ID
@@ -347,7 +451,7 @@ export default function StudentsPage() {
                         <button
                             type="submit"
                             disabled={loading || !selectedElectionId}
-                            className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg disabled:opacity-60 transition"
+                            className="px-6 py-2 max-h-10 md:mt-5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg disabled:opacity-60 transition"
                         >
                             {loading ? 'Saving…' : 'Submit'}
                         </button>
@@ -364,12 +468,14 @@ export default function StudentsPage() {
             <section className=" flex justify-between bg-white rounded-xl border border-gray-200 py-2 px-5">
                 <div className="flex items-center gap-3">
                     <div className="h-10 w-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
-                        <UploadIcon />
+                        <UploadIcon/>
                     </div>
                     <div>
                         <h2 className="text-base font-medium text-gray-900">Bulk Upload from Excel</h2>
                         <p className="text-xs text-gray-500">
-                            Required columns: <code className="bg-gray-100 px-1 rounded">student_id</code>, <code className="bg-gray-100 px-1 rounded">full_name</code>, <code className="bg-gray-100 px-1 rounded">class_name</code>
+                            Required columns: <code className="bg-gray-100 px-1 rounded">student_id</code>, <code
+                            className="bg-gray-100 px-1 rounded">full_name</code>, <code
+                            className="bg-gray-100 px-1 rounded">class_name</code>
                         </p>
                     </div>
                 </div>
@@ -397,160 +503,156 @@ export default function StudentsPage() {
 
             {/* Students Table */}
             <section className="bg-white rounded-xl border border-gray-200  overflow-hidden">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-5 border-b border-gray-100">
-                    <div className="flex items-center gap-4">
+                <div className="p-5 border-b border-gray-100">
+                    {/* Election Title */}
+                    <div className="flex items-center gap-4 mb-4">
                         <h2 className="text-base font-medium text-gray-900">
                             Students {selectedElection ? `for ${selectedElection.name} (${selectedElection.year})` : ''}
                         </h2>
                         {loading && <span className="text-xs text-gray-500">Loading…</span>}
                     </div>
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
-                        <input
-                            type="text"
-                            placeholder="Search by name or ID..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full sm:w-64 border border-blue-200 border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        {searchTerm && (
-                            <span className="text-xs text-gray-500">
-                                {filteredStudents.length} of {students.length}
-                            </span>
+                    
+                    {/* Filters Container */}
+                    <div className="flex flex-col lg:flex-row gap-4">
+                        {/* Search Box */}
+                        <div className="flex-1 lg:flex-initial lg:w-48">
+                            <input
+                                type="text"
+                                placeholder="Search by name or ID..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full border border-blue-200 border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                        </div>
+                        
+                        {/* Active Filter */}
+                        <div className="flex-1 lg:flex-initial lg:w-32">
+                            <select
+                                value={activeFilter}
+                                onChange={(e) => setActiveFilter(e.target.value as any)}
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                                <option value="all">All Active</option>
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                            </select>
+                        </div>
+                        
+                        {/* Voted Filter */}
+                        <div className="flex-1 lg:flex-initial lg:w-32">
+                            <select
+                                value={votedFilter}
+                                onChange={(e) => setVotedFilter(e.target.value as any)}
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                                <option value="all">All Voted</option>
+                                <option value="voted">Voted</option>
+                                <option value="not-voted">Not Voted</option>
+                            </select>
+                        </div>
+                        
+                        {/* Class Filter */}
+                        <div className="flex-1 lg:flex-initial lg:w-40">
+                            <select
+                                value={classFilter}
+                                onChange={(e) => setClassFilter(e.target.value)}
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                                <option value="">All Classes</option>
+                                {uniqueClasses.map(className => (
+                                    <option key={className} value={className}>{className}</option>
+                                ))}
+                            </select>
+                        </div>
+                        
+                        {/* Results Count */}
+                        {(searchTerm || activeFilter !== 'all' || votedFilter !== 'all' || classFilter) && (
+                            <div className="flex items-center">
+                                <span className="text-xs text-gray-500">
+                                    {filteredStudents.length} of {students.length}
+                                </span>
+                            </div>
                         )}
                     </div>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="min-w-full text-sm">
                         <thead>
-                            <tr className="bg-blue-100 border-b border-gray-100">
-                                <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Student ID</th>
-                                <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                                <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Class</th>
-                                <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Active</th>
-                                <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Has Voted</th>
-                                <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                            </tr>
+                        <tr className="bg-blue-100 border-b border-gray-100">
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Student
+                                ID
+                            </th>
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Class</th>
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Active</th>
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Has
+                                Voted
+                            </th>
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
                         </thead>
                         <tbody className="divide-y  divide-gray-100">
-                            {filteredStudents.map((s) => (
-                                <tr key={s.id} className="hover:bg-gray-50 transition odd:bg-white even:bg-blue-50 ">
-                                    <td className="px-5 py-2 font-medium text-gray-900">{s.student_id}</td>
-                                    <td className="px-5 py-2 text-gray-700">{s.full_name}</td>
-                                    <td className="px-5 py-2 text-gray-700">{s.class_name}</td>
-                                    <td className="px-5 py-2 ">
-                                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${s.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                        {filteredStudents.map((s) => (
+                            <tr key={s.id} className="hover:bg-gray-50 transition odd:bg-white even:bg-blue-50 ">
+                                <td className="px-5 py-2 font-medium text-gray-900">{s.student_id}</td>
+                                <td className="px-5 py-2 text-gray-700">{s.full_name}</td>
+                                <td className="px-5 py-2 text-gray-700">{s.class_name}</td>
+                                <td className="px-5 py-2 ">
+                                        <span
+                                            className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${s.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
                                             {s.is_active ? 'Yes' : 'No'}
                                         </span>
-                                    </td>
-                                    <td className="px-5 py-2">
-                                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${s.has_voted ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                                </td>
+                                <td className="px-5 py-2">
+                                        <span
+                                            className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${s.has_voted ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
                                             {s.has_voted ? 'Yes' : 'No'}
                                         </span>
-                                    </td>
-                                    <td className="px-5 py-2">
-                                        <div className="flex items-center gap-2">
-                                            <button
-                                                onClick={() => openEditModal(s)}
-                                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                                                title="Edit student"
-                                            >
-                                                <EditIcon />
-                                            </button>
-                                            <button
-                                                onClick={() => handleDeleteStudent(s)}
-                                                disabled={s.has_voted}
-                                                className={`p-1.5 rounded-lg transition ${s.has_voted ? 'text-gray-300 cursor-not-allowed' : 'text-red-600 hover:bg-red-50'}`}
-                                                title={s.has_voted ? 'Cannot delete - student has voted' : 'Delete student'}
-                                            >
-                                                <TrashIcon />
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                            {!loading && filteredStudents.length === 0 && (
-                                <tr>
-                                    <td colSpan={6} className="px-5 py-8 text-center text-gray-400">
-                                        {searchTerm
-                                            ? 'No students match your search.'
-                                            : (selectedElection
-                                                ? 'No students added for this election yet.'
-                                                : 'Select an election to view its students.')}
-                                    </td>
-                                </tr>
-                            )}
+                                </td>
+                                <td className="px-5 py-2">
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => openEditModal(s)}
+                                            disabled={isModalOpening}
+                                            className={`p-1.5 rounded-lg transition ${
+                                                isModalOpening 
+                                                    ? 'text-gray-300 cursor-wait' 
+                                                    : 'text-blue-600 hover:bg-blue-50'
+                                            }`}
+                                            title="Edit student"
+                                        >
+                                            <EditIcon/>
+                                        </button>
+                                        <button
+                                            onClick={() => handleDeleteStudent(s)}
+                                            disabled={s.has_voted}
+                                            className={`p-1.5 rounded-lg transition ${s.has_voted ? 'text-gray-300 cursor-not-allowed' : 'text-red-600 hover:bg-red-50'}`}
+                                            title={s.has_voted ? 'Cannot delete - student has voted' : 'Delete student'}
+                                        >
+                                            <TrashIcon/>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                        {!loading && filteredStudents.length === 0 && (
+                            <tr>
+                                <td colSpan={6} className="px-5 py-8 text-center text-gray-400">
+                                    {searchTerm || activeFilter !== 'all' || votedFilter !== 'all' || classFilter
+                                        ? 'No students match your filters.'
+                                        : (selectedElection
+                                            ? 'No students added for this election yet.'
+                                            : 'Select an election to view its students.')}
+                                </td>
+                            </tr>
+                        )}
                         </tbody>
                     </table>
                 </div>
             </section>
 
             {/* Edit Modal */}
-            {editingStudent && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-6">
-                        <h2 className="text-lg font-semibold text-gray-900 mb-4">Edit Student</h2>
-                        <form onSubmit={handleEditStudent} className="space-y-4">
-                            <div>
-                                <label className="text-xs font-medium text-gray-600 mb-1 block">
-                                    Student ID
-                                </label>
-                                <input
-                                    type="text"
-                                    value={editingStudent.student_id}
-                                    disabled
-                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="edit_full_name">
-                                    Full Name
-                                </label>
-                                <input
-                                    id="edit_full_name"
-                                    type="text"
-                                    value={editFullName}
-                                    onChange={(e) => setEditFullName(e.target.value)}
-                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    required
-                                />
-                            </div>
-                            <div>
-                                <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="edit_class_name">
-                                    Class
-                                </label>
-                                <select
-                                    id="edit_class_name"
-                                    value={editClassName}
-                                    onChange={(e) => setEditClassName(e.target.value)}
-                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    required
-                                >
-                                    <option value="">Select class...</option>
-                                    {CLASS_OPTIONS.map(opt => (
-                                        <option key={opt} value={opt}>{opt}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="flex justify-end gap-3 pt-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setEditingStudent(null)}
-                                    className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={loading}
-                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-60 transition"
-                                >
-                                    {loading ? 'Saving…' : 'Save Changes'}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
+            {EditModal}
         </div>
     );
 }

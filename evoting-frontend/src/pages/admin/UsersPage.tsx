@@ -27,10 +27,23 @@ const PlusIcon = () => (
     </svg>
 );
 
+const EditIcon = () => (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+    </svg>
+);
+
+const TrashIcon = () => (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+    </svg>
+);
+
 export default function UsersPage() {
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(false);
     const [showForm, setShowForm] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
 
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -38,6 +51,11 @@ export default function UsersPage() {
 
 
     const [editingUser, setEditingUser] = useState<User | null>(null);
+
+    // Filter users by search term
+    const filteredUsers = users.filter(user =>
+        user.username.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
     const fetchUsers = async () => {
         setLoading(true);
@@ -231,69 +249,90 @@ export default function UsersPage() {
             )}
 
             {/* Users Table */}
-            <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <section className="bg-white rounded-xl border border-gray-200  overflow-hidden">
+                <div
+                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-5 border-b border-gray-100">
+                    <div className="flex items-center gap-4">
+                        <h2 className="text-base font-medium text-gray-900">
+                            Users
+                        </h2>
+                        {loading && <span className="text-xs text-gray-500">Loading…</span>}
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
+                        <input
+                            type="text"
+                            placeholder="Search by username..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full sm:w-64 border border-blue-200 border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        {searchTerm && (
+                            <span className="text-xs text-gray-500">
+                                {filteredUsers.length} of {users.length}
+                            </span>
+                        )}
+                    </div>
+                </div>
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                        <thead className="bg-gray-50 border-b border-gray-100">
-                        <tr>
-                            <th className="text-left px-5 py-3 font-medium text-gray-600">User</th>
-                            <th className="text-left px-5 py-3 font-medium text-gray-600">Role</th>
-                            <th className="text-left px-5 py-3 font-medium text-gray-600">Status</th>
-                            <th className="text-right px-5 py-3 font-medium text-gray-600">Actions</th>
+                    <table className="min-w-full text-sm">
+                        <thead>
+                        <tr className="bg-blue-100 border-b border-gray-100">
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Username
+                            </th>
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-50">
-                        {loading && users.length === 0 ? (
-                            <tr>
-                                <td colSpan={4} className="px-5 py-8 text-center text-gray-500">
-                                    Loading users…
+                        <tbody className="divide-y  divide-gray-100">
+                        {filteredUsers.map((user: User) => (
+                            <tr key={user.id} className="hover:bg-gray-50 transition odd:bg-white even:bg-blue-50 ">
+                                <td className="px-5 py-2">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+                                            <UserIcon/>
+                                        </div>
+                                        <span className="font-medium text-gray-900">{user.username}</span>
+                                    </div>
+                                </td>
+                                <td className="px-5 py-2">
+                                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getRoleBadgeClass(user.role)}`}>
+                                        {user.role}
+                                    </span>
+                                </td>
+                                <td className="px-5 py-2">
+                                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${user.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                                        {user.is_active ? 'Active' : 'Inactive'}
+                                    </span>
+                                </td>
+                                <td className="px-5 py-2">
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => handleEdit(user)}
+                                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                            title="Edit user"
+                                        >
+                                            <EditIcon/>
+                                        </button>
+                                        <button
+                                            onClick={() => handleDelete(user)}
+                                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition"
+                                            title="Delete user"
+                                        >
+                                            <TrashIcon/>
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
-                        ) : users.length === 0 ? (
+                        ))}
+                        {!loading && filteredUsers.length === 0 && (
                             <tr>
-                                <td colSpan={4} className="px-5 py-8 text-center text-gray-500">
-                                    No users found. Click "Add User" to create one.
+                                <td colSpan={4} className="px-5 py-8 text-center text-gray-400">
+                                    {searchTerm
+                                        ? 'No users match your search.'
+                                        : 'No users found. Click "Add User" to create one.'}
                                 </td>
                             </tr>
-                        ) : (
-                            users.map((user) => (
-                                <tr key={user.id} className="hover:bg-gray-50 transition">
-                                    <td className="px-5 py-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
-                                                <UserIcon/>
-                                            </div>
-                                            <span className="font-medium text-gray-900">{user.username}</span>
-                                        </div>
-                                    </td>
-                                    <td className="px-5 py-4">
-                                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getRoleBadgeClass(user.role)}`}>
-                                            {user.role}
-                                        </span>
-                                    </td>
-                                    <td className="px-5 py-4">
-                                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${user.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-                                            {user.is_active ? 'Active' : 'Inactive'}
-                                        </span>
-                                    </td>
-                                    <td className="px-5 py-4 text-right">
-                                        <div className="flex justify-end gap-2">
-                                            <button
-                                                onClick={() => handleEdit(user)}
-                                                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 transition"
-                                            >
-                                                Edit
-                                            </button>
-                                            <button
-                                                onClick={() => handleDelete(user)}
-                                                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 hover:bg-red-100 text-red-600 transition"
-                                            >
-                                                Delete
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))
                         )}
                         </tbody>
                     </table>
