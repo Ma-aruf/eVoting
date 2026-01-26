@@ -28,10 +28,25 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class StudentSerializer(serializers.ModelSerializer):
+    election_id = serializers.IntegerField(write_only=True)
+
     class Meta:
         model = Student
-        fields = ["id", "student_id", "full_name", "class_name", "has_voted", "is_active", "election"]
-        read_only_fields = ["has_voted"]
+        fields = ["id", "student_id", "full_name", "class_name", "has_voted", "is_active", "election", "election_id"]
+        read_only_fields = ["has_voted", "election"]
+
+    def validate_election_id(self, value):
+        """Ensure election exists and is valid."""
+        if not Election.objects.filter(id=value).exists():
+            raise serializers.ValidationError("Invalid election ID.")
+        return value
+
+    def create(self, validated_data):
+        """Create student with the specified election."""
+        election_id = validated_data.pop('election_id')
+        election = Election.objects.get(id=election_id)
+        validated_data['election'] = election
+        return super().create(validated_data)
 
 
 class BulkStudentUploadSerializer(serializers.Serializer):

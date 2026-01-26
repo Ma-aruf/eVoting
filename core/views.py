@@ -75,6 +75,19 @@ class StudentViewSet(viewsets.ModelViewSet):
             return Student.objects.filter(election_id=election_id)
         return Student.objects.all()
 
+    def perform_create(self, serializer):
+        """Ensure election is set when creating a student."""
+        election_id = self.request.data.get('election_id')
+        if not election_id:
+            raise ParseError("election_id is required for student creation.")
+        
+        try:
+            election = Election.objects.get(pk=election_id)
+        except Election.DoesNotExist:
+            raise ParseError("Invalid election_id provided.")
+        
+        serializer.save(election=election)
+
     def destroy(self, request, *args, **kwargs):
         student = self.get_object()
         if student.has_voted:
@@ -168,7 +181,10 @@ class BulkStudentUploadView(APIView):
             )
 
         existing_ids = set(
-            Student.objects.filter(student_id__in=[s.student_id for s in rows_to_create])
+            Student.objects.filter(
+                student_id__in=[s.student_id for s in rows_to_create],
+                election_id=election_id  # Only check within this election
+            )
             .values_list("student_id", flat=True)
         )
 
@@ -180,15 +196,22 @@ class BulkStudentUploadView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        Student.objects.bulk_create(rows_to_create, ignore_conflicts=True)
-        return Response(
-            {
-                "detail": "Students imported.",
-                "created": len(rows_to_create),
-                "skipped_existing": len(existing_ids),
-            },
-            status=status.HTTP_201_CREATED,
-        )
+        try:
+            Student.objects.bulk_create(rows_to_create, ignore_conflicts=True)
+            return Response(
+                {
+                    "detail": "Students imported successfully.",
+                    "created": len(rows_to_create),
+                    "skipped_existing": len(existing_ids),
+                    "election": election.name,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+        except Exception as e:
+            return Response(
+                {"detail": f"Bulk import failed: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 class PositionViewSet(viewsets.ModelViewSet):
@@ -519,7 +542,7 @@ class MeView(APIView):
 class StudentActivationView(APIView):
     """
     Toggle `is_active` on a Student. Only activator or superuser may call.
-    Accepts JSON: { "student_id": "S12345", "is_active": true }
+    Accepts JSON: { "student_id": "S12345", "election_id": 1, "is_active": true }
     """
     permission_classes = [IsActivatorOrSuperUser]
 
@@ -527,9 +550,17 @@ class StudentActivationView(APIView):
         print("INSIDE ACTIVATION VIEW - POST CALLED")  # ← add this
         print(request.path, request.method)
         student_id = request.data.get("student_id")
+        election_id = request.data.get("election_id")
+        
         if not student_id:
             return Response(
                 {"detail": "student_id required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+            
+        if not election_id:
+            return Response(
+                {"detail": "election_id required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -541,19 +572,21 @@ class StudentActivationView(APIView):
             )
 
         try:
-            student = Student.objects.get(student_id=student_id)
-        except Student.DoesNotExist:
+            # Get the specific election
+            election = Election.objects.get(id=election_id)
+        except Election.DoesNotExist:
             return Response(
-                {"detail": "Student not found."},
+                {"detail": "Election not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Optional: ensure student belongs to the currently active election
-        active_election = Election.objects.filter(is_active=True).first()
-        if active_election and student.election != active_election:
+        try:
+            # Find student by both student_id and election_id
+            student = Student.objects.get(student_id=student_id, election_id=election_id)
+        except Student.DoesNotExist:
             return Response(
-                {"detail": "Student does not belong to the active election."},
-                status=status.HTTP_403_FORBIDDEN,
+                {"detail": "Student not found in this election."},
+                status=status.HTTP_404_NOT_FOUND,
             )
 
         # Check current status for better message

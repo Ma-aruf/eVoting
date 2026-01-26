@@ -1,8 +1,10 @@
 import {type FormEvent, useEffect, useState} from 'react';
+import {useQueryClient} from '@tanstack/react-query';
 import {useElections} from '../../queries/useElections';
 import {usePositions} from '../../queries/usePositions';
-import {useAllStudents} from '../../queries/useAllStudents';
+import {useStudents} from '../../queries/useStudents';
 import {useCandidates, useCreateCandidate, useUpdateCandidate, useDeleteCandidate} from '../../queries/useCandidates';
+import {queryKeys} from '../../queries/queryKeys';
 import type {Candidate} from '../../queries/useCandidates';
 import {showError} from '../../utils/toast';
 
@@ -31,10 +33,12 @@ export default function CandidatesPage() {
     const [selectedElectionId, setSelectedElectionId] = useState<number | null>(null);
     const [selectedPositionId, setSelectedPositionId] = useState<number | null>(null);
     
+    const queryClient = useQueryClient();
+    
     // Queries
     const {data: elections = [], isLoading: electionsLoading} = useElections();
     const {data: positions = [], isLoading: positionsLoading} = usePositions(selectedElectionId);
-    const {data: students = [], isLoading: studentsLoading} = useAllStudents();
+    const {data: students = [], isLoading: studentsLoading} = useStudents(selectedElectionId);
     const {data: candidates = [], isLoading: candidatesLoading} = useCandidates(selectedPositionId);
     
     // Mutations
@@ -114,18 +118,37 @@ export default function CandidatesPage() {
     };
 
 
-    // Auto-select first election and position when data loads
+    // Auto-select first election and position when data loads - prioritize active election
     useEffect(() => {
         if (elections.length > 0 && !selectedElectionId) {
-            setSelectedElectionId(elections[0].id);
+            // Find active election first
+            const activeElection = elections.find(e => e.is_active);
+            const targetElection = activeElection || elections[0];
+            setSelectedElectionId(targetElection.id);
         }
     }, [elections, selectedElectionId]);
     
     useEffect(() => {
-        if (positions.length > 0 && !selectedPositionId) {
-            setSelectedPositionId(positions[0].id);
+        // Reset position when election changes
+        if (positions.length > 0) {
+            // If we have positions, select the first one if none is selected
+            // or if the current selected position doesn't belong to this election
+            const currentPositionBelongsToElection = positions.some(p => p.id === selectedPositionId);
+            if (!selectedPositionId || !currentPositionBelongsToElection) {
+                setSelectedPositionId(positions[0].id);
+            }
+        } else {
+            // If no positions for this election, clear the selected position
+            // and explicitly clear all candidates cache
+            setSelectedPositionId(null);
+            
+            // Clear all candidates queries to ensure empty table
+            queryClient.invalidateQueries({ 
+                queryKey: queryKeys.candidates(null),
+                refetchType: 'inactive'
+            });
         }
-    }, [positions, selectedPositionId]);
+    }, [positions, selectedPositionId, queryClient]);
 
     const handleCreateCandidate = async (e: FormEvent) => {
         e.preventDefault();

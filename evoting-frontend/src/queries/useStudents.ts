@@ -47,18 +47,18 @@ export const useCreateStudent = () => {
             student_id: string;
             full_name: string;
             class_name: string;
-            election: number;
+            election_id: number;
         }) => {
             const res = await api.post('api/students/', data);
             return res.data;
         },
         onSuccess: (_, variables) => {
             showSuccess('Student added successfully.');
-            queryClient.invalidateQueries({queryKey: queryKeys.students(variables.election)});
+            queryClient.invalidateQueries({queryKey: queryKeys.students(variables.election_id)});
         },
         onError: (err: any) => {
             const detail = err.response?.data?.detail;
-            showError(detail || 'Failed to add student. Make sure the ID is unique.');
+            showError(detail || 'Failed to add student. Make sure the ID is unique within this election.');
         },
     });
 };

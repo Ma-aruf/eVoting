@@ -29,7 +29,7 @@ export const useCandidates = (positionId: number | null) => {
     },
     enabled: !!positionId,
     staleTime: 30 * 1000, // 30 seconds
-    placeholderData: (previousData) => previousData,
+    // Remove placeholderData to prevent stale data issues
   });
 };
 

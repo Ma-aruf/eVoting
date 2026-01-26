@@ -220,27 +220,27 @@ export default function VotingPage() {
     return (
         <div className="min-h-screen bg-gray-100 flex flex-col">
             {/* Header */}
-            <header className="bg-white shadow-sm flex-shrink-0">
-                <div className="px-4 sm:px-6 py-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <header className="bg-blue-900 shadow-sm flex-shrink-0">
+                <div className="px-4 sm:px-6 py-2">
+                    <div className="flex  flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div>
-                            <h1 className="text-xl font-bold text-gray-800">Student Voting Portal</h1>
-                            <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
+                            <h1 className=" text-xl md:text-3xl font-bold text-amber-400">Student Voting Portal</h1>
+                            <div className="flex flex-wrap items-center gap-3 text-md text-white/80 mt-2">
                                 <span>Welcome, <strong>{studentName}</strong></span>
                                 <span>•</span>
-                                <span>ID: {studentId}</span>
+                                <span className="text-white">ID: {studentId}</span>
                                 {activeElection && (
                                     <>
                                         <span>•</span>
                                         <span
-                                            className="text-blue-600 font-medium">{activeElection.name} ({activeElection.year})</span>
+                                            className="text-rose-300 font-medium">{activeElection.name} ({activeElection.year})</span>
                                     </>
                                 )}
                             </div>
                         </div>
                         <button
                             onClick={handleLogout}
-                            className="w-full sm:w-auto px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+                            className="w-20  sm:w-auto px-3 py-1 bg-red-400 text-sm rounded-lg hover:bg-red-500 transition-all"
                         >
                             Logout
                         </button>
@@ -248,7 +248,6 @@ export default function VotingPage() {
                 </div>
             </header>
 
-            {/* Progress Bar */}
 
             {/* Main Content - Centered Single Position */}
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col items-center">
@@ -259,14 +258,14 @@ export default function VotingPage() {
                     const isLastPosition = currentPositionIndex === positions.length - 1;
 
                     return (
-                        <div className="w-full max-w-5xl">
+                        <div className="w-full   max-w-6xl">
                             {/* Position Indicator */}
-                            <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
+                            <div className="flex flex-wrap items-center justify-center gap-2 mb-2">
                                 {positions.map((_, idx) => (
                                     <button
                                         key={idx}
                                         onClick={() => setCurrentPositionIndex(idx)}
-                                        className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full transition-all ${
+                                        className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full transition-all cursor-pointer ${
                                             idx === currentPositionIndex
                                                 ? 'bg-blue-600 scale-125'
                                                 : idx < currentPositionIndex
@@ -278,14 +277,13 @@ export default function VotingPage() {
                             </div>
 
                             {/* Position Card */}
-                            <div className="bg-white rounded-xl shadow-lg">
+                            <div className=" rounded border border-gray-200 flex flex-col max-w-[100%] max-h-[calc(100vh-50px)]">
                                 {/* Position Header */}
                                 <div
-                                    className="px-4 sm:px-6 py-4 border-b bg-gradient-to-r from-blue-600 to-blue-700 rounded-t-xl">
+                                    className="px-4 sm:px-6 py-2  bg-blue-300 rounded-t">
                                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                                        <div>
-                                            <p className="text-blue-200 text-sm">Position {currentPositionIndex + 1} of {positions.length}</p>
-                                            <h3 className="text-2xl sm:text-4xl font-bold text-white">{position.name}</h3>
+                                        <div className="flex justify-center">
+                                            <h3 className="text-2xl  font-bold text-black/70">{position.name}</h3>
                                         </div>
                                         <div className="flex items-center gap-2">
                                             {selectedVote?.candidate_id && (
@@ -305,26 +303,26 @@ export default function VotingPage() {
                                 </div>
 
                                 {/* Candidates - Centered with fit width */}
-                                <div className="p-4 sm:p-6">
+                                <div className="p-3 sm:p-1 flex-1 overflow-y-auto">
                                     {candidates.length > 0 ? (
-                                        <div className="flex justify-center">
-                                            <div className="inline-flex flex-wrap justify-center gap-4">
+                                        <div className="flex  justify-center">
+                                            <div className="inline-flex h-75  flex-wrap justify-center gap-4">
                                                 {candidates.map((candidate) => {
                                                     const isSelected = selectedVote?.candidate_id === candidate.id;
 
                                                     return (
                                                         <div
                                                             key={candidate.id}
-                                                            className={`flex flex-col items-center p-4 sm:p-5 rounded-xl border-2 transition-all w-[140px] sm:w-[160px] cursor-pointer ${
+                                                            className={`flex flex-col items-center p-4 sm:p-3 rounded-xl border-2 transition-all w-[155px] sm:w-[190px] h-[260px] sm:h-[290px] cursor-pointer ${
                                                                 isSelected
-                                                                    ? 'border-green-500 bg-green-50 ring-2 ring-green-200 shadow-lg'
-                                                                    : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50 hover:shadow-md'
+                                                                    ? 'border-green-500 bg-green-50 ring-1 ring-green-200 shadow-md'
+                                                                    : 'border-blue-200 hover:border-blue-300 hover:bg-blue-50 hover:shadow-md'
                                                             }`}
                                                             onClick={() => handleSelectCandidate(position.id, candidate)}
                                                         >
                                                             {/* Candidate Photo */}
                                                             <div
-                                                                className="w-24 h-24 rounded-full overflow-hidden bg-gray-100 mb-3 flex items-center justify-center border-2 border-white shadow">
+                                                                className="w-28 h-28 md:w-35 md:h-35 rounded-full overflow-hidden bg-gray-100 mb-3 flex items-center justify-center border-2 border-white shadow">
                                                                 {candidate.photo_url ? (
                                                                     <img
                                                                         src={candidate.photo_url}

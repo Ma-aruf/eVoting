@@ -29,15 +29,16 @@ class MultiVoteViewTests(TestCase):
         self.position2 = Position.objects.create(
             name="VP", election=self.election, display_order=2
         )
+        # Create students with election_id for composite constraint
         self.student = Student.objects.create(
-            student_id="S001", full_name="Alice", class_name="A1", is_active=True
+            student_id="S001", full_name="Alice", class_name="A1", is_active=True, election=self.election
         )
         self.candidate1 = Candidate.objects.create(
             student=self.student, position=self.position1
         )
         # Separate student for second candidate to avoid OneToOne conflict
         self.student_b = Student.objects.create(
-            student_id="S002", full_name="Bob", class_name="A1", is_active=True
+            student_id="S002", full_name="Bob", class_name="A1", is_active=True, election=self.election
         )
         self.candidate2 = Candidate.objects.create(
             student=self.student_b, position=self.position2
@@ -107,6 +108,14 @@ class BulkStudentUploadTests(TestCase):
             username="staff", password="pass", role="staff"
         )
         self.client.force_authenticate(user=self.user)
+        # Create an election for bulk upload tests
+        self.election = Election.objects.create(
+            name="Test Election",
+            year=2025,
+            start_time=timezone.now() - timedelta(hours=1),
+            end_time=timezone.now() + timedelta(hours=1),
+            is_active=False,  # Not active for bulk upload
+        )
 
     def _make_workbook(self, rows):
         wb = Workbook()
@@ -128,14 +137,19 @@ class BulkStudentUploadTests(TestCase):
         )
         resp = self.client.post(
             "/api/students/bulk-upload/",
-            {"file": buf},
+            {"file": buf, "election_id": self.election.id},
             format="multipart",
         )
         self.assertEqual(resp.status_code, 201, resp.content)
-        self.assertEqual(Student.objects.count(), 2)
+        self.assertEqual(Student.objects.filter(election=self.election).count(), 2)
 
     def test_bulk_upload_skips_existing(self):
-        Student.objects.create(student_id="S100", full_name="Existing", class_name="A1")
+        Student.objects.create(
+            student_id="S100", 
+            full_name="Existing", 
+            class_name="A1", 
+            election=self.election
+        )
         buf = self._make_workbook(
             [
                 ["S100", "Existing", "A1"],
@@ -144,8 +158,8 @@ class BulkStudentUploadTests(TestCase):
         )
         resp = self.client.post(
             "/api/students/bulk-upload/",
-            {"file": buf},
+            {"file": buf, "election_id": self.election.id},
             format="multipart",
         )
         self.assertEqual(resp.status_code, 201, resp.content)
-        self.assertEqual(Student.objects.count(), 2)  # one pre-existing + one new
+        self.assertEqual(Student.objects.filter(election=self.election).count(), 2)  # one pre-existing + one new

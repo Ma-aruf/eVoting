@@ -4,6 +4,9 @@ import {useStudents} from '../../queries/useStudents';
 import {useDashboardStats} from '../../queries/useDashboard';
 import {useActivateStudent} from '../../queries/useActivations';
 import {showError} from '../../utils/toast';
+import {queryKeys} from '../../queries/queryKeys';
+import {useQueryClient} from "@tanstack/react-query";
+
 
 export default function ActivationsPage() {
     const [selectedElectionId, setSelectedElectionId] = useState<number | null>(null);
@@ -24,16 +27,21 @@ export default function ActivationsPage() {
     // Loading state
     const loading = electionsLoading || studentsLoading || statsLoading || activateStudentMutation.isPending;
 
-    // Auto-select first election when data loads
+    // Auto-select first election when data loads - prioritize active election
     useEffect(() => {
         if (elections.length > 0 && !selectedElectionId) {
-            setSelectedElectionId(elections[0].id);
+            // Find active election first
+            const activeElection = elections.find(e => e.is_active);
+            const targetElection = activeElection || elections[0];
+            setSelectedElectionId(targetElection.id);
         }
     }, [elections, selectedElectionId]);
 
     const [studentQuery, setStudentQuery] = useState('');
     const [studentDropdownOpen, setStudentDropdownOpen] = useState(false);
     const [studentId, setStudentId] = useState('');
+
+    const queryClient = useQueryClient();
 
     const handleActivate = async (e?: FormEvent | MouseEvent<HTMLButtonElement>) => {
         e?.preventDefault();
@@ -52,11 +60,21 @@ export default function ActivationsPage() {
 
         setIsActivating(true);
 
-        activateStudentMutation.mutate(id, {
+        activateStudentMutation.mutate({
+            student_id: id,
+            election_id: selectedElectionId!
+        }, {
             onSuccess: () => {
                 setStudentId('');
                 setStudentQuery('');
                 setIsStudentActive(false);
+
+                const activeElection = elections.find(e => e.is_active);
+                queryClient.invalidateQueries({
+                    queryKey: queryKeys.dashboard(activeElection.id),
+                });
+
+
             },
             onError: (err: any) => {
                 showError(err.response?.data?.detail || 'Activation failed. Please try again.');
@@ -156,7 +174,8 @@ export default function ActivationsPage() {
                 <div className="flex flex-col md:flex-row md:items-end gap-4">
                     <div className="flex-1">
                         <h2 className="text-base font-medium text-gray-900">Activate Student</h2>
-                        <p className="text-xs text-gray-500 mt-1">Type student name or ID, select from list, then activate.</p>
+                        <p className="text-xs text-gray-500 mt-1">Type student name or ID, select from list, then
+                            activate.</p>
                     </div>
                 </div>
 

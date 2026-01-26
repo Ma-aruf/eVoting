@@ -243,25 +243,41 @@ export default function ResultsPage() {
                                 <div className="p-5">
                                     <div className="flex justify-center">
                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6  w-full">
-                                            {currentPosition.candidates.map((candidate, index) => {
+                                            {currentPosition.candidates.map((candidate) => {
                                                 const barWidth = candidate.percentage; // Use the actual percentage from data
-                                                const isWinner = index === 0 && candidate.vote_count > 0;
+                                                
+                                                // Find highest percentage and check for ties
+                                                const percentages = currentPosition.candidates.map(c => c.percentage);
+                                                const highestPercentage = Math.max(...percentages);
+                                                const candidatesWithHighest = currentPosition.candidates.filter(c => c.percentage === highestPercentage);
+                                                const isRunOff = candidatesWithHighest.length > 1 && candidate.percentage === highestPercentage && highestPercentage > 0;
+                                                const isWinner = candidatesWithHighest.length === 1 && candidate.percentage === highestPercentage && candidate.vote_count > 0;
 
                                                 return (
                                                     <div
                                                         key={candidate.id}
                                                         className={`flex flex-col items-center p-2 rounded-lg transition-all ${
                                                             isWinner
+                                                                ? 'bg-gradient-to-br from-yellow-100 to-amber-200 ring-2 ring-yellow-200 shadow-lg'
+                                                                : isRunOff
                                                                 ? 'bg-gradient-to-br from-emerald-50 to-green-100 ring-2 ring-green-400 shadow-lg'
                                                                 : 'bg-gray-50 border border-blue-200'
                                                         }`}
                                                     >
-                                                        {/* Winner Badge */}
+                                                        {/* Winner/Run-off Badge */}
                                                         {isWinner && (
                                                             <div className="mb-2">
                                                             <span
-                                                                className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-600 text-white">
+                                                                className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-emerald-300 text-black">
                                                                 🏆 Winner
+                                                            </span>
+                                                            </div>
+                                                        )}
+                                                        {isRunOff && (
+                                                            <div className="mb-2">
+                                                            <span
+                                                                className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-600 text-white">
+                                                                🔄 Run Off
                                                             </span>
                                                             </div>
                                                         )}
@@ -269,7 +285,7 @@ export default function ResultsPage() {
                                                         {/* Candidate Photo */}
                                                         <div
                                                             className={`w-28 h-28 rounded-full overflow-hidden mb-4 flex items-center justify-center shadow-lg ${
-                                                                isWinner ? 'ring-4 ring-green-400' : 'ring-4 ring-blue-200'
+                                                                isWinner ? 'ring-4 ring-amber-300' : isRunOff ? 'ring-4 ring-green-400' : 'ring-4 ring-blue-200'
                                                             }`}>
                                                             {candidate.photo_url ? (
                                                                 <img
@@ -297,7 +313,9 @@ export default function ResultsPage() {
                                                             <div className="flex justify-between items-center">
                                                                 <span className="text-sm text-gray-600">Votes</span>
                                                                 <span
-                                                                    className={`text-2xl font-bold ${isWinner ? 'text-green-600' : 'text-blue-600'}`}>
+                                                                    className={`text-2xl font-bold ${
+                                                                        isWinner ? 'text-amber-600' : isRunOff ? 'text-green-600' : 'text-blue-600'
+                                                                    }`}>
                                                                 {candidate.vote_count.toLocaleString()}
                                                             </span>
                                                             </div>
@@ -306,16 +324,20 @@ export default function ResultsPage() {
                                                                 <span
                                                                     className="text-sm text-gray-600">Percentage</span>
                                                                 <span
-                                                                    className={`text-lg font-semibold ${isWinner ? 'text-green-600' : 'text-blue-600'}`}>
+                                                                    className={`text-lg font-semibold ${
+                                                                        isWinner ? 'text-amber-600' : isRunOff ? 'text-green-600' : 'text-blue-600'
+                                                                    }`}>
                                                                 {candidate.percentage.toFixed(1)}%
                                                             </span>
                                                             </div>
 
                                                             {/* Progress Bar */}
                                                             <div className="pt-2">
-                                                                <div className="w-full bg-gray-200 rounded-full h-3">
+                                                                <div className={`w-full ${isWinner ? 'bg-emerald-300' : 'bg-gray-200'}  rounded-full h-3`}>
                                                                     <div
-                                                                        className={`h-3 rounded-full transition-all ${isWinner ? 'bg-green-500' : 'bg-blue-500'}`}
+                                                                        className={`h-3 rounded-full transition-all ${
+                                                                            isWinner ? 'bg-amber-500' : isRunOff ? 'bg-green-500' : 'bg-blue-500'
+                                                                        }`}
                                                                         style={{width: `${barWidth}%`}}
                                                                     ></div>
                                                                 </div>

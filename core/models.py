@@ -26,16 +26,20 @@ class Election(models.Model):
 
 
 class Student(models.Model):
-    student_id = models.CharField(max_length=30, unique=True)
+    student_id = models.CharField(max_length=30)
     full_name = models.CharField(max_length=100)
     class_name = models.CharField(max_length=50)
     has_voted = models.BooleanField(default=False)
     is_active = models.BooleanField(default=False)
-    election = models.ForeignKey(Election, on_delete=models.SET_NULL, null=True, blank=True)
+    election = models.ForeignKey(Election, on_delete=models.CASCADE)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['election', 'student_id'], name='unique_election_student')
+        ]
 
     def __str__(self):
-        return f"{self.full_name} - {self.student_id}"
+        return f"{self.full_name} - {self.student_id} ({self.election.name})"
 
 
 class Position(models.Model):

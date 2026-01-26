@@ -1,0 +1,140 @@
+#!/usr/bin/env python
+import os
+import django
+import requests
+import json
+
+# Set up Django
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'evoting.settings')
+django.setup()
+
+from core.models import Election, Student
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+def test_activation_with_auth():
+    print("🧪 Testing Activation Endpoint with Authentication")
+    print("=" * 55)
+    
+    # Get or create a test user
+    try:
+        user = User.objects.get(username='testadmin')
+        print(f'✅ Found test user: {user.username}')
+    except User.DoesNotExist:
+        print('📝 Creating test user...')
+        user = User.objects.create_user(
+            username='testadmin',
+            password='testpass123',
+            role='superuser'
+        )
+        print(f'✅ Created test user: {user.username}')
+    
+    # Get elections
+    elections = list(Election.objects.all().values('id', 'name'))
+    if len(elections) == 0:
+        print('❌ No elections found')
+        return
+    
+    election_id = elections[0]['id']
+    election_name = elections[0]['name']
+    
+    print(f'\n📝 Using election: {election_name} (ID: {election_id})')
+    
+    # Create test student
+    try:
+        student = Student.objects.create(
+            student_id='TEST_AUTH_001',
+            full_name='Test Auth Student',
+            class_name='Test Class',
+            election_id=election_id,
+            is_active=False
+        )
+        print(f'✅ Created test student: {student}')
+    except Exception as e:
+        print(f'❌ Failed to create test student: {e}')
+        return
+    
+    # Test authentication
+    print(f'\n🔐 Testing authentication...')
+    
+    # Login to get token
+    login_data = {
+        'username': 'testadmin',
+        'password': 'testpass123'
+    }
+    
+    try:
+        login_response = requests.post(
+            'http://localhost:8000/api/auth/login/',
+            json=login_data,
+            headers={'Content-Type': 'application/json'},
+            timeout=10
+        )
+        
+        if login_response.status_code == 200:
+            tokens = login_response.json()
+            access_token = tokens.get('access')
+            print(f'✅ Login successful, got access token')
+        else:
+            print(f'❌ Login failed: {login_response.status_code} - {login_response.text}')
+            return
+            
+    except Exception as e:
+        print(f'❌ Login request failed: {e}')
+        return
+    
+    # Test activation with authentication
+    print(f'\n🔄 Testing activation with authentication...')
+    
+    activation_data = {
+        'student_id': 'TEST_AUTH_001',
+        'election_id': election_id,
+        'is_active': True
+    }
+    
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f'Bearer {access_token}'
+    }
+    
+    print(f'📤 Sending authenticated request...')
+    print(f'   Headers: {headers}')
+    print(f'   Data: {activation_data}')
+    
+    try:
+        response = requests.post(
+            'http://localhost:8000/api/students/activate/',
+            json=activation_data,
+            headers=headers,
+            timeout=10
+        )
+        
+        print(f'📥 Response Status: {response.status_code}')
+        print(f'📥 Response Body: {response.text}')
+        
+        if response.status_code == 200:
+            print('✅ Activation successful with authentication!')
+            
+            # Verify the student was activated
+            student.refresh_from_db()
+            print(f'📊 Student status: {"Active" if student.is_active else "Inactive"}')
+            
+        else:
+            print(f'❌ Activation failed with status {response.status_code}')
+            
+    except Exception as e:
+        print(f'❌ Activation request failed: {e}')
+    
+    # Clean up
+    print(f'\n🧹 Cleaning up...')
+    try:
+        student.delete()
+        print('✅ Test student deleted')
+    except:
+        print('⚠️  Could not delete test student')
+    
+    print(f'\n🎉 Authentication test completed!')
+
+if __name__ == '__main__':
+    test_activation_with_auth()

@@ -53,10 +53,13 @@ export default function PositionsPage() {
     const [editPositionName, setEditPositionName] = useState('');
     const [editDisplayOrder, setEditDisplayOrder] = useState<string>('');
 
-    // Set initial election
+    // Set initial election - prioritize active election
     useEffect(() => {
         if (elections.length > 0 && selectedElectionId === null) {
-            setSelectedElectionId(elections[0].id);
+            // Find active election first
+            const activeElection = elections.find(e => e.is_active);
+            const targetElection = activeElection || elections[0];
+            setSelectedElectionId(targetElection.id);
         }
     }, [elections, selectedElectionId]);
 

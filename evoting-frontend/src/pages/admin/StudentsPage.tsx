@@ -126,12 +126,15 @@ export default function StudentsPage() {
     const [votedFilter, setVotedFilter] = useState<'all' | 'voted' | 'not-voted'>('all');
     const [classFilter, setClassFilter] = useState<string>('');
 
-    // Set initial election
+    // Set initial election - prioritize active election
     useEffect(() => {
         if (elections.length > 0 && selectedElectionId === null) {
-            const firstElectionId = elections[0].id;
-            if (firstElectionId !== selectedElectionId) {
-                setSelectedElectionId(firstElectionId);
+            // Find active election first
+            const activeElection = elections.find(e => e.is_active);
+            const targetElection = activeElection || elections[0];
+            
+            if (targetElection.id !== selectedElectionId) {
+                setSelectedElectionId(targetElection.id);
             }
         }
     }, [elections, selectedElectionId]);
@@ -153,7 +156,7 @@ export default function StudentsPage() {
             student_id: studentId.trim(),
             full_name: fullName.trim(),
             class_name: className,
-            election: selectedElectionId,
+            election_id: selectedElectionId!,
         });
 
         setStudentId('');
