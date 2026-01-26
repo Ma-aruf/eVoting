@@ -15,7 +15,6 @@ export default function ActivationsPage() {
     const {data: elections = [], isLoading: electionsLoading} = useElections();
     const {data: students = [], isLoading: studentsLoading} = useStudents(selectedElectionId);
     const {data: stats, isLoading: statsLoading} = useDashboardStats(selectedElectionId);
-    const [IsStudentActive, setIsStudentActive] = useState(false)
     const [isActivating, setIsActivating] = useState(false)
 
     // Unified filtering - only show inactive students for activation
@@ -51,9 +50,8 @@ export default function ActivationsPage() {
         const activeStud = students.find(
             (student) => student.student_id === id
         );
-        setIsStudentActive(activeStud?.is_active ?? false)
 
-        if (IsStudentActive) {
+        if (activeStud?.is_active) {
             showError('Student is already active');
             return;
         }
@@ -67,11 +65,10 @@ export default function ActivationsPage() {
             onSuccess: () => {
                 setStudentId('');
                 setStudentQuery('');
-                setIsStudentActive(false);
 
                 const activeElection = elections.find(e => e.is_active);
                 queryClient.invalidateQueries({
-                    queryKey: queryKeys.dashboard(activeElection.id),
+                    queryKey: queryKeys.dashboard(activeElection?.id ?? null),
                 });
 
 
@@ -235,7 +232,7 @@ export default function ActivationsPage() {
                     <div className="w-full lg:w-auto">
                         <button
                             type="submit"
-                            disabled={loading || !studentId.trim() || IsStudentActive || isActivating}
+                            disabled={loading || !studentId.trim() || students.find(s => s.student_id === studentId)?.is_active || isActivating}
                             className="w-full px-4 py-2 rounded-lg text-sm font-medium bg-cyan-600 hover:bg-cyan-700 text-white disabled:opacity-60 disabled:cursor-not-allowed transition"
 
                         >

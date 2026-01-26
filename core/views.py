@@ -571,6 +571,8 @@ class StudentActivationView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+
+
         try:
             # Get the specific election
             election = Election.objects.get(id=election_id)
@@ -587,6 +589,13 @@ class StudentActivationView(APIView):
             return Response(
                 {"detail": "Student not found in this election."},
                 status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Check if student has already voted (cannot be activated if voted)
+        if student.has_voted:
+            return Response(
+                {"detail": "Student has already voted and cannot be re-activated."},
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         # Check current status for better message
