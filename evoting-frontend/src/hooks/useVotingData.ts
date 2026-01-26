@@ -79,8 +79,6 @@ const fetchVotingData = async (): Promise<VotingData> => {
             }
 
             if (Array.isArray(candidates)) {
-                // Shuffle candidates for random order (only on first load)
-                candidates = [...candidates].sort(() => Math.random() - 0.5);
                 candidatesMap[position.id] = candidates;
             }
         } catch (err) {
