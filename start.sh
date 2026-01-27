@@ -28,7 +28,6 @@ python manage.py check --database default
 if [ $? -eq 0 ]; then
     echo "Database connection successful!"
 
-    # Run migrations
     echo "Running migrations..."
     python manage.py migrate --noinput
 
