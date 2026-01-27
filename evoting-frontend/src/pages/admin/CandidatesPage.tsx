@@ -7,6 +7,8 @@ import {useCandidates, useCreateCandidate, useUpdateCandidate, useDeleteCandidat
 import {queryKeys} from '../../queries/queryKeys';
 import type {Candidate} from '../../queries/useCandidates';
 import {showError} from '../../utils/toast';
+import ConfirmModal from '../../components/ConfirmModal';
+import {useConfirmModal} from '../../hooks/useConfirmModal';
 
 
 const UsersIcon = () => (
@@ -65,6 +67,9 @@ export default function CandidatesPage() {
     const [editStudentId, setEditStudentId] = useState<number | null>(null);
     const [editStudentQuery, setEditStudentQuery] = useState('');
     const [editStudentDropdownOpen, setEditStudentDropdownOpen] = useState(false);
+    
+    // Confirm Modal
+    const confirmModal = useConfirmModal();
 
 
     const handleEditCandidate = (candidate: any) => {
@@ -112,9 +117,17 @@ export default function CandidatesPage() {
 
 
     const handleDeleteCandidate = async (candidate: any) => {
-        if (!confirm(`Delete candidate "${candidate.student_name}"?`)) return;
-
-        deleteCandidateMutation.mutate(candidate);
+        const confirmed = await confirmModal.confirm({
+            title: 'Delete Candidate',
+            message: `Are you sure you want to delete "${candidate.student_name}"?`,
+            confirmText: 'Delete',
+            cancelText: 'Cancel',
+            type: 'danger'
+        });
+        
+        if (confirmed) {
+            deleteCandidateMutation.mutate(candidate);
+        }
     };
 
 
@@ -651,6 +664,18 @@ export default function CandidatesPage() {
                     </table>
                 </div>
             </section>
+            
+            {/* Confirm Modal */}
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                onClose={confirmModal.handleClose}
+                onConfirm={confirmModal.handleConfirm}
+                title={confirmModal.options.title}
+                message={confirmModal.options.message}
+                confirmText={confirmModal.options.confirmText}
+                cancelText={confirmModal.options.cancelText}
+                type={confirmModal.options.type}
+            />
         </div>
     );
 }

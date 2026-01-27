@@ -18,7 +18,11 @@ export default function ActivationsPage() {
     const [isActivating, setIsActivating] = useState(false)
 
     // Unified filtering - only show inactive students for activation
-    const inactiveStudents = students.filter(student => !student.is_active)
+    const inactiveStudents = students.filter(student => !student.is_active && student.has_voted === false)
+
+    // Total inactive (not voted and voted) students
+    const totalInactiveStudents = inactiveStudents.length
+
 
     // Mutations
     const activateStudentMutation = useActivateStudent();
@@ -125,10 +129,10 @@ export default function ActivationsPage() {
                                     </svg>
                                 </div>
                                 <div className="flex items-center gap-3 mb-3">
-                                    <p className="text-sm text-white/80">Total inactive</p>
+                                    <p className="text-sm text-white/80">Inactive & Not Voted</p>
                                 </div>
-                                <h3 className="font-semibold text-lg">Inactive Students</h3>
-                                <p className="text-3xl font-bold mt-2">{stats?.pending_activations || 0}</p>
+                                <h3 className="font-semibold text-lg">Available for Activation</h3>
+                                <p className="text-3xl font-bold mt-2">{totalInactiveStudents || 0}</p>
                             </div>
 
                             {/* Total Students Card */}
@@ -270,7 +274,8 @@ export default function ActivationsPage() {
             ) : (
                 <section className="bg-red-100 border-yellow-200 rounded-lg p-6">
                     <div className="flex items-center gap-3">
-                        <svg className="text-red-500" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        <svg className="text-red-500" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                             viewBox="0 0 24 24" fill="none"
                              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path
                                 d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
