@@ -2,6 +2,8 @@ import {useEffect, useState} from 'react';
 import {useNavigate} from 'react-router-dom';
 import api from '../apiConfig';
 import {useVotingData, type Candidate} from '../hooks/useVotingData';
+import ConfirmModal from '../components/ConfirmModal';
+import {useConfirmModal} from '../hooks/useConfirmModal';
 
 interface SelectedVote {
     position_id: number;
@@ -18,6 +20,9 @@ export default function VotingPage() {
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
     const [currentPositionIndex, setCurrentPositionIndex] = useState(0);
+    
+    // Confirm Modal
+    const confirmModal = useConfirmModal();
 
     // Get student info from session
     const studentId = sessionStorage.getItem('student_id');
@@ -151,9 +156,16 @@ export default function VotingPage() {
         }
     };
 
-    const handleLogout = () => {
-        const confirmLogout = window.confirm('Are you sure you want to logout? Your votes will not be saved.');
-        if (confirmLogout) {
+    const handleLogout = async () => {
+        const confirmed = await confirmModal.confirm({
+            title: 'Logout',
+            message: 'Are you sure you want to logout? Your votes will not be saved.',
+            confirmText: 'Logout',
+            cancelText: 'Cancel',
+            type: 'warning'
+        });
+        
+        if (confirmed) {
             sessionStorage.clear();
             navigate('/');
         }
@@ -434,6 +446,18 @@ export default function VotingPage() {
                     );
                 })()}
             </div>
+            
+            {/* Confirm Modal */}
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                onClose={confirmModal.handleClose}
+                onConfirm={confirmModal.handleConfirm}
+                title={confirmModal.options.title}
+                message={confirmModal.options.message}
+                confirmText={confirmModal.options.confirmText}
+                cancelText={confirmModal.options.cancelText}
+                type={confirmModal.options.type}
+            />
         </div>
     );
 }

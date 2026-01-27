@@ -8,6 +8,8 @@ import {
     useUpdateStudent
 } from '../../queries/useStudents';
 import {showError} from '../../utils/toast';
+import EditStudentModal from '../../components/EditStudentModal';
+import StudentRow from '../../components/StudentRow';
 
 interface Student {
     id: number;
@@ -25,20 +27,6 @@ interface Student {
 
 const CLASS_OPTIONS = ['Form 1', 'Form 2', 'Form 3'];
 
-// const UsersIcon = () => (
-//     <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-//         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-//               d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
-//     </svg>
-// );
-//
-// const CheckCircleIcon = () => (
-//     <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-//         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-//               d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-//     </svg>
-// );
-
 const UploadIcon = () => (
     <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
@@ -49,20 +37,6 @@ const UploadIcon = () => (
 const PlusIcon = () => (
     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
-    </svg>
-);
-
-const EditIcon = () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-    </svg>
-);
-
-const TrashIcon = () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
     </svg>
 );
 
@@ -114,9 +88,6 @@ export default function StudentsPage() {
 
     // Edit modal state
     const [editingStudent, setEditingStudent] = useState<Student | null>(null);
-    const [editFullName, setEditFullName] = useState('');
-    const [editClassName, setEditClassName] = useState('');
-    const [isModalOpening, setIsModalOpening] = useState(false);
 
     const [file, setFile] = useState<File | null>(null);
 
@@ -182,32 +153,24 @@ export default function StudentsPage() {
     };
 
     const openEditModal = useCallback((student: Student) => {
-        // Set loading state immediately for instant feedback
-        setIsModalOpening(true);
-        
-        // Use requestAnimationFrame for smooth state updates
-        requestAnimationFrame(() => {
-            setEditingStudent(student);
-            setEditFullName(student.full_name);
-            setEditClassName(student.class_name);
-            setIsModalOpening(false);
-        });
+        setEditingStudent(student);
     }, []);
 
-    const handleEditStudent = async (e: FormEvent) => {
-        e.preventDefault();
-        if (!editingStudent) return;
+    const closeEditModal = useCallback(() => {
+        setEditingStudent(null);
+    }, []);
 
+    const handleSaveEdit = useCallback((student: Student, fullName: string, className: string) => {
         updateStudent.mutate({
-            id: editingStudent.id,
-            full_name: editFullName.trim(),
-            class_name: editClassName,
+            id: student.id,
+            full_name: fullName,
+            class_name: className,
         });
 
         setEditingStudent(null);
-    };
+    }, []);
 
-    const handleDeleteStudent = async (student: Student) => {
+    const handleDeleteStudent = useCallback((student: Student) => {
         if (student.has_voted) {
             showError('Cannot delete a student who has already voted.');
             return;
@@ -215,7 +178,7 @@ export default function StudentsPage() {
         if (!confirm(`Are you sure you want to delete ${student.full_name}?`)) return;
 
         deleteStudent.mutate(student);
-    };
+    }, []);
 
     const selectedElection = elections.find(e => e.id === selectedElectionId) || null;
 
@@ -246,80 +209,6 @@ export default function StudentsPage() {
             return matchesSearch && matchesActive && matchesVoted && matchesClass;
         });
     }, [students, searchTerm, activeFilter, votedFilter, classFilter]);
-
-    // Memoized edit modal to prevent unnecessary re-renders
-    const EditModal = useMemo(() => {
-        if (!editingStudent) return null;
-
-        return (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-fade-in">
-                <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-6 animate-scale-up">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Edit Student</h2>
-                    <form onSubmit={handleEditStudent} className="space-y-4">
-                        <div>
-                            <label className="text-xs font-medium text-gray-600 mb-1 block">
-                                Student ID
-                            </label>
-                            <input
-                                type="text"
-                                value={editingStudent.student_id}
-                                disabled
-                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-500"
-                            />
-                        </div>
-                        <div>
-                            <label className="text-xs font-medium text-gray-600 mb-1 block"
-                                   htmlFor="edit_full_name">
-                                Full Name
-                            </label>
-                            <input
-                                id="edit_full_name"
-                                type="text"
-                                value={editFullName}
-                                onChange={(e) => setEditFullName(e.target.value)}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                required
-                            />
-                        </div>
-                        <div>
-                            <label className="text-xs font-medium text-gray-600 mb-1 block"
-                                   htmlFor="edit_class_name">
-                                Class
-                            </label>
-                            <select
-                                id="edit_class_name"
-                                value={editClassName}
-                                onChange={(e) => setEditClassName(e.target.value)}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                required
-                            >
-                                <option value="">Select class...</option>
-                                {CLASS_OPTIONS.map(opt => (
-                                    <option key={opt} value={opt}>{opt}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div className="flex justify-end gap-3 pt-2">
-                            <button
-                                type="button"
-                                onClick={() => setEditingStudent(null)}
-                                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                disabled={loading}
-                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-60 transition"
-                            >
-                                {loading ? 'Saving…' : 'Save Changes'}
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        );
-    }, [editingStudent, editFullName, editClassName, loading, handleEditStudent]);
 
     return (
         <div className="space-y-6 relative">
@@ -524,7 +413,7 @@ export default function StudentsPage() {
                                 placeholder="Search by name or ID..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full border border-blue-200 border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                             />
                         </div>
                         
@@ -594,58 +483,21 @@ export default function StudentsPage() {
                             <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                         </thead>
-                        <tbody className="divide-y  divide-gray-100">
+                        <tbody className="divide-y divide-gray-100">
                         {filteredStudents.map((s) => (
-                            <tr key={s.id} className="hover:bg-gray-50 transition odd:bg-white even:bg-blue-50 ">
-                                <td className="px-5 py-2 font-medium text-gray-900">{s.student_id}</td>
-                                <td className="px-5 py-2 text-gray-700">{s.full_name}</td>
-                                <td className="px-5 py-2 text-gray-700">{s.class_name}</td>
-                                <td className="px-5 py-2 ">
-                                        <span
-                                            className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${s.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-                                            {s.is_active ? 'Yes' : 'No'}
-                                        </span>
-                                </td>
-                                <td className="px-5 py-2">
-                                        <span
-                                            className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${s.has_voted ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
-                                            {s.has_voted ? 'Yes' : 'No'}
-                                        </span>
-                                </td>
-                                <td className="px-5 py-2">
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={() => openEditModal(s)}
-                                            disabled={isModalOpening}
-                                            className={`p-1.5 rounded-lg transition ${
-                                                isModalOpening 
-                                                    ? 'text-gray-300 cursor-wait' 
-                                                    : 'text-blue-600 hover:bg-blue-50'
-                                            }`}
-                                            title="Edit student"
-                                        >
-                                            <EditIcon/>
-                                        </button>
-                                        <button
-                                            onClick={() => handleDeleteStudent(s)}
-                                            disabled={s.has_voted}
-                                            className={`p-1.5 rounded-lg transition ${s.has_voted ? 'text-gray-300 cursor-not-allowed' : 'text-red-600 hover:bg-red-50'}`}
-                                            title={s.has_voted ? 'Cannot delete - student has voted' : 'Delete student'}
-                                        >
-                                            <TrashIcon/>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
+                            <StudentRow
+                                key={s.id}
+                                student={s}
+                                onEdit={openEditModal}
+                                onDelete={handleDeleteStudent}
+                            />
                         ))}
-                        {!loading && filteredStudents.length === 0 && (
+                        {filteredStudents.length === 0 && (
                             <tr>
-                                <td colSpan={6} className="px-5 py-8 text-center text-gray-400">
-                                    {searchTerm || activeFilter !== 'all' || votedFilter !== 'all' || classFilter
-                                        ? 'No students match your filters.'
-                                        : (selectedElection
-                                            ? 'No students added for this election yet.'
-                                            : 'Select an election to view its students.')}
+                                <td colSpan={6} className="px-5 py-8 text-center text-gray-500">
+                                    {students.length === 0 
+                                        ? 'No students added yet.' 
+                                        : 'Select an election to view its students.'}
                                 </td>
                             </tr>
                         )}
@@ -655,7 +507,12 @@ export default function StudentsPage() {
             </section>
 
             {/* Edit Modal */}
-            {EditModal}
+            <EditStudentModal
+                student={editingStudent}
+                onClose={closeEditModal}
+                onSave={handleSaveEdit}
+                loading={updateStudent.isPending}
+            />
         </div>
     );
 }

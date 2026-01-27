@@ -2,6 +2,7 @@ import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import api from '../apiConfig';
 import {queryKeys} from './queryKeys';
 import {showError, showSuccess} from '../utils/toast';
+import {useElections} from "./useElections.ts";
 
 export interface Student {
     id: number;
@@ -66,6 +67,10 @@ export const useCreateStudent = () => {
 export const useUpdateStudent = () => {
     const queryClient = useQueryClient();
 
+    const {data: elections = [],} = useElections();
+    const activeElection = elections.find(e => e.is_active);
+    const targetElection = activeElection || elections[0];
+
     return useMutation({
         mutationFn: async ({id, ...data}: {
             id: number;
@@ -75,13 +80,39 @@ export const useUpdateStudent = () => {
             const res = await api.patch(`api/students/${id}/`, data);
             return res.data;
         },
+        onMutate: async (variables) => {
+            // Cancel any outgoing refetches
+            await queryClient.cancelQueries({queryKey: queryKeys.students(targetElection.id)});
+            
+            // Snapshot the previous value
+            const previousStudents = queryClient.getQueryData(queryKeys.students(targetElection.id));
+            
+            // Optimistically update the cache
+            queryClient.setQueryData(queryKeys.students(targetElection.id), (old: Student[] | undefined) => {
+                if (!old) return old;
+                return old.map(student => 
+                    student.id === variables.id 
+                        ? {...student, ...variables}
+                        : student
+                );
+            });
+            
+            return {previousStudents};
+        },
+        onError: (err, _variables, context) => {
+            // Rollback on error
+            if (context?.previousStudents) {
+                queryClient.setQueryData(queryKeys.students(targetElection.id), context.previousStudents);
+            }
+            const detail = (err as any).response?.data?.detail;
+            showError(detail || 'Failed to update student.');
+        },
+        onSettled: () => {
+            // Refetch to ensure server state
+            queryClient.invalidateQueries({queryKey: queryKeys.students(targetElection.id)});
+        },
         onSuccess: () => {
             showSuccess('Student updated successfully.');
-            queryClient.invalidateQueries({queryKey: queryKeys.students(null)}); // Invalidate all since we don't know the election
-        },
-        onError: (err: any) => {
-            const detail = err.response?.data?.detail;
-            showError(detail || 'Failed to update student.');
         },
     });
 };

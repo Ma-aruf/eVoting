@@ -1,5 +1,7 @@
 import {useState} from 'react';
 import {useManageElections, useToggleElection, type Election} from '../../queries/useManageElections';
+import ConfirmModal from '../../components/ConfirmModal';
+import {useConfirmModal} from '../../hooks/useConfirmModal';
 
  const CalendarIcon = () => (
      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -24,6 +26,9 @@ export default function ManageElectionsPage() {
     
     // State
     const [actionElectionId, setActionElectionId] = useState<number | null>(null);
+    
+    // Confirm Modal
+    const confirmModal = useConfirmModal();
 
     const loading = electionsLoading || toggleElection.isPending;
 
@@ -32,8 +37,15 @@ export default function ManageElectionsPage() {
 
     const handleToggle = async (election: Election, nextActive: boolean) => {
         const verb = nextActive ? 'set active' : 'stop';
-        const ok = window.confirm(`Are you sure you want to ${verb} "${election.name}"?`);
-        if (!ok) return;
+        const confirmed = await confirmModal.confirm({
+            title: `${verb.charAt(0).toUpperCase() + verb.slice(1)} Election`,
+            message: `Are you sure you want to ${verb} "${election.name}"?`,
+            confirmText: verb.charAt(0).toUpperCase() + verb.slice(1),
+            cancelText: 'Cancel',
+            type: nextActive ? 'warning' : 'danger'
+        });
+        
+        if (!confirmed) return;
 
         setActionElectionId(election.id);
         
@@ -198,6 +210,18 @@ export default function ManageElectionsPage() {
                     </table>
                 </div>
             </section>
+            
+            {/* Confirm Modal */}
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                onClose={confirmModal.handleClose}
+                onConfirm={confirmModal.handleConfirm}
+                title={confirmModal.options.title}
+                message={confirmModal.options.message}
+                confirmText={confirmModal.options.confirmText}
+                cancelText={confirmModal.options.cancelText}
+                type={confirmModal.options.type}
+            />
         </div>
     );
 }
