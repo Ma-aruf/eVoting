@@ -282,7 +282,7 @@ class CandidateViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         position_id = self.request.query_params.get("position_id")
         if position_id:
-            return Candidate.objects.filter(position_id=position_id)
+            return Candidate.objects.filter(position_id=position_id).order_by('ballot_number')
         return Candidate.objects.none()
 
 
@@ -800,7 +800,7 @@ class ElectionResultsView(APIView):
         results = []
 
         for position in positions:
-            candidates = Candidate.objects.filter(position=position)
+            candidates = Candidate.objects.filter(position=position).order_by('ballot_number')
 
             candidate_results = []
             total_valid_votes_this_position = 0
@@ -874,7 +874,7 @@ class CandidatesForPositionView(APIView):
             )
 
         try:
-            candidates = Candidate.objects.filter(position_id=position_id).select_related('student')
+            candidates = Candidate.objects.filter(position_id=position_id).select_related('student').order_by('ballot_number')
         except ValueError:
             return Response(
                 {"detail": "Invalid position_id."},

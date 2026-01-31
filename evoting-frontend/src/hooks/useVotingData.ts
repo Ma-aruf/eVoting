@@ -23,6 +23,7 @@ interface Candidate {
     student_name: string;
     position: number;
     photo_url?: string;
+    ballot_number: number;
 }
 
 interface VotingData {

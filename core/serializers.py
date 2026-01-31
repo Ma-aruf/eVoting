@@ -71,7 +71,32 @@ class CandidateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Candidate
-        fields = ["id", "student", "student_name", "position", "photo_url"]
+        fields = ["id", "student", "student_name", "position", "photo_url", "ballot_number"]
+
+    def validate(self, data):
+        """
+        Validate that ballot_number is unique within the same position.
+        """
+        # Get the position and ballot_number from the data
+        position = data.get('position')
+        ballot_number = data.get('ballot_number')
+        
+        # If both position and ballot_number are provided
+        if position and ballot_number is not None:
+            # Check if there's an existing candidate with the same position and ballot_number
+            # Exclude the current instance if we're updating
+            queryset = Candidate.objects.filter(position=position, ballot_number=ballot_number)
+            
+            # If this is an update operation, exclude the current instance
+            if self.instance and self.instance.pk:
+                queryset = queryset.exclude(pk=self.instance.pk)
+            
+            if queryset.exists():
+                raise serializers.ValidationError({
+                    'ballot_number': f'A candidate with ballot number {ballot_number} already exists for this position.'
+                })
+        
+        return data
 
 
 class MultiVoteSerializer(serializers.Serializer):

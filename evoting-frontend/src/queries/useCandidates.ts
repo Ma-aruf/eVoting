@@ -9,6 +9,7 @@ export interface Candidate {
   student_name: string;
   position: number;
   photo_url: string;
+  ballot_number: number;
 }
 
 export const useCandidates = (positionId: number | null) => {
@@ -41,6 +42,7 @@ export const useCreateCandidate = () => {
       student: number;
       position: number;
       photo_url?: string;
+      ballot_number?: number;
     }) => {
       const res = await api.post('api/candidates/create/', data);
       return res.data;
@@ -51,7 +53,13 @@ export const useCreateCandidate = () => {
     },
     onError: (err: any) => {
       const detail = err.response?.data?.detail;
-      showError(detail || 'Failed to create candidate.');
+      if (typeof detail === 'string' && detail.includes('ballot number')) {
+        showError('Ballot number conflict: ' + detail);
+      } else if (typeof detail === 'object' && detail?.ballot_number) {
+        showError('Ballot number conflict: ' + detail.ballot_number[0]);
+      } else {
+        showError(detail || 'Failed to create candidate.');
+      }
     },
   });
 };
@@ -65,6 +73,7 @@ export const useUpdateCandidate = () => {
       student: number;
       position: number;
       photo_url?: string;
+      ballot_number?: number;
     }) => {
       const res = await api.put(`api/candidates/${id}/`, data);
       return res.data;
@@ -77,7 +86,13 @@ export const useUpdateCandidate = () => {
     },
     onError: (err: any) => {
       const detail = err.response?.data?.detail;
-      showError(detail || 'Failed to update candidate.');
+      if (typeof detail === 'string' && detail.includes('ballot number')) {
+        showError('Ballot number conflict: ' + detail);
+      } else if (typeof detail === 'object' && detail?.ballot_number) {
+        showError('Ballot number conflict: ' + detail.ballot_number[0]);
+      } else {
+        showError(detail || 'Failed to update candidate.');
+      }
     },
   });
 };

@@ -332,9 +332,13 @@ export default function VotingPage() {
                                                             }`}
                                                             onClick={() => handleSelectCandidate(position.id, candidate)}
                                                         >
+                                                            {/* Ballot Number Badge */}
+                                                            <div className="absolute -top-2 -right-2 w-8 h-8 bg-amber-400 text-black font-bold rounded-full flex items-center justify-center text-sm shadow-md border-2 border-white">
+                                                                {candidate.ballot_number}
+                                                            </div>
                                                             {/* Candidate Photo */}
                                                             <div
-                                                                className="w-28 h-28 md:w-35 md:h-35 rounded-full overflow-hidden bg-gray-100 mb-3 flex items-center justify-center border-2 border-white shadow">
+                                                                className="w-28 h-28 md:w-35 md:h-35 rounded-full overflow-hidden bg-gray-100 mb-3 flex items-center justify-center border-2 border-white shadow relative">
                                                                 {candidate.photo_url ? (
                                                                     <img
                                                                         src={candidate.photo_url}

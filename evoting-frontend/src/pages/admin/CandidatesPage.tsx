@@ -59,6 +59,7 @@ export default function CandidatesPage() {
     const [studentQuery, setStudentQuery] = useState('');
     const [studentDropdownOpen, setStudentDropdownOpen] = useState(false);
     const [photoUrl, setPhotoUrl] = useState<string>('');
+    const [ballotNumber, setBallotNumber] = useState<number>(1);
 
     const [editingCandidate, setEditingCandidate] = useState<Candidate | null>(null);
     const [editPhotoUrl, setEditPhotoUrl] = useState<string>('');
@@ -70,6 +71,16 @@ export default function CandidatesPage() {
     
     // Confirm Modal
     const confirmModal = useConfirmModal();
+
+    // Check for ballot number conflicts
+    const checkBallotNumberConflict = (ballotNumber: number, positionId: number | null, excludeCandidateId?: number) => {
+        if (!positionId) return false;
+        return candidates.some(candidate => 
+            candidate.position === positionId && 
+            candidate.ballot_number === ballotNumber && 
+            candidate.id !== excludeCandidateId
+        );
+    };
 
 
     const handleEditCandidate = (candidate: any) => {
@@ -98,11 +109,23 @@ export default function CandidatesPage() {
             return;
         }
 
+        // Check for ballot number conflict (exclude current candidate from check)
+        if (checkBallotNumberConflict(editingCandidate.ballot_number, editPositionId, editingCandidate.id)) {
+            const conflictingCandidate = candidates.find(c => 
+                c.position === editPositionId && 
+                c.ballot_number === editingCandidate.ballot_number &&
+                c.id !== editingCandidate.id
+            );
+            showError(`Ballot number ${editingCandidate.ballot_number} is already assigned to ${conflictingCandidate?.student_name || 'another candidate'} for this position.`);
+            return;
+        }
+
         updateCandidateMutation.mutate({
             id: editingCandidate.id,
             student: editStudentId,
             position: editPositionId,
             photo_url: editPhotoUrl.trim() || '',
+            ballot_number: editingCandidate.ballot_number,
         }, {
             onSuccess: () => {
                 setEditingCandidate(null);
@@ -179,15 +202,26 @@ export default function CandidatesPage() {
             return;
         }
 
+        // Check for ballot number conflict
+        if (checkBallotNumberConflict(ballotNumber, selectedPositionId)) {
+            const conflictingCandidate = candidates.find(c => 
+                c.position === selectedPositionId && c.ballot_number === ballotNumber
+            );
+            showError(`Ballot number ${ballotNumber} is already assigned to ${conflictingCandidate?.student_name || 'another candidate'} for this position.`);
+            return;
+        }
+
         createCandidateMutation.mutate({
             student: selectedStudentId,
             position: selectedPositionId,
             photo_url: photoUrl.trim() || undefined,
+            ballot_number: ballotNumber,
         }, {
             onSuccess: () => {
                 setSelectedStudentId(null);
                 setStudentQuery('');
                 setPhotoUrl('');
+                setBallotNumber(1);
             },
         });
     };
@@ -394,6 +428,29 @@ export default function CandidatesPage() {
                         </div>
 
                         <div className="flex-1">
+                            <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="ballot_number">
+                                Ballot Number
+                            </label>
+                            <input
+                                id="ballot_number"
+                                type="number"
+                                min="1"
+                                value={ballotNumber}
+                                onChange={(e) => setBallotNumber(Number(e.target.value))}
+                                className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                                    checkBallotNumberConflict(ballotNumber, selectedPositionId) 
+                                        ? 'border-red-300 bg-red-50' 
+                                        : 'border-gray-200'
+                                }`}
+                            />
+                            {checkBallotNumberConflict(ballotNumber, selectedPositionId) && (
+                                <p className="text-xs text-red-600 mt-1">
+                                    Ballot number {ballotNumber} is already in use for this position
+                                </p>
+                            )}
+                        </div>
+
+                        <div className="flex-1">
                             <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="photo_url">
                                 Photo URL (optional)
                             </label>
@@ -424,7 +481,29 @@ export default function CandidatesPage() {
                         Edit Candidate: {editingCandidate.student_name}
                     </h2>
                     <form onSubmit={handleUpdateCandidate} className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div>
+                                <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="edit_ballot_number">
+                                    Ballot Number
+                                </label>
+                                <input
+                                    id="edit_ballot_number"
+                                    type="number"
+                                    min="1"
+                                    value={editingCandidate.ballot_number ?? ''}
+                                    onChange={(e) => setEditingCandidate(prev => prev ? {...prev, ballot_number: Number(e.target.value)} : null)}
+                                    className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                                        checkBallotNumberConflict(editingCandidate.ballot_number, editPositionId, editingCandidate.id)
+                                            ? 'border-red-300 bg-red-50'
+                                            : 'border-gray-200'
+                                    }`}
+                                />
+                                {checkBallotNumberConflict(editingCandidate.ballot_number, editPositionId, editingCandidate.id) && (
+                                    <p className="text-xs text-red-600 mt-1">
+                                        Ballot number {editingCandidate.ballot_number} is already in use for this position
+                                    </p>
+                                )}
+                            </div>
                             <div>
                                 <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="edit_election">
                                     Election
@@ -599,6 +678,7 @@ export default function CandidatesPage() {
                     <table className="min-w-full text-sm">
                         <thead>
                             <tr className="bg-blue-100 border-b border-gray-100">
+                                <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Ballot #</th>
                                 <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Student</th>
                                 <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Student ID</th>
                                 <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Photo</th>
@@ -610,6 +690,11 @@ export default function CandidatesPage() {
                                 const student = students.find((s) => s.id === candidate.student);
                                 return (
                                     <tr key={candidate.id} className="hover:bg-gray-50 transition odd:bg-white even:bg-blue-50">
+                                        <td className="px-5 py-2 font-medium text-gray-900">
+                                            <span className="inline-flex items-center justify-center w-7 h-7 bg-amber-100 text-amber-800 rounded-full text-xs font-bold">
+                                                {candidate.ballot_number}
+                                            </span>
+                                        </td>
                                         <td className="px-5 py-2 font-medium text-gray-900">
                                             {candidate.student_name || student?.full_name || '—'}
                                         </td>
