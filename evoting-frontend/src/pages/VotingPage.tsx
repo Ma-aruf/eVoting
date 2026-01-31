@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react';
 import {useNavigate} from 'react-router-dom';
 import api from '../apiConfig';
-import {useVotingData, type Candidate} from '../hooks/useVotingData';
+import {type Candidate, useVotingData} from '../hooks/useVotingData';
 import ConfirmModal from '../components/ConfirmModal';
 import {useConfirmModal} from '../hooks/useConfirmModal';
 
@@ -20,7 +20,7 @@ export default function VotingPage() {
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
     const [currentPositionIndex, setCurrentPositionIndex] = useState(0);
-    
+
     // Confirm Modal
     const confirmModal = useConfirmModal();
 
@@ -164,7 +164,7 @@ export default function VotingPage() {
             cancelText: 'Cancel',
             type: 'warning'
         });
-        
+
         if (confirmed) {
             sessionStorage.clear();
             navigate('/');
@@ -289,7 +289,8 @@ export default function VotingPage() {
                             </div>
 
                             {/* Position Card */}
-                            <div className=" rounded border border-gray-200 flex flex-col max-w-[100%] max-h-[calc(100vh-50px)]">
+                            <div
+                                className=" rounded border border-gray-200 flex flex-col max-w-[100%] max-h-[calc(100vh-50px)]">
                                 {/* Position Header */}
                                 <div
                                     className="px-4 sm:px-6 py-2  bg-blue-300 rounded-t">
@@ -325,20 +326,17 @@ export default function VotingPage() {
                                                     return (
                                                         <div
                                                             key={candidate.id}
-                                                            className={`flex flex-col items-center p-4 sm:p-3 rounded-xl border-2 transition-all w-[155px] sm:w-[190px] h-[260px] sm:h-[290px] cursor-pointer ${
+                                                            className={`flex relative flex-col items-center p-4 sm:p-3 rounded-xl border-2 transition-all w-[155px] sm:w-[190px] h-[260px] sm:h-[290px] cursor-pointer ${
                                                                 isSelected
                                                                     ? 'border-green-500 bg-green-50 ring-1 ring-green-200 shadow-md'
                                                                     : 'border-blue-200 hover:border-blue-300 hover:bg-blue-50 hover:shadow-md'
                                                             }`}
                                                             onClick={() => handleSelectCandidate(position.id, candidate)}
                                                         >
-                                                            {/* Ballot Number Badge */}
-                                                            <div className="absolute -top-2 -right-2 w-8 h-8 bg-amber-400 text-black font-bold rounded-full flex items-center justify-center text-sm shadow-md border-2 border-white">
-                                                                {candidate.ballot_number}
-                                                            </div>
+
                                                             {/* Candidate Photo */}
                                                             <div
-                                                                className="w-28 h-28 md:w-35 md:h-35 rounded-full overflow-hidden bg-gray-100 mb-3 flex items-center justify-center border-2 border-white shadow relative">
+                                                                className="w-28 h-28 md:w-35 md:h-35 mt-5 rounded-full overflow-hidden bg-gray-100 mb-3 flex items-center justify-center border-2 border-white shadow relative">
                                                                 {candidate.photo_url ? (
                                                                     <img
                                                                         src={candidate.photo_url}
@@ -350,6 +348,9 @@ export default function VotingPage() {
                                                                         {candidate.student_name.charAt(0)}
                                                                     </span>
                                                                 )}
+                                                            </div>
+                                                            <div className="flex absolute top-0 right-1 ">
+                                                                <div className=" text-cyan-700 font-bold text-5xl">{candidate.ballot_number}</div>
                                                             </div>
 
                                                             {/* Candidate Name */}
@@ -450,7 +451,7 @@ export default function VotingPage() {
                     );
                 })()}
             </div>
-            
+
             {/* Confirm Modal */}
             <ConfirmModal
                 isOpen={confirmModal.isOpen}
