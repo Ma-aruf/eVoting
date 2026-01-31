@@ -75,11 +75,30 @@ class CandidateSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         """
-        Validate that ballot_number is unique within the same position.
+        Validate that ballot_number is unique within the same position
+        and that student is only a candidate for one position.
         """
         # Get the position and ballot_number from the data
         position = data.get('position')
         ballot_number = data.get('ballot_number')
+        student = data.get('student')
+        
+        # Validate student uniqueness (only if student is being changed/added)
+        if student:
+            # Check if this student is already a candidate for any position
+            # Exclude the current instance if we're updating
+            queryset = Candidate.objects.filter(student=student)
+            
+            # If this is an update operation, exclude the current instance
+            if self.instance and self.instance.pk:
+                queryset = queryset.exclude(pk=self.instance.pk)
+            
+            if queryset.exists():
+                existing_candidate = queryset.first()
+                existing_position = existing_candidate.position
+                raise serializers.ValidationError({
+                    'student': f'This student is already a candidate for position "{existing_position.name}". A student can only run for one position.'
+                })
         
         # If both position and ballot_number are provided
         if position and ballot_number is not None:

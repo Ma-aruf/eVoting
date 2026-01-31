@@ -52,12 +52,38 @@ export const useCreateCandidate = () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.candidates(variables.position) });
     },
     onError: (err: any) => {
-      const detail = err.response?.data?.detail;
-      if (typeof detail === 'string' && detail.includes('ballot number')) {
-        showError('Ballot number conflict: ' + detail);
-      } else if (typeof detail === 'object' && detail?.ballot_number) {
-        showError('Ballot number conflict: ' + detail.ballot_number[0]);
-      } else {
+      const detail = err.response?.data;
+      
+      // Handle DRF validation errors format (field-specific errors)
+      if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+        if (detail.ballot_number) {
+          showError('Ballot number conflict: ' + detail.ballot_number[0]);
+        } else if (detail.student) {
+          showError('Candidate conflict: ' + detail.student[0]);
+        } else if (detail.non_field_errors) {
+          showError(detail.non_field_errors[0]);
+        } else {
+          // Fallback: show first available error
+          const firstField = Object.keys(detail)[0];
+          if (firstField && detail[firstField]) {
+            showError(detail[firstField][0]);
+          } else {
+            showError('Validation failed. Please check your input.');
+          }
+        }
+      } 
+      // Handle string error messages
+      else if (typeof detail === 'string') {
+        if (detail.includes('ballot number')) {
+          showError('Ballot number conflict: ' + detail);
+        } else if (detail.includes('already') || detail.includes('candidate')) {
+          showError('Candidate conflict: ' + detail);
+        } else {
+          showError(detail);
+        }
+      } 
+      // Fallback error
+      else {
         showError(detail || 'Failed to create candidate.');
       }
     },
@@ -85,12 +111,38 @@ export const useUpdateCandidate = () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.candidates(null) });
     },
     onError: (err: any) => {
-      const detail = err.response?.data?.detail;
-      if (typeof detail === 'string' && detail.includes('ballot number')) {
-        showError('Ballot number conflict: ' + detail);
-      } else if (typeof detail === 'object' && detail?.ballot_number) {
-        showError('Ballot number conflict: ' + detail.ballot_number[0]);
-      } else {
+      const detail = err.response?.data;
+      
+      // Handle DRF validation errors format (field-specific errors)
+      if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+        if (detail.ballot_number) {
+          showError('Ballot number conflict: ' + detail.ballot_number[0]);
+        } else if (detail.student) {
+          showError('Candidate conflict: ' + detail.student[0]);
+        } else if (detail.non_field_errors) {
+          showError(detail.non_field_errors[0]);
+        } else {
+          // Fallback: show first available error
+          const firstField = Object.keys(detail)[0];
+          if (firstField && detail[firstField]) {
+            showError(detail[firstField][0]);
+          } else {
+            showError('Validation failed. Please check your input.');
+          }
+        }
+      } 
+      // Handle string error messages
+      else if (typeof detail === 'string') {
+        if (detail.includes('ballot number')) {
+          showError('Ballot number conflict: ' + detail);
+        } else if (detail.includes('already') || detail.includes('candidate')) {
+          showError('Candidate conflict: ' + detail);
+        } else {
+          showError(detail);
+        }
+      } 
+      // Fallback error
+      else {
         showError(detail || 'Failed to update candidate.');
       }
     },

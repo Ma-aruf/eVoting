@@ -82,6 +82,29 @@ export default function CandidatesPage() {
         );
     };
 
+    // Check if student is already a candidate in any position
+    const checkStudentAlreadyCandidate = (studentId: number | null, excludeCandidateId?: number) => {
+        if (!studentId) return false;
+        return candidates.some(candidate => 
+            candidate.student === studentId && 
+            candidate.id !== excludeCandidateId
+        );
+    };
+
+    // Get the position name where student is already a candidate
+    const getStudentExistingPosition = (studentId: number | null, excludeCandidateId?: number) => {
+        if (!studentId) return null;
+        const existingCandidate = candidates.find(candidate => 
+            candidate.student === studentId && 
+            candidate.id !== excludeCandidateId
+        );
+        if (existingCandidate) {
+            const position = positions.find(p => p.id === existingCandidate.position);
+            return position?.name || 'a position';
+        }
+        return null;
+    };
+
 
     const handleEditCandidate = (candidate: any) => {
         setEditingCandidate(candidate);
@@ -106,6 +129,14 @@ export default function CandidatesPage() {
 
         if (!editElectionId || !editPositionId || !editStudentId) {
             showError('Please select election, position, and student.');
+            return;
+        }
+
+        // Check if student is already a candidate in another position (excluding current candidate)
+        if (checkStudentAlreadyCandidate(editStudentId, editingCandidate.id)) {
+            const existingPosition = getStudentExistingPosition(editStudentId, editingCandidate.id);
+            const student = students.find(s => s.id === editStudentId);
+            showError(`${student?.full_name || 'This student'} is already a candidate for ${existingPosition}. A student can only run for one position.`);
             return;
         }
 
@@ -199,6 +230,14 @@ export default function CandidatesPage() {
         }
         if (!selectedStudentId) {
             showError('Please select a student.');
+            return;
+        }
+
+        // Check if student is already a candidate in another position
+        if (checkStudentAlreadyCandidate(selectedStudentId)) {
+            const existingPosition = getStudentExistingPosition(selectedStudentId);
+            const student = students.find(s => s.id === selectedStudentId);
+            showError(`${student?.full_name || 'This student'} is already a candidate for ${existingPosition}. A student can only run for one position.`);
             return;
         }
 
@@ -425,6 +464,11 @@ export default function CandidatesPage() {
                             {!selectedStudentId && studentQuery.trim() && (
                                 <p className="text-xs text-gray-500 mt-1">Select a student from the list.</p>
                             )}
+                            {selectedStudentId && checkStudentAlreadyCandidate(selectedStudentId) && (
+                                <p className="text-xs text-red-600 mt-1">
+                                    This student is already a candidate for {getStudentExistingPosition(selectedStudentId)}
+                                </p>
+                            )}
                         </div>
 
                         <div className="flex-1">
@@ -466,7 +510,7 @@ export default function CandidatesPage() {
 
                         <button
                             type="submit"
-                            disabled={loading || !selectedElectionId || !selectedPositionId}
+                            disabled={loading || !selectedElectionId || !selectedPositionId || !selectedStudentId || checkStudentAlreadyCandidate(selectedStudentId) || checkBallotNumberConflict(ballotNumber, selectedPositionId)}
                             className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-60 transition"
                         >
                             {loading ? 'Saving…' : 'Submit'}
@@ -617,12 +661,17 @@ export default function CandidatesPage() {
                             {!editStudentId && editStudentQuery.trim() && (
                                 <p className="text-xs text-gray-500 mt-1">Select a student from the list.</p>
                             )}
+                            {editStudentId && checkStudentAlreadyCandidate(editStudentId, editingCandidate.id) && (
+                                <p className="text-xs text-red-600 mt-1">
+                                    This student is already a candidate for {getStudentExistingPosition(editStudentId, editingCandidate.id)}
+                                </p>
+                            )}
                         </div>
 
                         <div className="flex gap-3">
                             <button
                                 type="submit"
-                                disabled={loading || !editElectionId || !editPositionId || !editStudentId}
+                                disabled={loading || !editElectionId || !editPositionId || !editStudentId || checkStudentAlreadyCandidate(editStudentId, editingCandidate.id) || checkBallotNumberConflict(editingCandidate.ballot_number, editPositionId, editingCandidate.id)}
                                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-60 transition"
                             >
                                 {loading ? 'Saving…' : 'Update Candidate'}

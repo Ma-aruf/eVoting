@@ -52,14 +52,15 @@ class Position(models.Model):
 
 
 class Candidate(models.Model):
-    student = models.OneToOneField(Student, on_delete=models.CASCADE)
+    student = models.ForeignKey(Student, on_delete=models.CASCADE)
     position = models.ForeignKey(Position, on_delete=models.CASCADE)
     photo_url = models.URLField(blank=True)
     ballot_number = models.PositiveIntegerField(default=1)
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=['position', 'ballot_number'], name='unique_position_ballot_number')
+            models.UniqueConstraint(fields=['position', 'ballot_number'], name='unique_position_ballot_number'),
+            models.UniqueConstraint(fields=['student'], name='unique_student_candidate')
         ]
 
     def __str__(self):
