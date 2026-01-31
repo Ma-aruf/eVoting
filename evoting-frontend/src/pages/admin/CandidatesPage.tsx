@@ -105,6 +105,33 @@ export default function CandidatesPage() {
         return null;
     };
 
+    // Helper function to filter students by query
+    const filterStudentsByQuery = (students: any[], query: string) => {
+        const q = query.toLowerCase().trim();
+        if (!q) return students;
+        return students.filter(student =>
+            student.full_name.toLowerCase().includes(q) ||
+            student.student_id.toLowerCase().includes(q)
+        );
+    };
+
+    // Helper function to get conflict error message
+    const getConflictErrorMessage = (studentId: number, excludeCandidateId?: number) => {
+        const existingPosition = getStudentExistingPosition(studentId, excludeCandidateId);
+        const student = students.find(s => s.id === studentId);
+        return `${student?.full_name || 'This student'} is already a candidate for ${existingPosition}. A student can only run for one position.`;
+    };
+
+    // Helper function to get ballot conflict error message
+    const getBallotConflictMessage = (ballotNumber: number, positionId: number, excludeCandidateId?: number) => {
+        const conflictingCandidate = candidates.find(c => 
+            c.position === positionId && 
+            c.ballot_number === ballotNumber &&
+            c.id !== excludeCandidateId
+        );
+        return `Ballot number ${ballotNumber} is already assigned to ${conflictingCandidate?.student_name || 'another candidate'} for this position.`;
+    };
+
 
     const handleEditCandidate = (candidate: any) => {
         setEditingCandidate(candidate);
@@ -134,20 +161,13 @@ export default function CandidatesPage() {
 
         // Check if student is already a candidate in another position (excluding current candidate)
         if (checkStudentAlreadyCandidate(editStudentId, editingCandidate.id)) {
-            const existingPosition = getStudentExistingPosition(editStudentId, editingCandidate.id);
-            const student = students.find(s => s.id === editStudentId);
-            showError(`${student?.full_name || 'This student'} is already a candidate for ${existingPosition}. A student can only run for one position.`);
+            showError(getConflictErrorMessage(editStudentId, editingCandidate.id));
             return;
         }
 
         // Check for ballot number conflict (exclude current candidate from check)
         if (checkBallotNumberConflict(editingCandidate.ballot_number, editPositionId, editingCandidate.id)) {
-            const conflictingCandidate = candidates.find(c => 
-                c.position === editPositionId && 
-                c.ballot_number === editingCandidate.ballot_number &&
-                c.id !== editingCandidate.id
-            );
-            showError(`Ballot number ${editingCandidate.ballot_number} is already assigned to ${conflictingCandidate?.student_name || 'another candidate'} for this position.`);
+            showError(getBallotConflictMessage(editingCandidate.ballot_number, editPositionId, editingCandidate.id));
             return;
         }
 
@@ -235,18 +255,13 @@ export default function CandidatesPage() {
 
         // Check if student is already a candidate in another position
         if (checkStudentAlreadyCandidate(selectedStudentId)) {
-            const existingPosition = getStudentExistingPosition(selectedStudentId);
-            const student = students.find(s => s.id === selectedStudentId);
-            showError(`${student?.full_name || 'This student'} is already a candidate for ${existingPosition}. A student can only run for one position.`);
+            showError(getConflictErrorMessage(selectedStudentId));
             return;
         }
 
         // Check for ballot number conflict
         if (checkBallotNumberConflict(ballotNumber, selectedPositionId)) {
-            const conflictingCandidate = candidates.find(c => 
-                c.position === selectedPositionId && c.ballot_number === ballotNumber
-            );
-            showError(`Ballot number ${ballotNumber} is already assigned to ${conflictingCandidate?.student_name || 'another candidate'} for this position.`);
+            showError(getBallotConflictMessage(ballotNumber, selectedPositionId));
             return;
         }
 
@@ -268,23 +283,9 @@ export default function CandidatesPage() {
     const selectedElection = elections.find(e => e.id === selectedElectionId) || null;
     const selectedPosition = positions.find(p => p.id === selectedPositionId) || null;
 
-    const filteredStudentOptions = students.filter((student) => {
-        const q = studentQuery.toLowerCase().trim();
-        if (!q) return true;
-        return (
-            student.full_name.toLowerCase().includes(q) ||
-            student.student_id.toLowerCase().includes(q)
-        );
-    });
+    const filteredStudentOptions = filterStudentsByQuery(students, studentQuery);
 
-    const filteredEditStudentOptions = students.filter((student) => {
-        const q = editStudentQuery.toLowerCase().trim();
-        if (!q) return true;
-        return (
-            student.full_name.toLowerCase().includes(q) ||
-            student.student_id.toLowerCase().includes(q)
-        );
-    });
+    const filteredEditStudentOptions = filterStudentsByQuery(students, editStudentQuery);
 
     const filteredCandidates = candidates.filter((candidate) => {
         const student = students.find((s) => s.id === candidate.student);
