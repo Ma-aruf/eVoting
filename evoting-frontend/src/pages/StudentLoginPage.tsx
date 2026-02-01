@@ -9,17 +9,6 @@ export default function StudentLoginPage() {
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
 
-
-    const getElection = async () => {
-        const res = await api.get('api/elections')
-
-        return res.data
-
-    }
-
-    console.log("Ele: ", getElection())
-
-
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
         setLoading(true);
@@ -30,13 +19,15 @@ export default function StudentLoginPage() {
                 student_id: studentId.trim()
             });
 
-            const { token, student } = response.data;
+            const { token, student, election } = response.data;
 
-
-            // Store token and student info in sessionStorage (cleared when tab closes)
+            // Store token, student info, and election context in sessionStorage
             sessionStorage.setItem('voter_token', token);
             sessionStorage.setItem('student_id', studentId);
             sessionStorage.setItem('student_name', student.full_name);
+            sessionStorage.setItem('election_id', String(election.id));
+            sessionStorage.setItem('election_name', election.name);
+            sessionStorage.setItem('election_year', String(election.year));
 
             // Redirect to voting page
             navigate('/vote');

@@ -343,7 +343,7 @@ class ElectionManageView(APIView):
     def patch(self, request):
         """
         Accepts JSON: { "election_id": 1, "is_active": true }
-        When setting an election active, all other elections are deactivated.
+        Multiple elections can be active simultaneously.
         """
         print("Inside post")
         election_id = request.data.get("election_id")
@@ -369,12 +369,9 @@ class ElectionManageView(APIView):
             )
 
         with transaction.atomic():
-            if bool(is_active):
-                # Deactivate all others, then activate this one
-                Election.objects.exclude(pk=election.pk).update(is_active=False)
-                election.is_active = True
-            else:
-                election.is_active = False
+            # Allow multiple elections to be active simultaneously
+            # Students are scoped by election_id, so no vote mixing occurs
+            election.is_active = bool(is_active)
             election.save(update_fields=["is_active"])
 
         return Response(
@@ -648,53 +645,63 @@ class StudentVoterLoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Check if there's an active election
-        active_election = Election.objects.filter(is_active=True).first()
-        if not active_election:
+        now = timezone.now()
+
+        # Find all active elections within voting window
+        active_elections = Election.objects.filter(
+            is_active=True,
+            start_time__lte=now,
+            end_time__gte=now
+        )
+
+        if not active_elections.exists():
             return Response(
                 {"detail": "No active election at this time."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Check if election is within voting window
-        now = timezone.now()
-        if now < active_election.start_time:
-            return Response(
-                {"detail": "Voting has not started yet."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        if now > active_election.end_time:
-            return Response(
-                {"detail": "Voting has ended."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
+        # Find the student who is ACTIVATED (is_active=True) in any of the active elections
+        # Student identity = student_id + election_id (composite)
+        # A student can only be activated in one election at a time
         try:
-            student = Student.objects.get(student_id=student_id, election=active_election)
-            print("Student found:", student)
+            student = Student.objects.get(
+                student_id=student_id,
+                election__in=active_elections,
+                is_active=True,  # Must be activated to vote
+                has_voted=False  # Must not have voted yet
+            )
+            active_election = student.election
         except Student.DoesNotExist:
+            # Check if student exists but is not activated or has voted
+            existing_student = Student.objects.filter(
+                student_id=student_id,
+                election__in=active_elections
+            ).first()
+            
+            if existing_student:
+                if existing_student.has_voted:
+                    return Response(
+                        {"detail": "Student has already voted."},
+                        status=status.HTTP_409_CONFLICT,
+                    )
+                else:
+                    return Response(
+                        {"detail": "Student is not activated to vote."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
             return Response(
-                {"detail": "Student not found for this election."},
+                {"detail": "Student not found in any active election."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-
-        # Check if student has already voted (check this first since voting also deactivates the student)
-        if student.has_voted:
+        except Student.MultipleObjectsReturned:
+            # Edge case: same student_id activated in multiple elections simultaneously
             return Response(
-                {"detail": "Student has already voted."},
+                {"detail": "Student is activated in multiple elections. Please contact administrator."},
                 status=status.HTTP_409_CONFLICT,
             )
 
-        # Check if student is active
-        if not student.is_active:
-            print("is student activated?: ", student.is_active)
-            return Response(
-                {"detail": "Student is not activated to vote."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        # Generate HMAC token
-        token = generate_voter_hmac(student.student_id)
+        # Generate HMAC token (include election_id to scope the token)
+        token = generate_voter_hmac(f"{student.student_id}_{active_election.id}")
 
         return Response({
             "token": token,

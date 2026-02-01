@@ -1,8 +1,8 @@
 # python
-from types import SimpleNamespace
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from django.utils.translation import gettext as _
+from django.utils import timezone
 from .models import Student, Election
 from .utils import verify_voter_hmac
 
@@ -27,30 +27,39 @@ class VoterAuthentication(BaseAuthentication):
     """
     Authenticate student voters via headers:
     - X-Student-Id: student_id
+    - X-Election-Id: election_id (to scope student lookup)
     - X-Voter-Token: HMAC token (hex)
     On success returns (StudentUser(student), token)
     """
     def authenticate(self, request):
         student_id = request.META.get("HTTP_X_STUDENT_ID")
+        election_id = request.META.get("HTTP_X_ELECTION_ID")
         token = request.META.get("HTTP_X_VOTER_TOKEN")
-        if not student_id or not token:
+        
+        if not student_id or not token or not election_id:
             return None  # allow other authenticators to run or cause IsAuthenticated to fail
 
-        # Get the active election to scope the student lookup
+        # Validate and get the specific election
         try:
-            active_election = Election.objects.filter(is_active=True).first()
-            if not active_election:
-                raise AuthenticationFailed(_("No active election found."))
-            
-            # Use composite lookup with active election
-            student = Student.objects.get(student_id=student_id, election=active_election)
-        except Student.DoesNotExist:
-            raise AuthenticationFailed(_("Invalid student identifier for active election."))
-        except Student.MultipleObjectsReturned:
-            # This should not happen with composite constraint, but handle it
-            raise AuthenticationFailed(_("Multiple students found with same identifier. Please contact administrator."))
+            election = Election.objects.get(pk=election_id, is_active=True)
+        except Election.DoesNotExist:
+            raise AuthenticationFailed(_("Election not found or not active."))
 
-        if not verify_voter_hmac(student.student_id, token):
+        # Validate voting window
+        now = timezone.now()
+        if now < election.start_time:
+            raise AuthenticationFailed(_("Voting has not started yet."))
+        if now > election.end_time:
+            raise AuthenticationFailed(_("Voting has ended."))
+
+        # Use composite lookup: student_id + election_id
+        try:
+            student = Student.objects.get(student_id=student_id, election=election)
+        except Student.DoesNotExist:
+            raise AuthenticationFailed(_("Invalid student identifier for this election."))
+
+        # Verify token using election-scoped key (student_id_electionId)
+        if not verify_voter_hmac(f"{student.student_id}_{election.id}", token):
             raise AuthenticationFailed(_("Invalid voter token."))
 
         return (StudentUser(student), token)

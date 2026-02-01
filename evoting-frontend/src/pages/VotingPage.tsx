@@ -24,17 +24,18 @@ export default function VotingPage() {
     // Confirm Modal
     const confirmModal = useConfirmModal();
 
-    // Get student info from session
+    // Get student info and election context from session
     const studentId = sessionStorage.getItem('student_id');
     const studentName = sessionStorage.getItem('student_name');
     const voterToken = sessionStorage.getItem('voter_token');
+    const electionId = sessionStorage.getItem('election_id');
 
-    // Redirect if not authenticated
+    // Redirect if not authenticated or missing election context
     useEffect(() => {
-        if (!studentId || !voterToken) {
+        if (!studentId || !voterToken || !electionId) {
             navigate('/');
         }
-    }, [studentId, voterToken, navigate]);
+    }, [studentId, voterToken, electionId, navigate]);
 
     // Fetch voting data using React Query (cached for entire session)
     const {data: votingData, isLoading: loading, error: queryError} = useVotingData(
@@ -87,7 +88,7 @@ export default function VotingPage() {
     };
 
     const handleSubmitVotes = async () => {
-        if (!studentId || !voterToken) {
+        if (!studentId || !voterToken || !electionId) {
             navigate('/');
             return;
         }
@@ -116,6 +117,7 @@ export default function VotingPage() {
             }, {
                 headers: {
                     'X-Student-Id': studentId,
+                    'X-Election-Id': electionId,
                     'X-Voter-Token': voterToken
                 }
             });

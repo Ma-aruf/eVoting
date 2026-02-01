@@ -33,21 +33,24 @@ interface VotingData {
 }
 
 const fetchVotingData = async (): Promise<VotingData> => {
-    // 1. Get active election
-    const electionRes = await api.get('/api/elections/', {
-        params: {is_active: true}
-    });
+    // 1. Get election from sessionStorage (set during login)
+    const electionId = sessionStorage.getItem('election_id');
+    const electionName = sessionStorage.getItem('election_name');
+    const electionYear = sessionStorage.getItem('election_year');
 
-    let elections = electionRes.data;
-    if (elections.results) {
-        elections = elections.results;
+    if (!electionId) {
+        throw new Error('No election context found. Please login again.');
     }
 
-    if (!Array.isArray(elections) || elections.length === 0) {
-        throw new Error('No active election found.');
-    }
-
-    const activeElection = elections[0];
+    // Build election object from session data
+    const activeElection: Election = {
+        id: parseInt(electionId, 10),
+        name: electionName || '',
+        year: parseInt(electionYear || '0', 10),
+        start_time: '',
+        end_time: '',
+        is_active: true
+    };
 
     // 2. Get positions for this election
     const positionsRes = await api.get('/api/positions/', {
@@ -98,10 +101,11 @@ const fetchVotingData = async (): Promise<VotingData> => {
 };
 
 export function useVotingData(enabled: boolean = true) {
+    const electionId = sessionStorage.getItem('election_id');
     return useQuery({
-        queryKey: ['votingData'],
+        queryKey: ['votingData', electionId],
         queryFn: fetchVotingData,
-        enabled,
+        enabled: enabled && !!electionId,
     });
 }
 
