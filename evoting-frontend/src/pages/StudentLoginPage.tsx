@@ -36,13 +36,12 @@ export default function StudentLoginPage() {
             console.error('Login error:', err);
             const detail = err.response?.data?.detail;
 
-            if (err.response?.status === 403) {
-                console.log("Error for not logging it: ", err)
+            if (detail) {
+                showError(detail);
+            } else if (err.response?.status === 403) {
                 showError('You are not activated to vote. Please contact the election committee.');
             } else if (err.response?.status === 409) {
                 showError('You have already voted.');
-            } else if (detail) {
-                showError(detail);
             } else {
                 showError('Failed to login. Please check your student ID and try again.');
             }

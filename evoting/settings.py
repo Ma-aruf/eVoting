@@ -308,3 +308,12 @@ STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")] if os.path.exists(os.path.
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Media files (uploaded images)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# Cloudinary Configuration (for production image uploads)
+CLOUDINARY_CLOUD_NAME = get_env('CLOUDINARY_CLOUD_NAME', '')
+CLOUDINARY_API_KEY = get_env('CLOUDINARY_API_KEY', '')
+CLOUDINARY_API_SECRET = get_env('CLOUDINARY_API_SECRET', '')

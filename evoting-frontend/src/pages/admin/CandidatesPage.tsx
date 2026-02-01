@@ -9,6 +9,7 @@ import type {Candidate} from '../../queries/useCandidates';
 import {showError} from '../../utils/toast';
 import ConfirmModal from '../../components/ConfirmModal';
 import {useConfirmModal} from '../../hooks/useConfirmModal';
+import ImageUpload from '../../components/ImageUpload';
 
 
 const UsersIcon = () => (
@@ -59,7 +60,7 @@ export default function CandidatesPage() {
     const [studentQuery, setStudentQuery] = useState('');
     const [studentDropdownOpen, setStudentDropdownOpen] = useState(false);
     const [photoUrl, setPhotoUrl] = useState<string>('');
-    const [ballotNumber, setBallotNumber] = useState<number>(1);
+    const [ballotNumber, setBallotNumber] = useState<number>(0);
 
     const [editingCandidate, setEditingCandidate] = useState<Candidate | null>(null);
     const [editPhotoUrl, setEditPhotoUrl] = useState<string>('');
@@ -275,7 +276,7 @@ export default function CandidatesPage() {
                 setSelectedStudentId(null);
                 setStudentQuery('');
                 setPhotoUrl('');
-                setBallotNumber(1);
+                setBallotNumber(0);
             },
         });
     };
@@ -495,17 +496,13 @@ export default function CandidatesPage() {
                             )}
                         </div>
 
-                        <div className="flex-1">
-                            <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="photo_url">
-                                Photo URL (optional)
+                        <div>
+                            <label className="text-xs font-medium text-gray-600 mb-1 block">
+                                Photo (optional)
                             </label>
-                            <input
-                                id="photo_url"
-                                type="url"
-                                value={photoUrl}
-                                onChange={(e) => setPhotoUrl(e.target.value)}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                placeholder="https://..."
+                            <ImageUpload
+                                onUploadSuccess={(url) => setPhotoUrl(url)}
+                                currentImageUrl={photoUrl}
                             />
                         </div>
 
@@ -597,16 +594,12 @@ export default function CandidatesPage() {
                             </div>
 
                             <div>
-                                <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="edit_photo_url">
-                                    Photo URL
+                                <label className="text-xs font-medium text-gray-600 mb-1 block">
+                                    Photo
                                 </label>
-                                <input
-                                    id="edit_photo_url"
-                                    type="url"
-                                    value={editPhotoUrl}
-                                    onChange={(e) => setEditPhotoUrl(e.target.value)}
-                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="https://..."
+                                <ImageUpload
+                                    onUploadSuccess={(url) => setEditPhotoUrl(url)}
+                                    currentImageUrl={editPhotoUrl}
                                 />
                             </div>
                         </div>

@@ -20,6 +20,7 @@ from .views import (
     ElectionResultsView,
     CandidatesForPositionView,
     UserViewSet,
+    ImageUploadView,
 )
 
 router = DefaultRouter()
@@ -63,6 +64,9 @@ urlpatterns = [
     path("votes/position-stats/", PositionStatsView.as_view(), name="position-stats"),
     path("elections/<int:election_id>/results/", ElectionResultsView.as_view(), name="election-results"),
     path('candidates-for-position/', CandidatesForPositionView.as_view(), name='candidates-for-position'),
+
+    # Image upload
+    path("upload/image/", ImageUploadView.as_view(), name="image-upload"),
 
     # Public read-only viewsets (must come last)
     path("", include(router.urls)),
