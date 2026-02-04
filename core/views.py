@@ -1,4 +1,5 @@
 from io import BytesIO
+import logging
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -333,6 +334,8 @@ class ElectionManageView(APIView):
     """
 
     permission_classes = [IsStaffOrSuperUser]
+    
+    security_logger = logging.getLogger('security')
 
     def get(self, request):
         # Return all elections (active and inactive)
@@ -348,6 +351,10 @@ class ElectionManageView(APIView):
         print("Inside post")
         election_id = request.data.get("election_id")
         is_active = request.data.get("is_active")
+        
+        # Get client IP and user for logging
+        client_ip = request.META.get('REMOTE_ADDR')
+        user = request.user
 
         if election_id is None:
             return Response(
@@ -373,6 +380,13 @@ class ElectionManageView(APIView):
             # Students are scoped by election_id, so no vote mixing occurs
             election.is_active = bool(is_active)
             election.save(update_fields=["is_active"])
+            
+            # Log election status change
+            action = "STARTED" if bool(is_active) else "STOPPED"
+            self.security_logger.info(
+                f"ELECTION_{action}: election_id={election_id}, election_name={election.name}, "
+                f"user={user.username if user else 'unknown'}, ip={client_ip}"
+            )
 
         return Response(
             {"detail": "Election status updated.", "id": election.pk, "is_active": election.is_active},
@@ -387,8 +401,24 @@ class MultiVoteView(APIView):
     """
     authentication_classes = [VoterAuthentication]
     permission_classes = [IsAuthenticated]
-
+    
+    security_logger = logging.getLogger('security')
+    
     def post(self, request):
+        # Apply rate limiting only in production
+        from django.conf import settings
+        if getattr(settings, 'RATE_LIMITING_ENABLED', False):
+            from django_ratelimit.decorators import ratelimit
+            from django.utils.decorators import method_decorator
+            
+            @method_decorator(ratelimit(key='ip', rate='10/m', method='POST'))
+            def rate_limited_post(self, request):
+                return self._actual_post(request)
+            return rate_limited_post(self, request)
+        else:
+            return self._actual_post(request)
+    
+    def _actual_post(self, request):
         serializer = MultiVoteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -398,6 +428,15 @@ class MultiVoteView(APIView):
         token = getattr(request, "auth", None)
         if student_user is None or token is None:
             raise ParseError("Student authentication required via headers.")
+
+        # Get client IP for logging
+        client_ip = request.META.get('REMOTE_ADDR')
+        
+        # Log vote attempt
+        self.security_logger.info(
+            f"VOTE_ATTEMPT: student_id={student_user.student_id if student_user else 'unknown'}, "
+            f"ip={client_ip}, election_ids={[v['election'] for v in data['votes']]}"
+        )
 
         try:
             with transaction.atomic():
@@ -409,12 +448,18 @@ class MultiVoteView(APIView):
                 now = timezone.now()
 
                 if not getattr(student, "is_active", False):
+                    self.security_logger.warning(
+                        f"VOTE_DENIED_INACTIVE: student_id={student.student_id}, ip={client_ip}"
+                    )
                     return Response(
                         {"detail": "Student is not activated to vote."},
                         status=status.HTTP_403_FORBIDDEN,
                     )
 
                 if getattr(student, "has_voted", False):
+                    self.security_logger.warning(
+                        f"VOTE_DENIED_ALREADY_VOTED: student_id={student.student_id}, ip={client_ip}"
+                    )
                     return Response(
                         {"detail": "Student has already voted."},
                         status=status.HTTP_403_FORBIDDEN,
@@ -507,6 +552,12 @@ class MultiVoteView(APIView):
                 student.has_voted = True
                 student.is_active = False
                 student.save(update_fields=["has_voted", "is_active"])
+                
+                # Log successful vote
+                self.security_logger.info(
+                    f"VOTE_SUCCESS: student_id={student.student_id}, ip={client_ip}, "
+                    f"votes_count={len(votes_to_create)}, election_ids={[v.election_id for v in votes_to_create]}"
+                )
 
         except Student.DoesNotExist:
             return Response(
@@ -542,12 +593,39 @@ class StudentActivationView(APIView):
     Accepts JSON: { "student_id": "S12345", "election_id": 1, "is_active": true }
     """
     permission_classes = [IsActivatorOrSuperUser]
-
+    
+    security_logger = logging.getLogger('security')
+    
     def post(self, request):
+        # Apply rate limiting only in production
+        from django.conf import settings
+        if getattr(settings, 'RATE_LIMITING_ENABLED', False):
+            from django_ratelimit.decorators import ratelimit
+            from django.utils.decorators import method_decorator
+            
+            @method_decorator(ratelimit(key='ip', rate='11/m', method='POST'))
+            def rate_limited_post(self, request):
+                return self._actual_post(request)
+            return rate_limited_post(self, request)
+        else:
+            return self._actual_post(request)
+    
+    def _actual_post(self, request):
         print("INSIDE ACTIVATION VIEW - POST CALLED")  # ← add this
         print(request.path, request.method)
+        
+        # Get client IP and user for logging
+        client_ip = request.META.get('REMOTE_ADDR')
+        user = request.user
+        
         student_id = request.data.get("student_id")
         election_id = request.data.get("election_id")
+        
+        # Log activation attempt
+        self.security_logger.info(
+            f"ACTIVATION_ATTEMPT: student_id={student_id}, election_id={election_id}, "
+            f"user={user.username if user else 'unknown'}, ip={client_ip}"
+        )
         
         if not student_id:
             return Response(
@@ -590,6 +668,10 @@ class StudentActivationView(APIView):
 
         # Check if student has already voted (cannot be activated if voted)
         if student.has_voted:
+            self.security_logger.warning(
+                f"ACTIVATION_DENIED_VOTED: student_id={student_id}, election_id={election_id}, "
+                f"user={user.username if user else 'unknown'}, ip={client_ip}"
+            )
             return Response(
                 {"detail": "Student has already voted and cannot be re-activated."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -609,6 +691,13 @@ class StudentActivationView(APIView):
         # Only toggle the is_active flag
         student.is_active = new_status
         student.save(update_fields=["is_active"])
+        
+        # Log successful activation/deactivation
+        action = "ACTIVATED" if new_status else "DEACTIVATED"
+        self.security_logger.info(
+            f"STUDENT_{action}: student_id={student_id}, election_id={election_id}, "
+            f"user={user.username if user else 'unknown'}, ip={client_ip}"
+        )
 
         status_text = "activated" if new_status else "deactivated"
         return Response(
@@ -635,9 +724,33 @@ class StudentVoterLoginView(APIView):
     Generate HMAC token for active students who haven't voted yet.
     """
     permission_classes = [AllowAny]
-
+    
+    security_logger = logging.getLogger('security')
+    
     def post(self, request):
+        # Apply rate limiting only in production
+        from django.conf import settings
+        if getattr(settings, 'RATE_LIMITING_ENABLED', False):
+            from django_ratelimit.decorators import ratelimit
+            from django.utils.decorators import method_decorator
+            
+            @method_decorator(ratelimit(key='ip', rate='5/m', method='POST'))
+            def rate_limited_post(self, request):
+                return self._actual_post(request)
+            return rate_limited_post(self, request)
+        else:
+            return self._actual_post(request)
+    
+    def _actual_post(self, request):
         student_id = request.data.get("student_id")
+        
+        # Get client IP for logging
+        client_ip = request.META.get('REMOTE_ADDR')
+        
+        # Log login attempt
+        self.security_logger.info(
+            f"LOGIN_ATTEMPT: student_id={student_id}, ip={client_ip}"
+        )
 
         if not student_id:
             return Response(
@@ -680,15 +793,24 @@ class StudentVoterLoginView(APIView):
             
             if existing_student:
                 if existing_student.has_voted:
+                    self.security_logger.warning(
+                        f"LOGIN_DENIED_VOTED: student_id={student_id}, ip={client_ip}"
+                    )
                     return Response(
                         {"detail": "Student has already voted."},
                         status=status.HTTP_409_CONFLICT,
                     )
                 else:
+                    self.security_logger.warning(
+                        f"LOGIN_DENIED_INACTIVE: student_id={student_id}, ip={client_ip}"
+                    )
                     return Response(
                         {"detail": "Student is not activated to vote."},
                         status=status.HTTP_403_FORBIDDEN,
                     )
+            self.security_logger.warning(
+                f"LOGIN_NOT_FOUND: student_id={student_id}, ip={client_ip}"
+            )
             return Response(
                 {"detail": "Student not found in any active election."},
                 status=status.HTTP_404_NOT_FOUND,
@@ -702,6 +824,11 @@ class StudentVoterLoginView(APIView):
 
         # Generate HMAC token (include election_id to scope the token)
         token = generate_voter_hmac(f"{student.student_id}_{active_election.id}")
+        
+        # Log successful login
+        self.security_logger.info(
+            f"LOGIN_SUCCESS: student_id={student.student_id}, election_id={active_election.id}, ip={client_ip}"
+        )
 
         return Response({
             "token": token,

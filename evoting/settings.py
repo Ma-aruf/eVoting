@@ -47,7 +47,9 @@ def get_env(key, default=None, cast=None):
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = get_env('DJANGO_SECRETE_KEY', 'a=84(-blt_b=$hn)-d1qcuh0*cd!13!92c0)(vy37^(9amds^x')
+SECRET_KEY = get_env('DJANGO_SECRET_KEY')
+if not SECRET_KEY:
+    raise ValueError("No DJANGO_SECRET_KEY set for production")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = get_env('DEBUG', default=False, cast=bool)
@@ -56,25 +58,42 @@ DEBUG = get_env('DEBUG', default=False, cast=bool)
 if get_env("RAILWAY_ENVIRONMENT") or get_env("RAILWAY_PUBLIC_DOMAIN"):
     DEBUG = False
 
-# Start with wildcard so everything works by default
-ALLOWED_HOSTS = ["*"]
-
-# Always allow localhost for local dev / health checks
-ALLOWED_HOSTS += ["localhost", "127.0.0.1", "0.0.0.0"]
-
-# Add Railway-specific domains if running in Railway
-if get_env("RAILWAY_ENVIRONMENT"):
+# Production security settings
+if not DEBUG:
+    # Security middleware settings for production
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_BROWSER_XSS_FILTER = True
+    X_FRAME_OPTIONS = 'DENY'
+    
+    # Restrict ALLOWED_HOSTS in production
+    ALLOWED_HOSTS = []
+    
+    # Add Railway domain
     railway_domain = get_env("RAILWAY_PUBLIC_DOMAIN")
-    if railway_domain and "*" not in ALLOWED_HOSTS:
+    if railway_domain:
         ALLOWED_HOSTS.extend([
             railway_domain,
             f"*.{railway_domain}",
         ])
-
-
-# Remove duplicates while preserving order
-seen = set()
-ALLOWED_HOSTS = [host for host in ALLOWED_HOSTS if not (host in seen or seen.add(host))]
+    
+    # Add any custom domains
+    custom_domains = get_env('ALLOWED_DOMAINS', '')
+    if custom_domains:
+        ALLOWED_HOSTS.extend([domain.strip() for domain in custom_domains.split(',')])
+    
+    # Always allow localhost for health checks
+    ALLOWED_HOSTS.extend(["localhost", "127.0.0.1", "0.0.0.0"])
+    
+    # Remove duplicates while preserving order
+    seen = set()
+    ALLOWED_HOSTS = [host for host in ALLOWED_HOSTS if not (host in seen or seen.add(host))]
+else:
+    # Development: Allow all hosts
+    ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
@@ -158,6 +177,34 @@ else:
             'HOST': get_env('HOST'),
         }
     }
+
+# Cache configuration for rate limiting
+if get_env('REDIS_URL') and not DEBUG:
+    # Production: Use Redis from environment (Railway, Upstash, etc.) with rate limiting
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': get_env('REDIS_URL'),
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            }
+        }
+    }
+    RATE_LIMITING_ENABLED = True
+    # Add django-ratelimit to installed apps only when enabled
+    if 'django_ratelimit' not in INSTALLED_APPS:
+        INSTALLED_APPS.append('django_ratelimit')
+else:
+    # Development: Use DummyCache (no rate limiting)
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.dummy.DummyCache',
+        }
+    }
+    RATE_LIMITING_ENABLED = False
+    # Remove django-ratelimit from installed apps when not enabled
+    if 'django_ratelimit' in INSTALLED_APPS:
+        INSTALLED_APPS.remove('django_ratelimit')
 
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = True
@@ -259,7 +306,9 @@ INSTALLED_APPS += ["rest_framework_simplejwt.token_blacklist"]
 
 AUTH_USER_MODEL = "core.User"
 
-VOTER_HMAC_KEY = "(d8b_zo+lzonkd*y%rq_@u^d!htd55p$k))&@+i)f@owwio&!)"
+VOTER_HMAC_KEY = get_env('VOTER_HMAC_KEY')
+if not VOTER_HMAC_KEY:
+    raise ValueError("No VOTER_HMAC_KEY set for production")
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -295,6 +344,52 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 
 USE_TZ = True
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'security': {
+            'format': '{levelname} {asctime} {ip} {user} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'file': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': 'django.log',
+            'formatter': 'verbose',
+        },
+        'security_file': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': 'security.log',
+            'formatter': 'security',
+        },
+        'console': {
+            'level': 'INFO',
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['file', 'console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'security': {
+            'handlers': ['security_file', 'console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/

@@ -410,7 +410,7 @@ export default function VotingPage() {
                                             <button
                                                 onClick={handleSubmitVotes}
                                                 disabled={submitting || selectedCount !== positions.length}
-                                                className="w-full sm:w-auto px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg disabled:opacity-60 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
+                                                className="w-full sm:w-auto gentle-attention  px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg disabled:opacity-60 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
                                             >
                                                 {submitting ? (
                                                     <>

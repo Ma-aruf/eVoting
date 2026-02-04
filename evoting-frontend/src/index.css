@@ -29,3 +29,18 @@
   animation: scale-up 0.3s ease-out;
 }
 
+
+/*shakes submit votes button to call attention*/
+@keyframes gentle-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-2px); }
+  40% { transform: translateX(2px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+}
+
+.gentle-attention {
+  animation: gentle-shake 0.6s ease-in-out 15;
+}
+
+
