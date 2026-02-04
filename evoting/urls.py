@@ -32,7 +32,6 @@ def health_check(request):
 urlpatterns = [
     path('', health_check, name='health_check'),
     path('test/', lambda request: JsonResponse({"message": "Django is working!"}), name='test'),
-    # path('create-superuser/', create_superuser_view, name='create-superuser'),
     path('admin/', admin.site.urls),
     path("api/", include("core.urls")),
 
