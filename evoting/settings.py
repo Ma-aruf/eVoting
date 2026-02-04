@@ -85,7 +85,7 @@ if not DEBUG:
     if custom_domains:
         ALLOWED_HOSTS.extend([domain.strip() for domain in custom_domains.split(',')])
     
-    # Always allow localhost for health checks
+    # Always allow localhost and Railway health checks
     ALLOWED_HOSTS.extend(["localhost", "127.0.0.1", "0.0.0.0"])
     
     # Remove duplicates while preserving order
