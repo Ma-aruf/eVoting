@@ -86,7 +86,7 @@ if not DEBUG:
         ALLOWED_HOSTS.extend([domain.strip() for domain in custom_domains.split(',')])
     
     # Always allow localhost and Railway health checks
-    ALLOWED_HOSTS.extend(["localhost", "127.0.0.1", "0.0.0.0"])
+    ALLOWED_HOSTS.extend(["localhost", "127.0.0.1", "0.0.0.0", "healthcheck.railway.app"])
     
     # Remove duplicates while preserving order
     seen = set()
