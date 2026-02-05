@@ -61,7 +61,7 @@ if get_env("RAILWAY_ENVIRONMENT") or get_env("RAILWAY_PUBLIC_DOMAIN"):
 # Production security settings
 if not DEBUG:
     # Security middleware settings for production
-    SECURE_SSL_REDIRECT = True
+    # SECURE_SSL_REDIRECT = True
     SECURE_HSTS_SECONDS = 31536000  # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
