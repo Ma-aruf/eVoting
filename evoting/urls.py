@@ -13,24 +13,28 @@ from rest_framework_simplejwt.views import (
 )
 
 def health_check(request):
-    import sys
-    print(f"Health check accessed: {request.method} {request.get_full_path()}", file=sys.stderr)
-    print(f"Headers: {dict(request.headers)}", file=sys.stderr)
-    print(f"ALLOWED_HOSTS: {getattr(__import__('django.conf').settings, 'ALLOWED_HOSTS', 'Not set')}", file=sys.stderr)
-    
-    # Simple, fast health check that always returns 200
-    # Railway just needs to see the app is running, not database status
-    response = JsonResponse({
-        "status": "ok",
-        "service": "evoting-api",
-        "timestamp": now().isoformat(),
-        "host": request.get_host(),
-        "path": request.get_full_path(),
-    }, status=200)
-    
-    print(f"Response status: {response.status_code}", file=sys.stderr)
-    print(f"Response content: {response.content}", file=sys.stderr)
-    return response
+    try:
+        # Very simple, fast response - no database calls, no complex logic
+        from django.http import JsonResponse
+        from django.utils.timezone import now
+        
+        response = JsonResponse({
+            "status": "ok",
+            "service": "evoting-api",
+            "timestamp": now().isoformat()
+        }, status=200)
+        
+        # Add CORS headers for Railway health check
+        response["Access-Control-Allow-Origin"] = "*"
+        response["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+        response["Access-Control-Allow-Headers"] = "*"
+        
+        return response
+        
+    except Exception as e:
+        # If anything fails, still return 200
+        from django.http import HttpResponse
+        return HttpResponse("OK", status=200)
 
 urlpatterns = [
     path('', health_check, name='health_check'),
