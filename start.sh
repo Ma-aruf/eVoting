@@ -21,11 +21,11 @@ echo "DATABASE_URL: ${DATABASE_URL:0:20}..."
 echo "PGHOST: $PGHOST"
 echo "PGDATABASE: $PGDATABASE"
 
-# Wait a bit for database to be ready
+# Wait longer for database to be ready
 echo "Waiting for database to be ready..."
-sleep 3
+sleep 5  # Increase from 3
 
-# Test database connection with a simple approach
+# Test database connection
 echo "Testing database connection..."
 python manage.py check --database default
 
@@ -39,8 +39,10 @@ if [ $? -eq 0 ]; then
     echo "Collecting static files..."
     python manage.py collectstatic --noinput
 
+    # Extra sleep to ensure everything is settled
+    sleep 2
+
     echo "Starting Gunicorn on port $PORT..."
-    # Start Gunicorn with the Railway PORT
     exec gunicorn evoting.wsgi:application \
         --bind 0.0.0.0:$PORT \
         --workers 1 \
@@ -50,9 +52,8 @@ if [ $? -eq 0 ]; then
         --error-logfile -
 else
     echo "Database connection failed, but proceeding anyway..."
-    echo "Starting Gunicorn..."
-    # Give extra time for everything to be ready
-    sleep 5
+    # Give extra time
+    sleep 10  # Increase from 5
     echo "PORT: $PORT"
     exec gunicorn evoting.wsgi:application --bind 0.0.0.0:${PORT:-8080} --workers 1 --timeout 120 --log-level debug --access-logfile - --error-logfile -
 fi
