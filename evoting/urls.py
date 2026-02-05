@@ -37,8 +37,9 @@ def health_check(request):
         return HttpResponse("OK", status=200)
 
 urlpatterns = [
+    # Simple health check for Railway
+    path('test/', lambda request: JsonResponse({"status": "healthy", "service": "evoting"}), name='test'),
     path('', health_check, name='health_check'),
-    path('test/', lambda request: JsonResponse({"message": "Django is working!"}), name='test'),
     path('admin/', admin.site.urls),
     path("api/", include("core.urls")),
 
