@@ -1,5 +1,6 @@
 from io import BytesIO
 import logging
+import sys
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -730,6 +731,9 @@ class StudentVoterLoginView(APIView):
     def post(self, request):
         # Apply rate limiting only in production
         from django.conf import settings
+        print(f"DEBUG: RATE_LIMITING_ENABLED = {getattr(settings, 'RATE_LIMITING_ENABLED', 'NOT_SET')}", file=sys.stderr)
+        print(f"DEBUG: REDIS_URL = {getattr(settings, 'CACHES', {}).get('default', {}).get('LOCATION', 'NOT_SET')}", file=sys.stderr)
+        
         if getattr(settings, 'RATE_LIMITING_ENABLED', False):
             from django_ratelimit.decorators import ratelimit
             from django.utils.decorators import method_decorator
