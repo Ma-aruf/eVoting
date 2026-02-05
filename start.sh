@@ -50,12 +50,9 @@ if [ $? -eq 0 ]; then
         --error-logfile -
 else
     echo "Database connection failed, but proceeding anyway..."
-    echo "Starting Gunicorn without migrations..."
-    exec gunicorn evoting.wsgi:application \
-        --bind 0.0.0.0:$PORT \
-        --workers 1 \
-        --timeout 120 \
-        --log-level debug \
-        --access-logfile - \
-        --error-logfile -
+    echo "Starting Gunicorn..."
+    # Give extra time for everything to be ready
+    sleep 5
+    echo "PORT: $PORT"
+    exec gunicorn evoting.wsgi:application --bind 0.0.0.0:${PORT:-8080} --workers 1 --timeout 120 --log-level debug --access-logfile - --error-logfile -
 fi
