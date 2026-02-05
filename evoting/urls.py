@@ -17,19 +17,11 @@ from rest_framework_simplejwt.views import (
 @csrf_exempt
 def health_check(request):
     """ health check endpoint that returns 200 OK"""
-    import sys
-    print(f"HEALTH CHECK HIT: {request.method} {request.get_full_path()}", file=sys.stderr)
-    print(f"HEADERS: {dict(request.headers)}", file=sys.stderr)
-    print(f"ALLOWED_HOSTS: {getattr(__import__('django.conf').settings, 'ALLOWED_HOSTS', 'Not set')}", file=sys.stderr)
-    
-    response = JsonResponse({
+    return JsonResponse({
         "status": "ok",
         "service": "evoting-api",
         "timestamp": now().isoformat()
     })
-    
-    print(f"RESPONSE: {response.status_code}", file=sys.stderr)
-    return response
 
 urlpatterns = [
     # Simple health check for Railway

@@ -1,10 +1,9 @@
 [deploy]
 startCommand = "bash start.sh"
-healthcheckPath = "/"
+healthcheckPath = "api/health/"
 healthcheckTimeout = 10
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
-port = 8080
 
 [build]
 builder = "NIXPACKS"
