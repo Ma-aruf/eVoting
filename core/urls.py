@@ -38,9 +38,13 @@ def healthcheck(request):
     return HttpResponse("OK")
 
 
+def healthz(request):
+    return HttpResponse("OK")
+
 
 urlpatterns = [
     path("health/", healthcheck),
+    path("healthz/", healthz),
     # Voter authentication
     path("voter/login/", StudentVoterLoginView.as_view(), name="voter-login"),
 
