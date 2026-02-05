@@ -3,6 +3,10 @@
 
 echo "Starting Django application..."
 
+# Set default port if not provided (Railway provides PORT)
+PORT=${PORT:-8080}
+echo "Using PORT: $PORT"
+
 # Check if DATABASE_URL is set
 if [ -z "$DATABASE_URL" ]; then
     echo "WARNING: DATABASE_URL not set, checking for PG* variables..."
@@ -19,7 +23,7 @@ echo "PGDATABASE: $PGDATABASE"
 
 # Wait a bit for database to be ready
 echo "Waiting for database to be ready..."
-sleep 10
+sleep 3
 
 # Test database connection with a simple approach
 echo "Testing database connection..."
@@ -35,12 +39,29 @@ if [ $? -eq 0 ]; then
     echo "Collecting static files..."
     python manage.py collectstatic --noinput
 
-    echo "Starting Gunicorn..."
-    # Give extra time for everything to be ready
-    sleep 5
-    exec gunicorn evoting.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --timeout 120 --log-level debug
+    echo "Starting Gunicorn on port $PORT..."
+    # Start Gunicorn with the Railway PORT
+    exec gunicorn evoting.wsgi:application \
+        --bind 0.0.0.0:$PORT \
+        --workers 1 \
+        --timeout 120 \
+        --log-level debug \
+        --access-logfile - \
+        --error-logfile -
 else
     echo "Database connection failed, but proceeding anyway..."
     echo "Starting Gunicorn without migrations..."
-    exec gunicorn evoting.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --timeout 120 --log-level debug
+    exec gunicorn evoting.wsgi:application \
+        --bind 0.0.0.0:$PORT \
+        --workers 1 \
+        --timeout 120 \
+        --log-level debug \
+        --access-logfile - \
+        --error-logfile -
 fi
+
+echo "=== DEBUG INFO ==="
+echo "PORT variable: $PORT"
+echo "All environment variables:"
+env
+echo "=== END DEBUG ==="
