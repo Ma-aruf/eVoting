@@ -356,9 +356,9 @@ LOGGING = {
             'style': '{',
         },
         'security': {
-            'format': '{levelname} {asctime} {ip} {user} {message}',
-            'style': '{',
-        },
+                'format': '{levelname} {asctime} {message}',
+                'style': '{',
+            },
     },
     'handlers': {
         'file': {
