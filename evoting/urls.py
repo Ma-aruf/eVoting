@@ -24,9 +24,12 @@ def health_check(request):
         "status": "ok",
         "service": "evoting-api",
         "timestamp": now().isoformat(),
+        "host": request.get_host(),
+        "path": request.get_full_path(),
     }, status=200)
     
     print(f"Response status: {response.status_code}", file=sys.stderr)
+    print(f"Response content: {response.content}", file=sys.stderr)
     return response
 
 urlpatterns = [
