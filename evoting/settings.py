@@ -85,6 +85,7 @@ if not DEBUG:
         ALLOWED_HOSTS.extend([
             railway_domain,
             f"*.{railway_domain}",
+            'healthcheck.railway.app',
         ])
     
     # Add any custom domains
@@ -96,8 +97,7 @@ if not DEBUG:
     ALLOWED_HOSTS.extend(["localhost", "127.0.0.1", "0.0.0.0", "healthcheck.railway.app", ""])
     
     # Remove duplicates while preserving order
-    seen = set()
-    ALLOWED_HOSTS = [host for host in ALLOWED_HOSTS if not (host in seen or seen.add(host))]
+    ALLOWED_HOSTS = list(dict.fromkeys(ALLOWED_HOSTS))  # preserves order, removes duplicates
 else:
     # Development: Allow all hosts
     ALLOWED_HOSTS = ["*"]
