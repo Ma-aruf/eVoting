@@ -31,11 +31,19 @@ router.register(r"candidates", CandidateViewSet, basename="candidate")
 router.register(r"users", UserViewSet, basename="user")
 
 
+# views.py
+from django.http import HttpResponse
+
+def healthcheck(request):
+    return HttpResponse("OK")
+
 
 
 urlpatterns = [
+    path("health/", healthcheck),
     # Voter authentication
     path("voter/login/", StudentVoterLoginView.as_view(), name="voter-login"),
+
 
     # Voting endpoint
     path("vote/", MultiVoteView.as_view(), name="multi-vote"),
