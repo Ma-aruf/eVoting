@@ -5,6 +5,8 @@ from django.http import JsonResponse
 from django.utils.timezone import now
 from django.conf import settings
 from django.conf.urls.static import static
+from django.views.decorators.csrf import csrf_exempt
+
 
 
 from rest_framework_simplejwt.views import (
@@ -12,33 +14,17 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
 )
 
+@csrf_exempt
 def health_check(request):
-    try:
-        # Very simple, fast response - no database calls, no complex logic
-        from django.http import JsonResponse
-        from django.utils.timezone import now
-        
-        response = JsonResponse({
-            "status": "ok",
-            "service": "evoting-api",
-            "timestamp": now().isoformat()
-        }, status=200)
-        
-        # Add CORS headers for Railway health check
-        response["Access-Control-Allow-Origin"] = "*"
-        response["Access-Control-Allow-Methods"] = "GET, OPTIONS"
-        response["Access-Control-Allow-Headers"] = "*"
-        
-        return response
-        
-    except Exception as e:
-        # If anything fails, still return 200
-        from django.http import HttpResponse
-        return HttpResponse("OK", status=200)
+    """ health check endpoint that returns 200 OK"""
+    return JsonResponse({
+        "status": "ok",
+        "service": "evoting-api",
+        "timestamp": now().isoformat()
+    })
 
 urlpatterns = [
     # Simple health check for Railway
-    path('test/', lambda request: JsonResponse({"status": "healthy", "service": "evoting"}), name='test'),
     path('', health_check, name='health_check'),
     path('admin/', admin.site.urls),
     path("api/", include("core.urls")),
