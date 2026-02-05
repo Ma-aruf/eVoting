@@ -59,9 +59,3 @@ else
         --access-logfile - \
         --error-logfile -
 fi
-
-echo "=== DEBUG INFO ==="
-echo "PORT variable: $PORT"
-echo "All environment variables:"
-env
-echo "=== END DEBUG ==="
