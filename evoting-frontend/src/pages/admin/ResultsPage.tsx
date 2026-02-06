@@ -114,7 +114,7 @@ export default function ResultsPage() {
                 <div className="flex w-full md:w-auto items-center">
                     <button
                         onClick={exportToCSV}
-                        className="w-full md:w-auto px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg flex items-center justify-center transition"
+                        className="w-full md:w-auto px-4 py-2 bg-blue-300 hover:bg-green-600 text-black/70 text-sm font-medium rounded-lg flex items-center justify-center transition"
                     >
                         <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -168,7 +168,7 @@ export default function ResultsPage() {
                                 className="bg-blue-400 rounded-xl px-4 p-2 h-20 text-black">
                                 <p className="text-xs uppercase tracking-wide text-black mb-1">Election</p>
                                 <p className="text-xs text font-semibold">{results.election_name}</p>
-                                <p className="text-sm text-green-700">{results.year}</p>
+                                <p className="text-sm font-bold mt-2 text-gray-200">{results.year}</p>
                             </div>
 
                             <div
@@ -195,11 +195,11 @@ export default function ResultsPage() {
                         {currentPosition && (
                             <section className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                                 {/* Position Header */}
-                                <div className="px-3 py-1 bg-gray-200 rounded-t-xl">
+                                <div className="px-3 py-1 bg-blue-100/50  rounded-t-xl">
                                     <div className="flex flex-col md:flex-row md:items-center md:justify-between">
                                         <div>
-                                            <p className="text-blue-200 text-sm">Position {currentPositionIndex + 1} of {results.positions.length}</p>
-                                            <h3 className="text-2xl font-bold text-white">{currentPosition.position_name}</h3>
+                                            <p className="text-black text-sm">Position {currentPositionIndex + 1} of {results.positions.length}</p>
+                                            <h3 className="text-2xl font-bold text-black/90">{currentPosition.position_name}</h3>
                                         </div>
                                         {results.positions.length > 0 && (
                                             <div
@@ -207,7 +207,7 @@ export default function ResultsPage() {
                                                 <button
                                                     onClick={() => setCurrentPositionIndex(prev => Math.max(0, prev - 1))}
                                                     disabled={currentPositionIndex === 0}
-                                                    className="flex w-full sm:w-auto justify-center items-center gap-2 px-1 py-2 bg-green-600 hover:bg-green-700 text-black rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed transition"
+                                                    className="flex w-full sm:w-auto justify-center items-center gap-2 px-1 py-2 bg-blue-500 hover:bg-blue-600 text-black rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed transition"
                                                 >
                                                     <svg className="w-5 h-3" fill="none" stroke="currentColor"
                                                          viewBox="0 0 24 24">
@@ -223,7 +223,7 @@ export default function ResultsPage() {
                                                     onClick={() => setCurrentPositionIndex(prev => Math.min(results.positions.length - 1, prev + 1))}
                                                     disabled={currentPositionIndex === results.positions.length - 1}
                                                     className="flex w-full sm:w-auto justify-center items-center gap-2 px-1
-                                                py-2 bg-yellow-500 hover:bg-yellow-700 text-black text-xs rounded disabled:opacity-50 disabled:cursor-not-allowed transition"
+                                                py-2 bg-blue-400 hover:bg-blue-500 text-black text-xs rounded disabled:opacity-50 disabled:cursor-not-allowed transition"
                                                 >
                                                     Next
                                                     <svg className="w-5 h-3" fill="none" stroke="currentColor"
