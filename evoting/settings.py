@@ -216,6 +216,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5175",
     "http://127.0.0.1:5173",
+    "https://kasec-evoting.onrender.com",
     "https://kasec-evoting-7lkj.onrender.com"
 ]
 
@@ -250,6 +251,7 @@ CORS_ALLOW_HEADERS = [
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5175",
+    "https://kasec-evoting.onrender.com",
     "https://kasec-evoting-7lkj.onrender.com"
 ]
 
