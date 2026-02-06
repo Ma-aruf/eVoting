@@ -106,7 +106,7 @@ export default function ResultsPage() {
 
     return (
         <div className="space-y-6">
-            <header className="flex mt-0 flex-col md:flex-row md:items-end md:justify-between gap-4">
+            <header className="flex  mt-0 flex-col md:flex-row md:items-end md:justify-between gap-4">
                 <div>
                     <h1 className="text-xl font-semibold text-gray-900">Election Results</h1>
                 </div>
@@ -126,7 +126,7 @@ export default function ResultsPage() {
             </header>
 
             {/* Election Selector */}
-            <section className=" p-1 rounded ">
+            <section className="  p-1 rounded ">
                 <div className="flex flex-col  md:flex-row md:items-center md:justify-between gap-4">
                     <div>
                         <h2 className="font-medium text-gray-800">Select Election</h2>
@@ -165,27 +165,27 @@ export default function ResultsPage() {
                         {/* Election Summary - Colorful Cards */}
                         <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
                             <div
-                                className="bg-green-200 rounded-xl px-4 p-2 h-20 text-black/80">
+                                className="bg-blue-400 rounded-xl px-4 p-2 h-20 text-black">
                                 <p className="text-xs uppercase tracking-wide text-black mb-1">Election</p>
-                                <p className="text-lg text font-semibold">{results.election_name}</p>
+                                <p className="text-xs text font-semibold">{results.election_name}</p>
                                 <p className="text-sm text-green-700">{results.year}</p>
                             </div>
 
                             <div
-                                className="bg-cyan-300/50 rounded-xl px-4 p-2 h-20  text-black/70">
-                                <p className="text-xs uppercase tracking-wide text-black/80 mb-1">Total Voters</p>
+                                className="bg-blue-400/70 rounded-xl px-4 p-2 h-20  text-black/70">
+                                <p className="text-xs uppercase tracking-wide text-black mb-1">Total Voters</p>
                                 <p className="text-3xl font-bold">{results.total_voters.toLocaleString()}</p>
                             </div>
 
                             <div
-                                className="bg-emerald-600/50 rounded-xl px-4 p-2 h-20  text-black/60">
+                                className="bg-blue-400/50 rounded-xl px-4 p-2 h-20  text-black">
                                 <p className="text-xs uppercase tracking-wide text-black-50 mb-1">Voters Voted</p>
                                 <p className="text-3xl font-bold">{results.voters_voted.toLocaleString()}</p>
                             </div>
 
                             <div
-                                className="bg-purple-300 rounded-xl px-4 p-2 h-20  text-black/60">
-                                <p className="text-xs uppercase tracking-wide text-black/50 mb-1">Turnout</p>
+                                className="bg-blue-400/30 rounded-xl px-4 p-2 h-20  text-black">
+                                <p className="text-xs uppercase tracking-wide text-black mb-1">Turnout</p>
                                 <p className="text-3xl font-bold">{results.voter_turnout.toFixed(1)}%</p>
                             </div>
                         </section>
@@ -195,7 +195,7 @@ export default function ResultsPage() {
                         {currentPosition && (
                             <section className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                                 {/* Position Header */}
-                                <div className="px-3 py-1 bg-blue-400 rounded-t-xl">
+                                <div className="px-3 py-1 bg-gray-200 rounded-t-xl">
                                     <div className="flex flex-col md:flex-row md:items-center md:justify-between">
                                         <div>
                                             <p className="text-blue-200 text-sm">Position {currentPositionIndex + 1} of {results.positions.length}</p>
