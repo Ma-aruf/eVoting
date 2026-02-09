@@ -180,8 +180,7 @@ export default function StudentLoginPage() {
 
                     {/* Footer */}
                     <p className="text-center text-xs text-gray-400 mt-16">
-                        Hi There
-                        {/*2026 eVoting System. Donated by <strong className="text-black">Kasec Old Students' Association.</strong>*/}
+                        2026 eVoting System. Donated by <strong className="text-black">Kasec Old Students' Association.</strong>
                     </p>
                 </div>
             </div>
