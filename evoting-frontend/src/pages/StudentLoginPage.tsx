@@ -1,12 +1,14 @@
 import {type FormEvent, useState} from 'react';
+import {useQueryClient} from '@tanstack/react-query';
 import {FiArrowRight, FiUser} from 'react-icons/fi';
-import {useNavigate} from 'react-router-dom';
+import {useLocation, useNavigate} from 'react-router-dom';
 import api from '../apiConfig.ts';
 import AuthLayout from '../components/AuthLayout';
 import Alert from '../components/ui/Alert';
 import Button from '../components/ui/Button';
 import FormField from '../components/ui/FormField';
 import TextInput from '../components/ui/TextInput';
+import {clearVoterSession} from '../api/voterApi';
 
 type ApiError = {response?: {status?: number; data?: {detail?: string}}};
 
@@ -23,13 +25,19 @@ function getVoterLoginError(error: unknown) {
 export default function StudentLoginPage() {
     const [studentId, setStudentId] = useState('');
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const location = useLocation();
+    const [error, setError] = useState<string | null>(
+        (location.state as {message?: string} | null)?.message ?? null
+    );
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
 
     const handleSubmit = async (event: FormEvent) => {
         event.preventDefault();
         setError(null);
         setLoading(true);
+        clearVoterSession();
+        queryClient.removeQueries({queryKey: ['votingData']});
         try {
             const submittedStudentId = studentId.trim();
             const response = await api.post('api/voter/login/', {student_id: submittedStudentId});

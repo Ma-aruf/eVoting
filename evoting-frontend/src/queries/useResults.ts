@@ -9,6 +9,7 @@ export interface CandidateResult {
     photo_url?: string;
     vote_count: number;
     percentage: number;
+    ballot_number?: number;
 }
 
 export interface PositionResult {
@@ -16,6 +17,7 @@ export interface PositionResult {
     position_name: string;
     display_order: number;
     total_votes: number;
+    total_valid_votes?: number;
     skipped_votes: number;
     skipped_percentage: number;
     candidates: CandidateResult[];
@@ -31,9 +33,12 @@ export interface ElectionResult {
     positions: PositionResult[];
 }
 
-export const useResults = (electionId: number | null) => {
+export const useResults = (electionId: number | null, options?: {live?: boolean; userId?: string | null}) => {
+    const live = options?.live ?? false;
     return useQuery({
-        queryKey: queryKeys.results(electionId),
+        queryKey: live
+            ? queryKeys.liveResults(options?.userId ?? null, electionId)
+            : queryKeys.results(electionId),
         queryFn: async (): Promise<ElectionResult | null> => {
             if (!electionId) return null;
             
@@ -53,6 +58,7 @@ export const useResults = (electionId: number | null) => {
                     position_name: pos.position_name,
                     display_order: pos.display_order,
                     total_votes: pos.total_valid_votes + pos.skipped_votes,
+                    total_valid_votes: pos.total_valid_votes,
                     skipped_votes: pos.skipped_votes,
                     skipped_percentage: pos.skip_percentage,
                     candidates: pos.candidates.map((cand: any) => ({
@@ -61,7 +67,8 @@ export const useResults = (electionId: number | null) => {
                         candidate_name: cand.candidate_name,
                         photo_url: cand.photo_url || undefined,
                         vote_count: cand.vote_count,
-                        percentage: cand.percentage
+                        percentage: cand.percentage,
+                        ballot_number: cand.ballot_number
                     }))
                 }))
             };
@@ -69,7 +76,9 @@ export const useResults = (electionId: number | null) => {
             return finalResult;
         },
         enabled: !!electionId,
-        staleTime: 30 * 1000, // 30 seconds
-        refetchInterval: 60 * 1000, // Auto-refresh every minute
+        staleTime: live ? 0 : 30 * 1000,
+        refetchInterval: live ? 3000 : 60 * 1000,
+        refetchIntervalInBackground: live,
+        refetchOnWindowFocus: true,
     });
 };

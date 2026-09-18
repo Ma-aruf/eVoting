@@ -1,22 +1,42 @@
 import {useEffect, useState} from 'react';
+import {
+    FiAward,
+    FiBarChart2,
+    FiChevronLeft,
+    FiChevronRight,
+    FiClipboard,
+    FiDownload,
+    FiMonitor,
+    FiRefreshCw,
+    FiUsers
+} from 'react-icons/fi';
+import StatisticCard from '../../components/StatisticCard';
 import {useElections} from '../../queries/useElections';
+import {useAuth} from '../../hooks/useAuth';
 import {useResults} from '../../queries/useResults';
 import {showError} from '../../utils/toast';
+import {useNavigate} from 'react-router-dom';
 
 export default function ResultsPage() {
+    const navigate = useNavigate();
+    const {user} = useAuth();
+    const isScopedRole = user?.role === 'staff' || user?.role === 'activator';
     const [currentPositionIndex, setCurrentPositionIndex] = useState(0);
     const [selectedElectionId, setSelectedElectionId] = useState<number | null>(null);
 
     // Queries
     const {data: elections = [], isLoading: electionsLoading} = useElections();
-    const {data: results, isLoading: resultsLoading, error: resultsError} = useResults(selectedElectionId);
+    const effectiveElectionId = isScopedRole
+        ? user?.assignedElection?.id ?? null
+        : selectedElectionId;
+    const {data: results, isLoading: resultsLoading, error: resultsError} = useResults(effectiveElectionId);
 
     // Combined loading state
     const loading = electionsLoading || resultsLoading;
 
     // Auto-select first election when data loads
     useEffect(() => {
-        if (elections.length > 0 && !selectedElectionId) {
+        if (!isScopedRole && elections.length > 0 && !selectedElectionId) {
             const active = elections.find(e => e.is_active);
             if (active) {
                 setSelectedElectionId(active.id);
@@ -24,7 +44,7 @@ export default function ResultsPage() {
                 setSelectedElectionId(elections[0].id);
             }
         }
-    }, [elections, selectedElectionId]);
+    }, [elections, isScopedRole, selectedElectionId]);
 
     // Reset position index when results change
     useEffect(() => {
@@ -105,49 +125,46 @@ export default function ResultsPage() {
     const currentPosition = results?.positions?.[currentPositionIndex];
 
     return (
-        <div className="space-y-6">
-            <header className="flex  mt-0 flex-col md:flex-row md:items-end md:justify-between gap-4">
-                <div>
-                    <h1 className="text-xl font-semibold text-gray-900">Election Results</h1>
-                </div>
-
-                <div className="flex w-full md:w-auto items-center">
+        <div className="results-page">
+            {/* Election Selector */}
+            <div className="results-election-context__inner">
+                {isScopedRole ? (
+                    <span className="results-election-select" aria-label="Assigned election">
+                        {elections.find(election => election.id === effectiveElectionId)?.name ?? 'Assigned election unavailable'}
+                    </span>
+                ) : <select
+                    value={selectedElectionId || ''}
+                    onChange={(e) => setSelectedElectionId(e.target.value ? Number(e.target.value) : null)}
+                    className="results-election-select"
+                    disabled={loading}
+                >
+                    <option value="">Select an election...</option>
+                    {elections.map((election) => (
+                        <option key={election.id} value={election.id}>
+                            {election.name} ({election.year})
+                        </option>
+                    ))}
+                </select>}
+                <div className="results-actions">
+                    {effectiveElectionId && (
+                        <button
+                            type="button"
+                            onClick={() => navigate(`/admin/live-results?election=${effectiveElectionId}`)}
+                            className="ui-button ui-button--primary"
+                        >
+                            <FiMonitor className="w-4 h-4 mr-2" aria-hidden="true"/>
+                            Live Results
+                        </button>
+                    )}
                     <button
                         onClick={exportToCSV}
-                        className="w-full md:w-auto px-4 py-2 bg-blue-300 hover:bg-green-600 text-black/70 text-sm font-medium rounded-lg flex items-center justify-center transition"
+                        className="ui-button ui-button--success"
                     >
-                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                  d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                        </svg>
+                        <FiDownload className="w-4 h-4 mr-2" aria-hidden="true"/>
                         Export CSV
                     </button>
                 </div>
-            </header>
-
-            {/* Election Selector */}
-            <section className="  p-1 rounded ">
-                <div className="flex flex-col  md:flex-row md:items-center md:justify-between gap-4">
-                    <div>
-                        <h2 className="font-medium text-gray-800">Select Election</h2>
-                        <p className="text-sm text-gray-500">Choose an election to view results</p>
-                    </div>
-
-                    <select
-                        value={selectedElectionId || ''}
-                        onChange={(e) => setSelectedElectionId(e.target.value ? Number(e.target.value) : null)}
-                        className="border border-gray-300 rounded-lg px-4 py-2.5 text-sm w-full md:min-w-[280px] md:w-auto focus:ring-1 focus:ring-blue-100 focus:border-blue-500"
-                        disabled={loading}
-                    >
-                        <option value="">Select an election...</option>
-                        {elections.map((election) => (
-                            <option key={election.id} value={election.id}>
-                                {election.name} ({election.year})
-                            </option>
-                        ))}
-                    </select>
-                </div>
-            </section>
+            </div>
 
             {/* Results Content */}
             <div className="relative">
@@ -162,76 +179,61 @@ export default function ResultsPage() {
                 )}
                 {results ? (
                     <div className="space-y-6">
-                        {/* Election Summary - Colorful Cards */}
-                        <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div
-                                className="bg-blue-400 rounded-xl px-4 p-2 h-20 text-black">
-                                <p className="text-xs uppercase tracking-wide text-black mb-1">Election</p>
-                                <p className="text-xs text font-semibold">{results.election_name}</p>
-                                <p className="text-sm font-bold mt-2 text-gray-200">{results.year}</p>
-                            </div>
-
-                            <div
-                                className="bg-blue-400/70 rounded-xl px-4 p-2 h-20  text-black/70">
-                                <p className="text-xs uppercase tracking-wide text-black mb-1">Total Voters</p>
-                                <p className="text-3xl font-bold">{results.total_voters.toLocaleString()}</p>
-                            </div>
-
-                            <div
-                                className="bg-blue-400/50 rounded-xl px-4 p-2 h-20  text-black">
-                                <p className="text-xs uppercase tracking-wide text-black-50 mb-1">Voters Voted</p>
-                                <p className="text-3xl font-bold">{results.voters_voted.toLocaleString()}</p>
-                            </div>
-
-                            <div
-                                className="bg-blue-400/30 rounded-xl px-4 p-2 h-20  text-black">
-                                <p className="text-xs uppercase tracking-wide text-black mb-1">Turnout</p>
-                                <p className="text-3xl font-bold">{results.voter_turnout.toFixed(1)}%</p>
-                            </div>
+                        {/* Election Summary */}
+                        <section className="results-summary-grid">
+                            <StatisticCard
+                                label="Total voters"
+                                value={results.total_voters.toLocaleString()}
+                                icon={<FiUsers/>}
+                                status="primary"
+                                layout="split"
+                            />
+                            <StatisticCard
+                                label="Voters voted"
+                                value={results.voters_voted.toLocaleString()}
+                                icon={<FiBarChart2/>}
+                                status="strong"
+                                layout="split"
+                            />
+                            <StatisticCard
+                                label="Turnout"
+                                value={`${results.voter_turnout.toFixed(1)}%`}
+                                icon={<FiBarChart2/>}
+                                status="success"
+                                layout="split"
+                            />
                         </section>
 
 
                         {/* Current Position Results */}
                         {currentPosition && (
-                            <section className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                            <section className="results-position-section">
                                 {/* Position Header */}
-                                <div className="px-3 py-1 bg-blue-100/50  rounded-t-xl">
-                                    <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+                                <div className="results-position-header">
+                                    <div className="results-position-header__inner">
                                         <div>
-                                            <p className="text-black text-sm">Position {currentPositionIndex + 1} of {results.positions.length}</p>
-                                            <h3 className="text-2xl font-bold text-black/90">{currentPosition.position_name}</h3>
+                                            <h3 className="text-sm font-semibold text-gray-900">{currentPosition.position_name}</h3>
                                         </div>
                                         {results.positions.length > 0 && (
                                             <div
-                                                className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-1 gap-3 rounded-xl p-0">
+                                                className="results-position-actions">
                                                 <button
                                                     onClick={() => setCurrentPositionIndex(prev => Math.max(0, prev - 1))}
                                                     disabled={currentPositionIndex === 0}
-                                                    className="flex w-full sm:w-auto justify-center items-center gap-2 px-1 py-2 bg-blue-500 hover:bg-blue-600 text-black rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed transition"
+                                                    className="ui-button ui-button--secondary"
                                                 >
-                                                    <svg className="w-5 h-3" fill="none" stroke="currentColor"
-                                                         viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round"
-                                                              strokeWidth={2}
-                                                              d="M15 19l-7-7 7-7"/>
-                                                    </svg>
-                                                    Previous
+                                                    <FiChevronLeft className="w-5 h-3" aria-hidden="true"/>
+                                                    Prev
                                                 </button>
 
 
                                                 <button
                                                     onClick={() => setCurrentPositionIndex(prev => Math.min(results.positions.length - 1, prev + 1))}
                                                     disabled={currentPositionIndex === results.positions.length - 1}
-                                                    className="flex w-full sm:w-auto justify-center items-center gap-2 px-1
-                                                py-2 bg-blue-400 hover:bg-blue-500 text-black text-xs rounded disabled:opacity-50 disabled:cursor-not-allowed transition"
+                                                    className="ui-button ui-button--primary"
                                                 >
                                                     Next
-                                                    <svg className="w-5 h-3" fill="none" stroke="currentColor"
-                                                         viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round"
-                                                              strokeWidth={2}
-                                                              d="M9 5l7 7-7 7"/>
-                                                    </svg>
+                                                    <FiChevronRight className="w-5 h-3" aria-hidden="true"/>
                                                 </button>
                                             </div>
                                         )}
@@ -240,12 +242,12 @@ export default function ResultsPage() {
                                 </div>
 
                                 {/* Candidate Cards */}
-                                <div className="p-5">
+                                <div className="results-candidate-area">
                                     <div className="flex justify-center">
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6  w-full">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
                                             {currentPosition.candidates.map((candidate) => {
                                                 const barWidth = candidate.percentage; // Use the actual percentage from data
-                                                
+
                                                 // Find highest percentage and check for ties
                                                 const percentages = currentPosition.candidates.map(c => c.percentage);
                                                 const highestPercentage = Math.max(...percentages);
@@ -256,28 +258,29 @@ export default function ResultsPage() {
                                                 return (
                                                     <div
                                                         key={candidate.id}
-                                                        className={`flex flex-col items-center p-2 rounded-lg transition-all ${
+                                                        className={`relative flex flex-col items-center p-2 rounded-none transition-all ${
                                                             isWinner
-                                                                ? 'bg-gradient-to-br from-yellow-100 to-amber-200 ring-2 ring-yellow-200 shadow-lg'
+                                                                ? 'bg-[#fffaf0] border border-[#d4af37] shadow-sm'
                                                                 : isRunOff
-                                                                ? 'bg-gradient-to-br from-emerald-50 to-green-100 ring-2 ring-green-400 shadow-lg'
-                                                                : 'bg-gray-50 border border-blue-200'
+                                                                    ? 'bg-green-50 border border-green-200 shadow-sm'
+                                                                    : 'bg-white border border-gray-200 shadow-sm'
                                                         }`}
                                                     >
                                                         {/* Winner/Run-off Badge */}
                                                         {isWinner && (
-                                                            <div className="mb-2">
                                                             <span
-                                                                className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-emerald-300 text-black">
-                                                                🏆 Winner
+                                                                className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#d4af37] text-white shadow-sm"
+                                                                title="Winner"
+                                                                aria-label="Winner"
+                                                            >
+                                                                <FiAward aria-hidden="true" />
                                                             </span>
-                                                            </div>
                                                         )}
                                                         {isRunOff && (
                                                             <div className="mb-2">
                                                             <span
                                                                 className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-600 text-white">
-                                                                🔄 Run Off
+                                                                <FiRefreshCw aria-hidden="true"/> Run Off
                                                             </span>
                                                             </div>
                                                         )}
@@ -285,7 +288,7 @@ export default function ResultsPage() {
                                                         {/* Candidate Photo */}
                                                         <div
                                                             className={`w-28 h-28 rounded-full overflow-hidden mb-4 flex items-center justify-center shadow-lg ${
-                                                                isWinner ? 'ring-4 ring-amber-300' : isRunOff ? 'ring-4 ring-green-400' : 'ring-4 ring-blue-200'
+                                                                isWinner ? 'ring-4 ring-[#d4af37]' : isRunOff ? 'ring-4 ring-green-400' : 'ring-4 ring-[#b8cbea]'
                                                             }`}>
                                                             {candidate.photo_url ? (
                                                                 <img
@@ -296,7 +299,7 @@ export default function ResultsPage() {
                                                             ) : (
                                                                 <div
                                                                     className="w-full h-full bg-cyan-700/80 flex items-center justify-center">
-                                                                <span className="text-4xl font-bold text-white">
+                                                                    <span className="text-2xl font-bold text-white">
                                                                     {candidate.candidate_name.charAt(0)}
                                                                 </span>
                                                                 </div>
@@ -304,17 +307,17 @@ export default function ResultsPage() {
                                                         </div>
 
                                                         {/* Candidate Name */}
-                                                        <h4 className="text-lg font-semibold text-gray-800 text-center mb-1">
+                                                        <h4 className="text-sm font-semibold text-gray-800 text-center mb-1">
                                                             {candidate.candidate_name}
                                                         </h4>
 
                                                         {/* Stats */}
                                                         <div className="w-full space-y-3">
                                                             <div className="flex justify-between items-center">
-                                                                <span className="text-sm text-gray-600">Votes</span>
+                                                                <span className="text-xs text-gray-600">Votes</span>
                                                                 <span
-                                                                    className={`text-2xl font-bold ${
-                                                                        isWinner ? 'text-amber-600' : isRunOff ? 'text-green-600' : 'text-blue-600'
+                                                                    className={`text-lg font-bold ${
+                                                                        isWinner ? 'text-[#b38728]' : isRunOff ? 'text-green-600' : 'text-[#1d4f91]'
                                                                     }`}>
                                                                 {candidate.vote_count.toLocaleString()}
                                                             </span>
@@ -322,10 +325,10 @@ export default function ResultsPage() {
 
                                                             <div className="flex justify-between items-center">
                                                                 <span
-                                                                    className="text-sm text-gray-600">Percentage</span>
+                                                                    className="text-xs text-gray-600">Percentage</span>
                                                                 <span
-                                                                    className={`text-lg font-semibold ${
-                                                                        isWinner ? 'text-amber-600' : isRunOff ? 'text-green-600' : 'text-blue-600'
+                                                                    className={`text-sm font-semibold ${
+                                                                        isWinner ? 'text-[#b38728]' : isRunOff ? 'text-green-600' : 'text-[#1d4f91]'
                                                                     }`}>
                                                                 {candidate.percentage.toFixed(1)}%
                                                             </span>
@@ -333,10 +336,11 @@ export default function ResultsPage() {
 
                                                             {/* Progress Bar */}
                                                             <div className="pt-2">
-                                                                <div className={`w-full ${isWinner ? 'bg-emerald-300' : 'bg-gray-200'}  rounded-full h-3`}>
+                                                                <div
+                                                                    className={`w-full ${isWinner ? 'bg-[#f5e7b2]' : 'bg-gray-200'} rounded-full h-3`}>
                                                                     <div
                                                                         className={`h-3 rounded-full transition-all ${
-                                                                            isWinner ? 'bg-amber-500' : isRunOff ? 'bg-green-500' : 'bg-blue-500'
+                                                                            isWinner ? 'bg-[#d4af37]' : isRunOff ? 'bg-green-500' : 'bg-[#1d4f91]'
                                                                         }`}
                                                                         style={{width: `${barWidth}%`}}
                                                                     ></div>
@@ -354,12 +358,8 @@ export default function ResultsPage() {
 
                         {/* No positions message */}
                         {results.positions.length === 0 && (
-                            <div className="bg-white rounded-xl shadow-sm p-8 text-center">
-                                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor"
-                                     viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-                                </svg>
+                            <div className="results-empty-state">
+                                <FiClipboard className="mx-auto h-12 w-12 text-gray-400" aria-hidden="true"/>
                                 <h3 className="mt-2 text-sm font-medium text-gray-900">No positions found</h3>
                                 <p className="mt-1 text-sm text-gray-500">
                                     This election has no positions with results yet.
@@ -368,12 +368,8 @@ export default function ResultsPage() {
                         )}
                     </div>
                 ) : (
-                    <div className="bg-white rounded-xl shadow-sm p-8 text-center">
-                        <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor"
-                             viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-                        </svg>
+                    <div className="results-empty-state">
+                        <FiClipboard className="mx-auto h-12 w-12 text-gray-400" aria-hidden="true"/>
                         <h3 className="mt-2 text-sm font-medium text-gray-900">No election selected</h3>
                         <p className="mt-1 text-sm text-gray-500">
                             Select an election from the dropdown above to view its results.

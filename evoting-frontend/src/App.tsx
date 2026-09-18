@@ -18,6 +18,7 @@ import type {JSX} from "react";
 import StudentLoginPage from "./pages/StudentLoginPage";
 import VotingPage from "./pages/VotingPage";
 import ResultsPage from "./pages/admin/ResultsPage";
+import LiveResultsPage from "./pages/admin/LiveResultsPage";
 
 // Create a client with real-time configuration for admin data
 const queryClient = new QueryClient({
@@ -62,6 +63,14 @@ function App() {
                         <Route path="/voter-login" element={<StudentLoginPage/>}/>
                         <Route path="/admin/login" element={<LoginPage/>}/>
                         <Route path="/vote" element={<VotingPage/>}/>
+                        <Route
+                            path="/admin/live-results"
+                            element={
+                                <ProtectedRoute allowedRoles={['superuser', 'staff']}>
+                                    <LiveResultsPage/>
+                                </ProtectedRoute>
+                            }
+                        />
 
                         {/* All admin pages live under /admin */}
                         <Route path="/admin" element={<AdminLayout/>}>
@@ -125,7 +134,7 @@ function App() {
                             <Route
                                 path="results"
                                 element={
-                                    <ProtectedRoute allowedRoles={['superuser']}>
+                                    <ProtectedRoute allowedRoles={['superuser', 'staff']}>
                                         <ResultsPage/>
                                     </ProtectedRoute>
                                 }

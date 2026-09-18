@@ -2,7 +2,6 @@ import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import api from '../apiConfig';
 import {queryKeys} from './queryKeys';
 import {showError, showSuccess} from '../utils/toast';
-import {useElections} from "./useElections.ts";
 
 export interface Student {
     id: number;
@@ -67,28 +66,25 @@ export const useCreateStudent = () => {
 export const useUpdateStudent = () => {
     const queryClient = useQueryClient();
 
-    const {data: elections = [],} = useElections();
-    const activeElection = elections.find(e => e.is_active);
-    const targetElection = activeElection || elections[0];
-
     return useMutation({
         mutationFn: async ({id, ...data}: {
             id: number;
             full_name: string;
             class_name: string;
+            election_id: number;
         }) => {
             const res = await api.patch(`api/students/${id}/`, data);
             return res.data;
         },
         onMutate: async (variables) => {
             // Cancel any outgoing refetches
-            await queryClient.cancelQueries({queryKey: queryKeys.students(targetElection.id)});
+            await queryClient.cancelQueries({queryKey: queryKeys.students(variables.election_id)});
             
             // Snapshot the previous value
-            const previousStudents = queryClient.getQueryData(queryKeys.students(targetElection.id));
+            const previousStudents = queryClient.getQueryData(queryKeys.students(variables.election_id));
             
             // Optimistically update the cache
-            queryClient.setQueryData(queryKeys.students(targetElection.id), (old: Student[] | undefined) => {
+            queryClient.setQueryData(queryKeys.students(variables.election_id), (old: Student[] | undefined) => {
                 if (!old) return old;
                 return old.map(student => 
                     student.id === variables.id 
@@ -99,17 +95,17 @@ export const useUpdateStudent = () => {
             
             return {previousStudents};
         },
-        onError: (err, _variables, context) => {
+        onError: (err, variables, context) => {
             // Rollback on error
             if (context?.previousStudents) {
-                queryClient.setQueryData(queryKeys.students(targetElection.id), context.previousStudents);
+                queryClient.setQueryData(queryKeys.students(variables.election_id), context.previousStudents);
             }
             const detail = (err as any).response?.data?.detail;
             showError(detail || 'Failed to update voter.');
         },
-        onSettled: () => {
+        onSettled: (_data, _error, variables) => {
             // Refetch to ensure server state
-            queryClient.invalidateQueries({queryKey: queryKeys.students(targetElection.id)});
+            queryClient.invalidateQueries({queryKey: queryKeys.students(variables.election_id)});
         },
         onSuccess: () => {
             showSuccess('Voter updated successfully.');
@@ -128,9 +124,9 @@ export const useDeleteStudent = () => {
             await api.delete(`api/students/${student.id}/`);
             return student;
         },
-        onSuccess: () => {
+        onSuccess: (_data, student) => {
             showSuccess('Voter deleted successfully.');
-            queryClient.invalidateQueries({queryKey: queryKeys.students(null)}); // Invalidate all since we don't know the election
+            queryClient.invalidateQueries({queryKey: queryKeys.students(student.election?.id ?? null)});
         },
         onError: (err: any) => {
             if (err.message === 'Cannot delete a student who has already voted.') {

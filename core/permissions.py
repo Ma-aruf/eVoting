@@ -8,7 +8,32 @@ class HasRole(BasePermission):
         user = request.user
         if not user or not user.is_authenticated:
             return False
+        if (getattr(user, "role", None) == "superuser") != bool(getattr(user, "is_superuser", False)):
+            return False
         return user.role in self.allowed_roles
+
+
+class IsAdminUser(HasRole):
+    """Any internally consistent authenticated management account."""
+
+    allowed_roles = ["staff", "activator", "superuser"]
+
+
+class IsElectionDataViewer(BasePermission):
+    """Allow admin accounts and election-authenticated voters to read ballot data."""
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+
+        if getattr(user, "student", None) is not None:
+            return True
+
+        role = getattr(user, "role", None)
+        if (role == "superuser") != bool(getattr(user, "is_superuser", False)):
+            return False
+        return role in {"staff", "activator", "superuser"}
 
 
 class IsSuperUser(HasRole):
@@ -30,6 +55,8 @@ class IsStaffOrSuperUserOrReadOnlyActivator(BasePermission):
             return False
 
         role = getattr(user, "role", None)
+        if (role == "superuser") != bool(getattr(user, "is_superuser", False)):
+            return False
         if role in ["staff", "superuser"]:
             return True
         if role == "activator" and request.method in SAFE_METHODS:

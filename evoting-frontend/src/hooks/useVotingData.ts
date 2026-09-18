@@ -1,5 +1,5 @@
 import {useQuery} from '@tanstack/react-query';
-import api from '../apiConfig';
+import {getVoterSession, voterApi} from '../api/voterApi';
 
 interface Election {
     id: number;
@@ -33,14 +33,15 @@ interface VotingData {
 }
 
 const fetchVotingData = async (): Promise<VotingData> => {
-    // 1. Get election from sessionStorage (set during login)
-    const electionId = sessionStorage.getItem('election_id');
+    const session = getVoterSession();
     const electionName = sessionStorage.getItem('election_name');
     const electionYear = sessionStorage.getItem('election_year');
 
-    if (!electionId) {
+    if (!session) {
         throw new Error('No election context found. Please login again.');
     }
+
+    const electionId = session.electionId;
 
     // Build election object from session data
     const activeElection: Election = {
@@ -53,9 +54,7 @@ const fetchVotingData = async (): Promise<VotingData> => {
     };
 
     // 2. Get positions for this election
-    const positionsRes = await api.get('/api/positions/', {
-        params: {election_id: activeElection.id}
-    });
+    const positionsRes = await voterApi.getPositions(session);
 
     let positions = positionsRes.data;
     if (positions.results) {
@@ -73,9 +72,7 @@ const fetchVotingData = async (): Promise<VotingData> => {
     const candidatesMap: Record<number, Candidate[]> = {};
     const candidatePromises = positions.map(async (position: Position) => {
         try {
-            const candidatesRes = await api.get('/api/candidates/', {
-                params: {position_id: position.id}
-            });
+            const candidatesRes = await voterApi.getCandidates(session, position.id);
 
             let candidates = candidatesRes.data;
             if (candidates.results) {
@@ -86,7 +83,10 @@ const fetchVotingData = async (): Promise<VotingData> => {
                 candidatesMap[position.id] = candidates;
             }
         } catch (err) {
-            console.error(`Failed to fetch candidates for position ${position.id}:`, err);
+            if ((err as {response?: {status?: number}}).response?.status === 401 ||
+                (err as {response?: {status?: number}}).response?.status === 403) {
+                throw new Error('Your voter session is no longer valid. Please sign in again.');
+            }
             candidatesMap[position.id] = [];
         }
     });
@@ -101,11 +101,13 @@ const fetchVotingData = async (): Promise<VotingData> => {
 };
 
 export function useVotingData(enabled: boolean = true) {
-    const electionId = sessionStorage.getItem('election_id');
+    const session = getVoterSession();
+    const electionId = session?.electionId ?? null;
+    const studentId = session?.studentId ?? null;
     return useQuery({
-        queryKey: ['votingData', electionId],
+        queryKey: ['votingData', electionId, studentId],
         queryFn: fetchVotingData,
-        enabled: enabled && !!electionId,
+        enabled: enabled && !!session,
     });
 }
 

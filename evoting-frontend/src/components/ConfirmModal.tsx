@@ -1,3 +1,4 @@
+
 import ConfirmationDialog from './ui/ConfirmationDialog';
 
 interface ConfirmModalProps {
@@ -11,7 +12,26 @@ interface ConfirmModalProps {
     type?: 'danger' | 'warning' | 'info';
 }
 
-export default function ConfirmModal({isOpen, onClose, onConfirm, title, message, confirmText = 'Confirm', cancelText = 'Cancel', type = 'danger'}: ConfirmModalProps) {
-    return <ConfirmationDialog open={isOpen} onClose={onClose} onConfirm={onConfirm} title={title} message={message}
-        confirmText={confirmText} cancelText={cancelText} variant={type}/>;
+export default function ConfirmModal({
+    isOpen,
+    onClose,
+    onConfirm,
+    title,
+    message,
+    confirmText = 'Confirm',
+    cancelText = 'Cancel',
+    type = 'danger',
+}: ConfirmModalProps) {
+    return (
+        <ConfirmationDialog
+            open={isOpen}
+            onClose={onClose}
+            onConfirm={onConfirm}
+            title={title}
+            message={message}
+            confirmText={confirmText}
+            cancelText={cancelText}
+            variant={type}
+        />
+    );
 }

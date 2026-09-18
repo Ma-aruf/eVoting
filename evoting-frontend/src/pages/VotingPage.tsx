@@ -1,6 +1,8 @@
 import {useEffect, useState} from 'react';
+import {useQueryClient} from '@tanstack/react-query';
 import {useNavigate} from 'react-router-dom';
-import api from '../apiConfig';
+import {FiAlertCircle, FiCheck, FiCheckCircle, FiLoader, FiUserPlus} from 'react-icons/fi';
+import {clearVoterSession, getVoterSession, voterApi} from '../api/voterApi';
 import {type Candidate, useVotingData} from '../hooks/useVotingData';
 import ConfirmModal from '../components/ConfirmModal';
 import {useConfirmModal} from '../hooks/useConfirmModal';
@@ -15,6 +17,7 @@ interface SelectedVote {
 
 export default function VotingPage() {
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const [selectedVotes, setSelectedVotes] = useState<SelectedVote[]>([]);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -64,9 +67,19 @@ export default function VotingPage() {
     // Handle query error
     useEffect(() => {
         if (queryError) {
+            const status = (queryError as {response?: {status?: number}}).response?.status;
+            if (status === 401 || status === 403 || status === 404 || queryError.message.includes('session')) {
+                clearVoterSession();
+                queryClient.removeQueries({queryKey: ['votingData']});
+                navigate('/voter-login', {
+                    replace: true,
+                    state: {message: 'Your voter session is no longer valid. Please sign in again.'},
+                });
+                return;
+            }
             setError(queryError instanceof Error ? queryError.message : 'Failed to load voting data.');
         }
-    }, [queryError]);
+    }, [navigate, queryClient, queryError]);
 
     const handleSelectCandidate = (positionId: number, candidate: Candidate) => {
         setSelectedVotes(prev =>
@@ -112,44 +125,49 @@ export default function VotingPage() {
         setError(null);
 
         try {
-            await api.post('/api/vote/', {
-                votes: votesToSubmit
-            }, {
-                headers: {
-                    'X-Student-Id': studentId,
-                    'X-Election-Id': electionId,
-                    'X-Voter-Token': voterToken
-                }
-            });
+            const session = getVoterSession();
+            if (!session) {
+                throw new Error('Your voter session is no longer valid. Please sign in again.');
+            }
+            await voterApi.submitVotes(session, votesToSubmit);
 
             // Success - clear session and show success message
             setSuccess(true);
             setTimeout(() => {
-                sessionStorage.clear();
+                clearVoterSession();
+                queryClient.removeQueries({queryKey: ['votingData']});
                 navigate('/');
             }, 3000);
 
-        } catch (err: any) {
-            console.error('Vote submission error:', err);
-
-            if (err.response?.status === 403) {
-                if (err.response?.data?.detail === 'Student has already voted.') {
+        } catch (err: unknown) {
+            const apiError = err as {response?: {status?: number; data?: {detail?: string}}};
+            if (apiError.response?.status === 401 || apiError.response?.status === 404) {
+                clearVoterSession();
+                queryClient.removeQueries({queryKey: ['votingData']});
+                navigate('/voter-login', {
+                    replace: true,
+                    state: {message: 'Your voter session is no longer valid. Please sign in again.'},
+                });
+            } else if (apiError.response?.status === 403) {
+                if (apiError.response?.data?.detail === 'Student has already voted.') {
                     setError('You have already voted. You cannot vote again.');
                     setTimeout(() => {
-                        sessionStorage.clear();
+                        clearVoterSession();
+                        queryClient.removeQueries({queryKey: ['votingData']});
                         navigate('/');
                     }, 3000);
-                } else if (err.response?.data?.detail === 'Student is not activated to vote.') {
+                } else if (apiError.response?.data?.detail === 'Student is not activated to vote.') {
                     setError('Your voting access has been deactivated.');
                     setTimeout(() => {
-                        sessionStorage.clear();
+                        clearVoterSession();
+                        queryClient.removeQueries({queryKey: ['votingData']});
                         navigate('/');
                     }, 3000);
                 } else {
-                    setError(err.response?.data?.detail || 'Voting is not allowed at this time.');
+                    setError(apiError.response?.data?.detail || 'Voting is not allowed at this time.');
                 }
-            } else if (err.response?.status === 400) {
-                setError(err.response?.data?.detail || 'Invalid vote submission. Please check your selections.');
+            } else if (apiError.response?.status === 400) {
+                setError(apiError.response?.data?.detail || 'Invalid vote submission. Please check your selections.');
             } else {
                 setError('Failed to submit votes. Please try again.');
             }
@@ -168,7 +186,8 @@ export default function VotingPage() {
         });
 
         if (confirmed) {
-            sessionStorage.clear();
+            clearVoterSession();
+            queryClient.removeQueries({queryKey: ['votingData']});
             navigate('/');
         }
     };
@@ -189,10 +208,7 @@ export default function VotingPage() {
             <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
                 <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-6">
                     <div className="text-red-500 text-center mb-4">
-                        <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
+                        <FiAlertCircle className="w-12 h-12 mx-auto" aria-hidden="true" />
                     </div>
                     <h2 className="text-xl font-bold text-gray-800 text-center mb-2">Error</h2>
                     <p className="text-gray-600 text-center mb-6">{error}</p>
@@ -212,10 +228,7 @@ export default function VotingPage() {
             <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
                 <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-6">
                     <div className="text-green-500 text-center mb-4">
-                        <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
+                        <FiCheckCircle className="w-12 h-12 mx-auto" aria-hidden="true" />
                     </div>
                     <h2 className="text-xl font-bold text-gray-800 text-center mb-2">Votes Submitted Successfully!</h2>
                     <p className="text-gray-600 text-center mb-6">
@@ -304,12 +317,7 @@ export default function VotingPage() {
                                             {selectedVote?.candidate_id && (
                                                 <span
                                                     className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
-                                                    <svg className="w-4 h-4 mr-1" fill="currentColor"
-                                                         viewBox="0 0 20 20">
-                                                        <path fillRule="evenodd"
-                                                              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                                              clipRule="evenodd"/>
-                                                    </svg>
+                                                    <FiCheck className="w-4 h-4 mr-1" aria-hidden="true" />
                                                     Voted
                                                 </span>
                                             )}
@@ -369,12 +377,7 @@ export default function VotingPage() {
                                                                 }`}>
                                                                 {isSelected ? (
                                                                     <>
-                                                                        <svg className="w-4 h-4" fill="currentColor"
-                                                                             viewBox="0 0 20 20">
-                                                                            <path fillRule="evenodd"
-                                                                                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                                                                  clipRule="evenodd"/>
-                                                                        </svg>
+                                                                        <FiCheck className="w-4 h-4" aria-hidden="true" />
                                                                         Selected
                                                                     </>
                                                                 ) : (
@@ -388,11 +391,7 @@ export default function VotingPage() {
                                         </div>
                                     ) : (
                                         <div className="text-center py-8 text-gray-500">
-                                            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none"
-                                                 viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1}
-                                                      d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
-                                            </svg>
+                                            <FiUserPlus className="mx-auto h-12 w-12 text-gray-400" aria-hidden="true" />
                                             <p className="mt-2">No candidates for this position</p>
                                         </div>
                                     )}
@@ -414,23 +413,12 @@ export default function VotingPage() {
                                             >
                                                 {submitting ? (
                                                     <>
-                                                        <svg className="animate-spin h-4 w-4 text-white" fill="none"
-                                                             viewBox="0 0 24 24">
-                                                            <circle className="opacity-25" cx="12" cy="12" r="10"
-                                                                    stroke="currentColor" strokeWidth="4"/>
-                                                            <path className="opacity-75" fill="currentColor"
-                                                                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
-                                                        </svg>
+                                                        <FiLoader className="animate-spin h-4 w-4 text-white" aria-hidden="true" />
                                                         Submitting...
                                                     </>
                                                 ) : (
                                                     <>
-                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor"
-                                                             viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round"
-                                                                  strokeWidth={2}
-                                                                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                                        </svg>
+                                                        <FiCheckCircle className="w-4 h-4" aria-hidden="true" />
                                                         Submit Votes
                                                     </>
                                                 )}

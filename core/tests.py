@@ -105,10 +105,6 @@ class MultiVoteViewTests(TestCase):
 class BulkStudentUploadTests(TestCase):
     def setUp(self):
         self.client = APIClient()
-        self.user = User.objects.create_user(
-            username="staff", password="pass", role="staff"
-        )
-        self.client.force_authenticate(user=self.user)
         # Create an election for bulk upload tests
         self.election = Election.objects.create(
             name="Test Election",
@@ -117,6 +113,10 @@ class BulkStudentUploadTests(TestCase):
             end_time=timezone.now() + timedelta(hours=1),
             is_active=False,  # Not active for bulk upload
         )
+        self.user = User.objects.create_user(
+            username="staff", password="pass", role="staff", assigned_election=self.election
+        )
+        self.client.force_authenticate(user=self.user)
 
     def _make_workbook(self, rows):
         wb = Workbook()

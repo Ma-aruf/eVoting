@@ -1,13 +1,25 @@
 import {createContext, type ReactNode, useEffect, useState} from 'react';
+import {useQueryClient} from '@tanstack/react-query';
 import {useLocation, useNavigate} from 'react-router-dom';
 import api from "../apiConfig.ts";
 import { jwtDecode } from 'jwt-decode';
 
 
 export type UserRole = 'superuser' | 'staff' | 'activator' | null;
+export interface AssignedElection {
+    id: number;
+    name: string;
+    year: number;
+}
+
+export interface AuthUser {
+    username: string;
+    role: UserRole;
+    assignedElection: AssignedElection | null;
+}
 
 interface AuthState {
-    user: { username: string; role: UserRole } | null;
+    user: AuthUser | null;
     isAuthenticated: boolean;
     login: (username: string, password: string) => Promise<void>;
     logout: () => void;
@@ -21,20 +33,15 @@ interface DecodedToken {
 export const SESSION_KEY = 'kosa_admin_session';
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
-function deriveRoleFromUsername(username: string): UserRole {
-    if (username === 'superuser') return 'superuser';
-    if (username.startsWith('staff')) return 'staff';
-    if (username.startsWith('activator')) return 'activator';
-    return null;
-}
-
-
 export function AuthProvider({children}: { children: ReactNode }) {
+    const queryClient = useQueryClient();
     const [user, setUser] = useState<AuthState['user']>(() => {
         const stored = localStorage.getItem(SESSION_KEY);
         if (!stored) return null;
         try {
-            return JSON.parse(stored);
+                const parsed = JSON.parse(stored) as AuthUser;
+                if (!parsed.role || !('assignedElection' in parsed)) return null;
+                return parsed;
         } catch {
             localStorage.removeItem(SESSION_KEY);
             return null;
@@ -71,38 +78,32 @@ export function AuthProvider({children}: { children: ReactNode }) {
             api.defaults.headers.common = api.defaults.headers.common || {};
             api.defaults.headers.common['Authorization'] = `Bearer ${access}`;
             
-            try {
-                const profileResp = await api.get('api/auth/me/');
-                const profile = profileResp.data || {};
-                const role: UserRole = profile.role ?? deriveRoleFromUsername(username);
-                const userData = {username: profile.username ?? username, role};
-                localStorage.setItem(SESSION_KEY, JSON.stringify(userData));
-                setUser(userData);
-                setIsAuthenticated(true);
-
-                const target = role === 'activator' ? '/admin/activations' : '/admin/dashboard';
-                navigate(target);
-                return;
-            } catch (err) {
-                // If profile fetch fails, fallback to username-based role
-                const role = deriveRoleFromUsername(username);
-                if (!role) {
-                    throw new Error('Unable to determine user role after login.');
-                }
-                const userData = {username, role};
-                localStorage.setItem(SESSION_KEY, JSON.stringify(userData));
-                setUser(userData);
-                setIsAuthenticated(true);
-
-                const target = role === 'activator' ? '/admin/activations' : '/admin/dashboard';
-                navigate(target);
-                return;
+            const profileResp = await api.get('api/auth/me/');
+            const profile = profileResp.data || {};
+            const role: UserRole = profile.role ?? null;
+            const assignedElection = profile.assigned_election ?? null;
+            if (!role || (role === 'superuser' && assignedElection) ||
+                ((role === 'staff' || role === 'activator') && !assignedElection)) {
+                throw new Error('The account has an invalid election assignment.');
             }
-        } catch (err: any) {
+            const userData: AuthUser = {
+                username: profile.username ?? username,
+                role,
+                assignedElection,
+            };
+            localStorage.setItem(SESSION_KEY, JSON.stringify(userData));
+            setUser(userData);
+            setIsAuthenticated(true);
+
+            const target = role === 'activator' ? '/admin/activations' : '/admin/dashboard';
+            navigate(target);
+        } catch (err: unknown) {
             // Clear any partial state on login failure
             localStorage.removeItem('access_token');
             localStorage.removeItem('refresh_token');
             localStorage.removeItem(SESSION_KEY);
+            sessionStorage.clear();
+            queryClient.clear();
             setUser(null);
             setIsAuthenticated(false);
             
@@ -115,6 +116,8 @@ export function AuthProvider({children}: { children: ReactNode }) {
         localStorage.removeItem(SESSION_KEY);
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
+        sessionStorage.clear();
+        queryClient.clear();
         setUser(null);
         setIsAuthenticated(false);
         if (api.defaults && api.defaults.headers && api.defaults.headers.common) {
@@ -165,6 +168,29 @@ export function AuthProvider({children}: { children: ReactNode }) {
         }
     };
 
+    const hydrateProfile = async () => {
+        try {
+            const profileResp = await api.get('api/auth/me/');
+            const profile = profileResp.data || {};
+            const role: UserRole = profile.role ?? null;
+            const assignedElection = profile.assigned_election ?? null;
+            if (!role || (role === 'superuser' && assignedElection) ||
+                ((role === 'staff' || role === 'activator') && !assignedElection)) {
+                throw new Error('The account has an invalid election assignment.');
+            }
+            const userData: AuthUser = {
+                username: profile.username,
+                role,
+                assignedElection,
+            };
+            localStorage.setItem(SESSION_KEY, JSON.stringify(userData));
+            setUser(userData);
+            setIsAuthenticated(true);
+        } catch {
+            logout();
+        }
+    };
+
     // Add auto-refresh on app load
     useEffect(() => {
         if (!isAdminRoute) return;
@@ -173,13 +199,13 @@ export function AuthProvider({children}: { children: ReactNode }) {
         if (!token) return;
 
         // Check token immediately on load
-        checkAndRefreshToken();
+        void checkAndRefreshToken().then(() => hydrateProfile());
 
         // Set up interval to check token periodically (every 1 minute)
         const intervalId = setInterval(checkAndRefreshToken, 60000);
 
         return () => clearInterval(intervalId);
-    }, [isAdminRoute]);
+    }, [isAdminRoute]); // eslint-disable-line react-hooks/exhaustive-deps
 
     return (
         <AuthContext.Provider value={{user, isAuthenticated, login, logout}}>

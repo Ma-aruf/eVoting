@@ -12,9 +12,9 @@ export interface Candidate {
   ballot_number: number;
 }
 
-export const useCandidates = (positionId: number | null) => {
+export const useCandidates = (positionId: number | null, electionId: number | null = null) => {
   return useQuery({
-    queryKey: queryKeys.candidates(positionId),
+    queryKey: queryKeys.candidates(positionId, electionId),
     queryFn: async (): Promise<Candidate[]> => {
       if (!positionId) return [];
       const res = await api.get('api/candidates/', {
@@ -43,13 +43,14 @@ export const useCreateCandidate = () => {
       position: number;
       photo_url?: string;
       ballot_number?: number;
+      election_id?: number;
     }) => {
       const res = await api.post('api/candidates/create/', data);
       return res.data;
     },
     onSuccess: (_, variables) => {
       showSuccess('Candidate created successfully.');
-      queryClient.invalidateQueries({ queryKey: queryKeys.candidates(variables.position) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.candidates(variables.position, variables.election_id ?? null) });
     },
     onError: (err: any) => {
       const detail = err.response?.data;
@@ -94,19 +95,22 @@ export const useUpdateCandidate = () => {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async ({ id, ...data }: {
+    mutationFn: async (input: {
       id: number;
       student: number;
       position: number;
       photo_url?: string;
       ballot_number?: number;
+      election_id?: number;
     }) => {
+      const {id, election_id, ...data} = input;
+      void election_id;
       const res = await api.put(`api/candidates/${id}/`, data);
       return res.data;
     },
     onSuccess: (_, variables) => {
       showSuccess('Candidate updated successfully.');
-      queryClient.invalidateQueries({ queryKey: queryKeys.candidates(variables.position) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.candidates(variables.position, variables.election_id ?? null) });
       // Also invalidate the old position in case position changed
       queryClient.invalidateQueries({ queryKey: queryKeys.candidates(null) });
     },
@@ -153,13 +157,13 @@ export const useDeleteCandidate = () => {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async (candidate: Candidate) => {
+    mutationFn: async (candidate: Candidate & {election_id?: number}) => {
       await api.delete(`api/candidates/${candidate.id}/`);
       return candidate;
     },
     onSuccess: (_, variables) => {
       showSuccess('Candidate deleted successfully.');
-      queryClient.invalidateQueries({ queryKey: queryKeys.candidates(variables.position) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.candidates(variables.position, variables.election_id ?? null) });
     },
     onError: (err: any) => {
       const detail = err.response?.data?.detail;

@@ -1,4 +1,3 @@
-
 import {type FormEvent, useMemo, useState} from 'react';
 import {
     FiCheckCircle,
@@ -31,6 +30,7 @@ import IconButton from '../../components/ui/IconButton';
 import Modal from '../../components/ui/Modal';
 
 import {useElections} from '../../queries/useElections';
+import {useAuth} from '../../hooks/useAuth';
 import {
     type Student,
     useBulkUploadStudents,
@@ -63,7 +63,7 @@ type UploadResult = {
 const message = (error: unknown, fallback: string) =>
     (error as ApiError)?.response?.data?.detail || fallback;
 
-function StudentStatus({student}: {student: Student}) {
+function StudentStatus({student}: { student: Student }) {
     return (
         <div className="student-status-stack">
             <Badge variant={student.is_active ? 'success' : 'neutral'}>
@@ -78,16 +78,16 @@ function StudentStatus({student}: {student: Student}) {
 }
 
 function StudentForm({
-    studentId,
-    fullName,
-    className,
-    pending,
-    onStudentIdChange,
-    onFullNameChange,
-    onClassChange,
-    onSubmit,
-    onCancel,
-}: {
+                         studentId,
+                         fullName,
+                         className,
+                         pending,
+                         onStudentIdChange,
+                         onFullNameChange,
+                         onClassChange,
+                         onSubmit,
+                         onCancel,
+                     }: {
     studentId: string;
     fullName: string;
     className: string;
@@ -150,6 +150,8 @@ function StudentForm({
 }
 
 export default function StudentsPage() {
+    const {user} = useAuth();
+    const isScopedRole = user?.role === 'staff' || user?.role === 'activator';
     const [selectedElectionId, setSelectedElectionId] =
         useState<number | null>(null);
 
@@ -175,7 +177,10 @@ export default function StudentsPage() {
     // Queries and mutations
 
     const electionsQuery = useElections();
-    const studentsQuery = useStudents(selectedElectionId);
+    const effectiveElectionId = isScopedRole
+        ? user?.assignedElection?.id ?? null
+        : selectedElectionId;
+    const studentsQuery = useStudents(effectiveElectionId);
 
     const create = useCreateStudent();
     const update = useUpdateStudent();
@@ -193,7 +198,7 @@ export default function StudentsPage() {
     );
 
     const selected =
-        elections.find(election => election.id === selectedElectionId) ?? null;
+        elections.find(election => election.id === effectiveElectionId) ?? null;
 
     // Filter options and records
 
@@ -266,7 +271,7 @@ export default function StudentsPage() {
         event.preventDefault();
 
         if (
-            !selectedElectionId ||
+            !effectiveElectionId ||
             !studentId.trim() ||
             !fullName.trim() ||
             !className
@@ -280,7 +285,7 @@ export default function StudentsPage() {
                 student_id: studentId.trim(),
                 full_name: fullName.trim(),
                 class_name: className,
-                election_id: selectedElectionId,
+                election_id: effectiveElectionId,
             },
             {
                 onSuccess: () => {
@@ -294,11 +299,11 @@ export default function StudentsPage() {
     const handleUpload = (event: FormEvent) => {
         event.preventDefault();
 
-        if (file && selectedElectionId) {
+        if (file && effectiveElectionId) {
             upload.mutate(
                 {
                     file,
-                    election_id: selectedElectionId,
+                    election_id: effectiveElectionId,
                 },
                 {
                     onSuccess: () => setFile(null),
@@ -325,60 +330,6 @@ export default function StudentsPage() {
 
     return (
         <div className="students-page">
-            {/* Election selector and page actions */}
-
-            <div className="voter-header">
-                <FormField
-                    id="students-election"
-                    label="Election"
-                >
-                    <SelectField
-                        value={selectedElectionId ?? ''}
-                        onChange={event => {
-                            setSelectedElectionId(
-                                event.target.value
-                                    ? Number(event.target.value)
-                                    : null
-                            );
-                            setCurrentPage(1);
-                        }}
-                    >
-                        <option value="" selected={true}>
-                            {elections.length
-                                ? 'Select an election'
-                                : 'No elections available'}
-                        </option>
-
-                        {elections.map(election => (
-                            <option
-                                key={election.id}
-                                value={election.id}
-                            >
-                                {election.name} ({election.year})
-                            </option>
-                        ))}
-                    </SelectField>
-                </FormField>
-
-                <div className="voter-header-buttons">
-                    <Button
-                        leadingIcon={<FiPlus aria-hidden="true" />}
-                        onClick={() => setShowAdd(true)}
-                    >
-                        Add voter
-                    </Button>
-
-                    <Button
-                        variant="secondary"
-                        className="voter-import-button"
-                        leadingIcon={<FiUploadCloud aria-hidden="true" />}
-                        onClick={() => setShowImport(true)}
-                    >
-                        Import voters
-                    </Button>
-                </div>
-            </div>
-
             {/* Student statistics */}
 
             {selected && (
@@ -389,7 +340,7 @@ export default function StudentsPage() {
                     <StatisticCard
                         label="Total voters"
                         value={students.length}
-                        icon={<FiUsers aria-hidden="true" />}
+                        icon={<FiUsers aria-hidden="true"/>}
                         status="primary"
                         layout="split"
                     />
@@ -399,7 +350,7 @@ export default function StudentsPage() {
                         value={
                             students.filter(student => student.is_active).length
                         }
-                        icon={<FiCheckCircle aria-hidden="true" />}
+                        icon={<FiCheckCircle aria-hidden="true"/>}
                         status="success"
                         layout="split"
                     />
@@ -409,12 +360,70 @@ export default function StudentsPage() {
                         value={
                             students.filter(student => student.has_voted).length
                         }
-                        icon={<FiFileText aria-hidden="true" />}
+                        icon={<FiFileText aria-hidden="true"/>}
                         status="strong"
                         layout="split"
                     />
                 </section>
             )}
+
+            <div className="voter-header">
+                <div className="voter-header-election">
+                    <FormField
+                    id="students-election"
+                    label="Election"
+                >
+                    {isScopedRole ? (
+                        <TextInput
+                            value={selected ? `${selected.name} (${selected.year})` : 'Assigned election unavailable'}
+                            readOnly
+                            aria-readonly="true"
+                        />
+                    ) : (
+                        <SelectField
+                            value={effectiveElectionId ?? ''}
+                            onChange={event => {
+                                setSelectedElectionId(
+                                    event.target.value
+                                        ? Number(event.target.value)
+                                        : null
+                                );
+                                setCurrentPage(1);
+                            }}
+                        >
+                            <option value="">
+                                {elections.length
+                                    ? 'Select an election'
+                                    : 'No elections available'}
+                            </option>
+                            {elections.map(election => (
+                                <option key={election.id} value={election.id}>
+                                    {election.name} ({election.year})
+                                </option>
+                            ))}
+                        </SelectField>
+                    )}
+                </FormField>
+                </div>
+                <div className="voter-header-buttons">
+                    <Button
+                        leadingIcon={<FiPlus aria-hidden="true"/>}
+                        onClick={() => setShowAdd(true)}
+                    >
+                        Add voter
+                    </Button>
+
+                    <Button
+                        variant="secondary"
+                        className="voter-import-button"
+                        leadingIcon={<FiUploadCloud aria-hidden="true"/>}
+                        onClick={() => setShowImport(true)}
+                    >
+                        Import voters
+                    </Button>
+                </div>
+            </div>
+
 
             {/* Query error */}
 
@@ -458,7 +467,7 @@ export default function StudentsPage() {
                         label="Search by name or voter ID"
                     >
                         <div className="students-search-control">
-                            <FiSearch aria-hidden="true" />
+                            <FiSearch aria-hidden="true"/>
 
                             <TextInput
                                 value={search}
@@ -479,13 +488,13 @@ export default function StudentsPage() {
                     >
                         <SelectField
                             value={activeFilter}
-                                onChange={event =>
-                                    (() => {
-                                        setActiveFilter(
-                                            event.target.value as ActiveFilter
-                                        );
-                                        setCurrentPage(1);
-                                    })()
+                            onChange={event =>
+                                (() => {
+                                    setActiveFilter(
+                                        event.target.value as ActiveFilter
+                                    );
+                                    setCurrentPage(1);
+                                })()
                             }
                         >
                             <option value="all">All statuses</option>
@@ -500,13 +509,13 @@ export default function StudentsPage() {
                     >
                         <SelectField
                             value={votedFilter}
-                                onChange={event =>
-                                    (() => {
-                                        setVotedFilter(
-                                            event.target.value as VotedFilter
-                                        );
-                                        setCurrentPage(1);
-                                    })()
+                            onChange={event =>
+                                (() => {
+                                    setVotedFilter(
+                                        event.target.value as VotedFilter
+                                    );
+                                    setCurrentPage(1);
+                                })()
                             }
                         >
                             <option value="all">All statuses</option>
@@ -557,7 +566,7 @@ export default function StudentsPage() {
                     />
                 )}
 
-                {!loading && !queryError && !selectedElectionId && (
+                {!loading && !queryError && !effectiveElectionId && (
                     <EmptyState
                         title="Select an election"
                         message="Choose an election to view its voters."
@@ -566,7 +575,7 @@ export default function StudentsPage() {
 
                 {!loading &&
                     !queryError &&
-                    selectedElectionId &&
+                    effectiveElectionId &&
                     !students.length && (
                         <EmptyState
                             title="No voters yet"
@@ -576,7 +585,7 @@ export default function StudentsPage() {
 
                 {!loading &&
                     !queryError &&
-                    selectedElectionId &&
+                    effectiveElectionId &&
                     students.length > 0 &&
                     !filtered.length && (
                         <EmptyState
@@ -596,25 +605,25 @@ export default function StudentsPage() {
                                 </caption>
 
                                 <thead>
-                                    <tr>
-                                        <th scope="col">Voter ID</th>
-                                        <th scope="col">Full name</th>
-                                        <th scope="col">Class</th>
-                                        <th scope="col">Activation</th>
-                                        <th scope="col">Voting status</th>
-                                        <th scope="col" className="!text-right">Actions</th>
-                                    </tr>
+                                <tr>
+                                    <th scope="col">Voter ID</th>
+                                    <th scope="col">Full name</th>
+                                    <th scope="col">Class</th>
+                                    <th scope="col">Activation</th>
+                                    <th scope="col">Voting status</th>
+                                    <th scope="col" className="!text-right">Actions</th>
+                                </tr>
                                 </thead>
 
                                 <tbody>
-                                    {paginatedStudents.map(student => (
-                                        <StudentRow
-                                            key={student.id}
-                                            student={student}
-                                            onEdit={setEditing}
-                                            onDelete={setDeleting}
-                                        />
-                                    ))}
+                                {paginatedStudents.map(student => (
+                                    <StudentRow
+                                        key={student.id}
+                                        student={student}
+                                        onEdit={setEditing}
+                                        onDelete={setDeleting}
+                                    />
+                                ))}
                                 </tbody>
                             </table>
                         </div>
@@ -635,7 +644,7 @@ export default function StudentsPage() {
                                             </p>
                                         </div>
 
-                                        <StudentStatus student={student} />
+                                        <StudentStatus student={student}/>
                                     </div>
 
                                     <dl className="student-mobile-details">
@@ -662,7 +671,7 @@ export default function StudentsPage() {
                                         <IconButton
                                             label={`Edit ${student.full_name}`}
                                             icon={
-                                                <FiEdit2 aria-hidden="true" />
+                                                <FiEdit2 aria-hidden="true"/>
                                             }
                                             onClick={() =>
                                                 setEditing(student)
@@ -676,7 +685,7 @@ export default function StudentsPage() {
                                                     : `Delete ${student.full_name}`
                                             }
                                             icon={
-                                                <FiTrash2 aria-hidden="true" />
+                                                <FiTrash2 aria-hidden="true"/>
                                             }
                                             variant="danger"
                                             disabled={student.has_voted}
@@ -703,7 +712,7 @@ export default function StudentsPage() {
                                         variant="quiet"
                                         size="compact"
                                         leadingIcon={
-                                            <FiChevronLeft aria-hidden="true" />
+                                            <FiChevronLeft aria-hidden="true"/>
                                         }
                                         disabled={visiblePage === 1}
                                         onClick={() =>
@@ -719,7 +728,7 @@ export default function StudentsPage() {
                                         variant="quiet"
                                         size="compact"
                                         trailingIcon={
-                                            <FiChevronRight aria-hidden="true" />
+                                            <FiChevronRight aria-hidden="true"/>
                                         }
                                         disabled={visiblePage === totalPages}
                                         onClick={() =>
@@ -852,10 +861,10 @@ export default function StudentsPage() {
                         <Button
                             type="submit"
                             loading={upload.isPending}
-                            disabled={!file || !selectedElectionId}
+                            disabled={!file || !effectiveElectionId}
                             className="voter-import-button"
                             leadingIcon={
-                                <FiUploadCloud aria-hidden="true" />
+                                <FiUploadCloud aria-hidden="true"/>
                             }
                         >
                             Import voters
@@ -875,6 +884,7 @@ export default function StudentsPage() {
                             id: student.id,
                             full_name: name,
                             class_name: classValue,
+                            election_id: student.election?.id ?? effectiveElectionId!,
                         },
                         {
                             onSuccess: () => setEditing(null),

@@ -28,7 +28,8 @@ api.interceptors.response.use(
         const originalRequest = error.config;
         
         // Handle 401 errors (unauthorized)
-        if (error.response?.status === 401 && !originalRequest._retry) {
+        const voterRequest = Boolean(originalRequest?.headers?.['X-Voter-Token']);
+        if (error.response?.status === 401 && !voterRequest && !originalRequest._retry) {
             originalRequest._retry = true;
             
             const refreshToken = localStorage.getItem('refresh_token');

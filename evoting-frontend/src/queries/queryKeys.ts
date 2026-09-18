@@ -16,11 +16,12 @@ export const queryKeys = {
   position: (id: number) => ['positions', id] as const,
   
   // Candidates (scoped by position)
-  candidates: (positionId: number | null) => ['candidates', positionId] as const,
+  candidates: (positionId: number | null, electionId: number | null = null) => ['candidates', positionId, electionId] as const,
   candidate: (id: number) => ['candidates', id] as const,
   
   // Results (scoped by election)
   results: (electionId: number | null) => ['results', electionId] as const,
+  liveResults: (userId: string | null, electionId: number | null) => ['live-results', userId, electionId] as const,
   
   // Users (admin users, not students)
   users: ['users'] as const,

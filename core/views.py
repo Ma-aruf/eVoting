@@ -15,10 +15,19 @@ from rest_framework.permissions import AllowAny
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from .authentication import VoterAuthentication
 from .models import Election, Position, Candidate, Vote, Student
-from .permissions import IsStaffOrSuperUser, IsActivatorOrSuperUser, IsStaffOrSuperUserOrReadOnlyActivator, IsSuperUser
+from .permissions import (
+    IsAdminUser,
+    IsElectionDataViewer,
+    IsStaffOrSuperUser,
+    IsActivatorOrSuperUser,
+    IsStaffOrSuperUserOrReadOnlyActivator,
+    IsSuperUser,
+)
+from .election_access import get_scoped_election_or_404, scope_queryset
 from .serializers import (
     StudentSerializer,
     BulkStudentUploadSerializer,
@@ -51,19 +60,19 @@ class UserViewSet(viewsets.ModelViewSet):
 
 class ElectionViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    Public read-only access to elections.
-    Voters need to see active elections without JWT auth.
+    Election data is available only to scoped management accounts.
     """
     queryset = Election.objects.all()
     serializer_class = ElectionSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAdminUser]
 
     def get_queryset(self):
         # Optional: allow filtering by is_active
+        queryset = scope_queryset(Election.objects.all(), self.request.user, "id")
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
-            return Election.objects.filter(is_active=is_active.lower() == 'true')
-        return Election.objects.all()
+            queryset = queryset.filter(is_active=is_active.lower() == 'true')
+        return queryset
 
 
 class StudentViewSet(viewsets.ModelViewSet):
@@ -77,10 +86,11 @@ class StudentViewSet(viewsets.ModelViewSet):
     permission_classes = [IsStaffOrSuperUserOrReadOnlyActivator]
 
     def get_queryset(self):
+        queryset = scope_queryset(Student.objects.all(), self.request.user)
         election_id = self.request.query_params.get("election_id")
         if election_id:
-            return Student.objects.filter(election_id=election_id)
-        return Student.objects.all()
+            return queryset.filter(election_id=election_id)
+        return queryset
 
     def perform_create(self, serializer):
         """Ensure election is set when creating a student."""
@@ -89,7 +99,7 @@ class StudentViewSet(viewsets.ModelViewSet):
             raise ParseError("election_id is required for student creation.")
         
         try:
-            election = Election.objects.get(pk=election_id)
+            election = get_scoped_election_or_404(self.request.user, election_id)
         except Election.DoesNotExist:
             raise ParseError("Invalid election_id provided.")
         
@@ -133,7 +143,7 @@ class BulkStudentUploadView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         try:
-            election = Election.objects.get(pk=election_id)
+            election = get_scoped_election_or_404(request.user, election_id)
         except Election.DoesNotExist:
             return Response(
                 {"detail": "Invalid election_id."},
@@ -229,21 +239,32 @@ class BulkStudentUploadView(APIView):
 
 class PositionViewSet(viewsets.ModelViewSet):
     """
-    Read positions publicly, but only staff/superuser can update/delete.
+    Read positions through an authenticated admin or voter election context;
+    only staff/superuser can update/delete.
     Expects `?election_id=` as a query parameter for listing.
     """
     serializer_class = PositionSerializer
+    authentication_classes = [JWTAuthentication, VoterAuthentication]
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
-            return [AllowAny()]
+            return [IsElectionDataViewer()]
         return [IsStaffOrSuperUser()]
 
     def get_queryset(self):
+        queryset = scope_queryset(Position.objects.all(), self.request.user)
         election_id = self.request.query_params.get("election_id")
         if election_id:
-            return Position.objects.filter(election_id=election_id)
-        return Position.objects.all()
+            return queryset.filter(election_id=election_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        election = serializer.validated_data["election"]
+        get_scoped_election_or_404(self.request.user, election.pk)
+        if election_has_votes(election.pk):
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({"detail": ELECTION_CONFIGURATION_LOCKED_DETAIL})
+        serializer.save()
 
 
 class PositionCreateView(APIView):
@@ -251,10 +272,26 @@ class PositionCreateView(APIView):
     Staff or superuser can create positions for an election.
     """
     permission_classes = [IsStaffOrSuperUser]
+    authentication_classes = [JWTAuthentication, VoterAuthentication]
+
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [IsElectionDataViewer()]
+        return [IsStaffOrSuperUser()]
+
+    def get(self, request, pk):
+        position = get_object_or_404(
+            scope_queryset(Position.objects.all(), request.user), pk=pk
+        )
+        return Response(PositionSerializer(position).data)
 
     def post(self, request):
         serializer = PositionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        try:
+            get_scoped_election_or_404(request.user, serializer.validated_data["election"].pk)
+        except Election.DoesNotExist:
+            raise ParseError("Election not found.")
         if election_has_votes(serializer.validated_data["election"].pk):
             return Response(
                 {"detail": ELECTION_CONFIGURATION_LOCKED_DETAIL},
@@ -264,7 +301,9 @@ class PositionCreateView(APIView):
         return Response(PositionSerializer(position).data, status=status.HTTP_201_CREATED)
 
     def put(self, request, pk):
-        position = get_object_or_404(Position, pk=pk)
+        position = get_object_or_404(
+            scope_queryset(Position.objects.all(), request.user), pk=pk
+        )
         if election_has_votes(position.election_id):
             return Response(
                 {"detail": ELECTION_CONFIGURATION_LOCKED_DETAIL},
@@ -276,6 +315,11 @@ class PositionCreateView(APIView):
             partial=True
         )
         serializer.is_valid(raise_exception=True)
+        if "election" in serializer.validated_data:
+            try:
+                get_scoped_election_or_404(request.user, serializer.validated_data["election"].pk)
+            except Election.DoesNotExist:
+                raise ParseError("Election not found.")
         position = serializer.save()
         return Response(
             PositionSerializer(position).data,
@@ -286,7 +330,9 @@ class PositionCreateView(APIView):
         return self.put(request, pk)
 
     def delete(self, request, pk):
-        position = get_object_or_404(Position, pk=pk)
+        position = get_object_or_404(
+            scope_queryset(Position.objects.all(), request.user), pk=pk
+        )
         if election_has_votes(position.election_id):
             return Response(
                 {"detail": ELECTION_CONFIGURATION_LOCKED_DETAIL},
@@ -307,16 +353,18 @@ class PositionCreateView(APIView):
 
 class CandidateViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    Public, read-only list of candidates for a given position.
+    Read-only candidate data requires an authenticated admin or voter context.
     Expects `?position_id=` as a query parameter.
     """
     serializer_class = CandidateSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsElectionDataViewer]
+    authentication_classes = [JWTAuthentication, VoterAuthentication]
 
     def get_queryset(self):
+        queryset = scope_queryset(Candidate.objects.all(), self.request.user, "position__election_id")
         position_id = self.request.query_params.get("position_id")
         if position_id:
-            return Candidate.objects.filter(position_id=position_id).order_by('ballot_number')
+            return queryset.filter(position_id=position_id).order_by('ballot_number')
         return Candidate.objects.none()
 
 
@@ -325,11 +373,35 @@ class CandidateCreateView(APIView):
     Staff or superuser can register candidates for positions.
     """
     permission_classes = [IsStaffOrSuperUser]
+    authentication_classes = [JWTAuthentication, VoterAuthentication]
+
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [IsElectionDataViewer()]
+        return [IsStaffOrSuperUser()]
+
+    def get(self, request, pk):
+        candidate = get_object_or_404(
+            scope_queryset(Candidate.objects.all(), request.user, "position__election_id"),
+            pk=pk,
+        )
+        return Response(CandidateSerializer(candidate).data)
 
     # CREATE
     def post(self, request):
+        position_id = request.data.get("position")
+        if position_id is not None:
+            get_object_or_404(
+                scope_queryset(Position.objects.all(), request.user), pk=position_id
+            )
         serializer = CandidateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        try:
+            get_scoped_election_or_404(
+                request.user, serializer.validated_data["position"].election_id
+            )
+        except Election.DoesNotExist:
+            raise ParseError("Election not found.")
         if election_has_votes(serializer.validated_data["position"].election_id):
             return Response(
                 {"detail": ELECTION_CONFIGURATION_LOCKED_DETAIL},
@@ -340,7 +412,10 @@ class CandidateCreateView(APIView):
 
     # EDIT
     def put(self, request, pk):
-        candidate = get_object_or_404(Candidate, pk=pk)
+        candidate = get_object_or_404(
+            scope_queryset(Candidate.objects.all(), request.user, "position__election_id"),
+            pk=pk,
+        )
         election_locked = election_has_votes(candidate.position.election_id)
         if election_locked and any(
             field in request.data
@@ -375,6 +450,11 @@ class CandidateCreateView(APIView):
             partial=True
         )
         serializer.is_valid(raise_exception=True)
+        effective_position = serializer.validated_data.get("position", candidate.position)
+        try:
+            get_scoped_election_or_404(request.user, effective_position.election_id)
+        except Election.DoesNotExist:
+            raise ParseError("Election not found.")
         candidate = serializer.save()
         return Response(
             CandidateSerializer(candidate).data,
@@ -386,7 +466,10 @@ class CandidateCreateView(APIView):
 
     # DELETE
     def delete(self, request, pk):
-        candidate = get_object_or_404(Candidate, pk=pk)
+        candidate = get_object_or_404(
+            scope_queryset(Candidate.objects.all(), request.user, "position__election_id"),
+            pk=pk,
+        )
         if election_has_votes(candidate.position.election_id):
             return Response(
                 {"detail": ELECTION_CONFIGURATION_LOCKED_DETAIL},
@@ -415,8 +498,9 @@ class ElectionManageView(APIView):
     security_logger = logging.getLogger('security')
 
     def get(self, request):
-        # Return all elections (active and inactive)
-        elections = Election.objects.all().order_by('-year', '-start_time')
+        elections = scope_queryset(
+            Election.objects.all(), request.user, "id"
+        ).order_by('-year', '-start_time')
         serializer = ElectionSerializer(elections, many=True)
         return Response(serializer.data)
 
@@ -445,7 +529,7 @@ class ElectionManageView(APIView):
             )
 
         try:
-            election = Election.objects.get(pk=election_id)
+            election = get_scoped_election_or_404(request.user, election_id)
         except Election.DoesNotExist:
             return Response(
                 {"detail": "Election not found."},
@@ -703,6 +787,15 @@ class MeView(APIView):
         return Response({
             "username": user.username,
             "role": user.role,
+            "assigned_election": (
+                {
+                    "id": user.assigned_election.id,
+                    "name": user.assigned_election.name,
+                    "year": user.assigned_election.year,
+                }
+                if user.assigned_election_id
+                else None
+            ),
         })
 
 
@@ -768,12 +861,21 @@ class StudentActivationView(APIView):
 
 
         try:
-            # Get the specific election
-            election = Election.objects.get(id=election_id)
+            election = get_scoped_election_or_404(request.user, election_id)
         except Election.DoesNotExist:
             return Response(
                 {"detail": "Election not found."},
                 status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if bool(is_active) and not election.is_active:
+            self.security_logger.warning(
+                f"ACTIVATION_DENIED_INACTIVE_ELECTION: student_id={student_id}, election_id={election_id}, "
+                f"user={user.username if user else 'unknown'}, ip={client_ip}"
+            )
+            return Response(
+                {"detail": "Voters cannot be activated for an inactive election."},
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         try:
@@ -827,9 +929,10 @@ class StudentActivationView(APIView):
 
 class ElectionCreateView(APIView):
     """
-    Staff or superuser can create a new election.
+    Only a superuser can create an election because creation is a global
+    operation and cannot be scoped to a staff member's assigned election.
     """
-    permission_classes = [IsStaffOrSuperUser]
+    permission_classes = [IsSuperUser]
 
     def post(self, request):
         serializer = ElectionSerializer(data=request.data)
@@ -972,7 +1075,7 @@ class ElectionStatsView(APIView):
 
     def get(self, request, election_id):
         try:
-            election = Election.objects.get(pk=election_id)
+            election = get_scoped_election_or_404(request.user, election_id)
         except Election.DoesNotExist:
             return Response(
                 {"detail": "Election not found."},
@@ -1004,7 +1107,9 @@ class PositionStatsView(APIView):
             )
 
         try:
-            position = Position.objects.get(pk=position_id)
+            position = get_object_or_404(
+                scope_queryset(Position.objects.all(), request.user), pk=position_id
+            )
         except Position.DoesNotExist:
             return Response(
                 {"detail": "Position not found."},
@@ -1041,7 +1146,7 @@ class ElectionResultsView(APIView):
 
     def get(self, request, election_id):
         try:
-            election = Election.objects.get(pk=election_id)
+            election = get_scoped_election_or_404(request.user, election_id)
         except Election.DoesNotExist:
             return Response(
                 {"detail": "Election not found."},
@@ -1074,6 +1179,7 @@ class ElectionResultsView(APIView):
                     "student_id": candidate.student.student_id,
                     "candidate_name": candidate.student.full_name,
                     "photo_url": candidate.photo_url or "",
+                    "ballot_number": candidate.ballot_number,
                     "vote_count": vote_count,
                 })
 
@@ -1132,7 +1238,9 @@ class CandidatesForPositionView(APIView):
             )
 
         try:
-            position = Position.objects.get(pk=position_id)
+            position = get_object_or_404(
+                scope_queryset(Position.objects.all(), request.user), pk=position_id
+            )
             candidates = Candidate.objects.filter(position_id=position_id).select_related('student').order_by('ballot_number')
         except (ValueError, Position.DoesNotExist):
             return Response(

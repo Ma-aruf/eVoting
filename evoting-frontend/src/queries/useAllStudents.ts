@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import api from '../apiConfig';
+import {useAuth} from '../hooks/useAuth';
 
 export interface Student {
   id: number;
@@ -16,8 +17,9 @@ export interface Student {
 }
 
 export const useAllStudents = () => {
+  const {user} = useAuth();
   return useQuery({
-    queryKey: ['students', 'all'], // Separate key for all students
+    queryKey: ['students', 'all', user?.username ?? null],
     queryFn: async (): Promise<Student[]> => {
       const res = await api.get('api/students/');
       const data = res.data;

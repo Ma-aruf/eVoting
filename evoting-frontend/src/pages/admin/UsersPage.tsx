@@ -1,12 +1,23 @@
 import {type FormEvent, useEffect, useState} from 'react';
+import {FiEdit2, FiLock, FiPlus, FiSearch, FiTrash2} from 'react-icons/fi';
 import api from '../../apiConfig';
+import ConfirmModal from '../../components/ConfirmModal';
+import PageContainer from '../../components/PageContainer';
+import Alert from '../../components/ui/Alert';
+import Button from '../../components/ui/Button';
+import FormField from '../../components/ui/FormField';
+import Modal from '../../components/ui/Modal';
+import SelectField from '../../components/ui/SelectField';
+import TextInput from '../../components/ui/TextInput';
 import {showError, showSuccess} from '../../utils/toast';
+import {type Election, useElections} from '../../queries/useElections';
 
 interface User {
     id: number;
     username: string;
     role: 'superuser' | 'staff' | 'activator';
     is_active: boolean;
+    assigned_election: Election | null;
 }
 
 interface ListResponse<T> {
@@ -14,63 +25,44 @@ interface ListResponse<T> {
     results?: T[];
 }
 
-const UserIcon = () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-    </svg>
-);
+type ApiError = { response?: { data?: unknown } };
 
-const PlusIcon = () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
-    </svg>
-);
-
-const EditIcon = () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-    </svg>
-);
-
-const TrashIcon = () => (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-    </svg>
-);
+function errorMessage(error: unknown, fallback: string) {
+    const detail = (error as ApiError).response?.data;
+    if (typeof detail === 'string') return detail;
+    if (detail && typeof detail === 'object') {
+        return Object.entries(detail as Record<string, unknown>)
+            .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : String(value)}`)
+            .join('; ') || fallback;
+    }
+    return fallback;
+}
 
 export default function UsersPage() {
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(false);
     const [showForm, setShowForm] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-
+    const [formError, setFormError] = useState('');
+    const [userToDelete, setUserToDelete] = useState<User | null>(null);
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
-    const [role, setRole] = useState<'staff' | 'activator' | 'superuser'>('staff');
-
-
+    const [role, setRole] = useState<User['role']>('staff');
     const [editingUser, setEditingUser] = useState<User | null>(null);
+    const [electionId, setElectionId] = useState<number | null>(null);
+    const electionsQuery = useElections();
+    const elections = electionsQuery.data ?? [];
 
-    // Filter users by search term
-    const filteredUsers = users.filter(user =>
-        user.username.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredUsers = users.filter(user => user.username.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const fetchUsers = async () => {
         setLoading(true);
         try {
             const res = await api.get<User[] | ListResponse<User>>('api/users/');
             const data = res.data;
-            if (Array.isArray(data)) {
-                setUsers(data);
-            } else if (Array.isArray(data.results)) {
-                setUsers(data.results);
-            } else {
-                setUsers([]);
-            }
-        } catch (err) {
-            showError('Failed to load users.');
+            setUsers(Array.isArray(data) ? data : Array.isArray(data.results) ? data.results : []);
+        } catch (error) {
+            showError(errorMessage(error, 'Failed to load users.'));
         } finally {
             setLoading(false);
         }
@@ -85,37 +77,43 @@ export default function UsersPage() {
         setPassword('');
         setRole('staff');
         setEditingUser(null);
+        setElectionId(null);
+        setFormError('');
         setShowForm(false);
     };
 
-    const handleSubmit = async (e: FormEvent) => {
-        e.preventDefault();
-        setLoading(true);
+    const openCreateForm = () => {
+        resetForm();
+        setShowForm(true);
+    };
 
+    const handleSubmit = async (event: FormEvent) => {
+        event.preventDefault();
+        setLoading(true);
+        setFormError('');
         try {
             if (editingUser) {
-                const payload: any = {username, role};
-                if (password.trim()) {
-                    payload.password = password;
-                }
+                const payload: { username: string; role: User['role']; password?: string } = {username, role};
+                if (password.trim()) payload.password = password;
                 await api.patch(`api/users/${editingUser.id}/`, payload);
                 showSuccess('User updated successfully.');
             } else {
-                await api.post('api/users/', {username, password, role});
+                const payload: {
+                    username: string;
+                    password: string;
+                    role: User['role'];
+                    election_id?: number
+                } = {username, password, role};
+                if (role !== 'superuser' && electionId) payload.election_id = electionId;
+                await api.post('api/users/', payload);
                 showSuccess('User created successfully.');
             }
             resetForm();
             await fetchUsers();
-        } catch (err: any) {
-            const detail = err.response?.data;
-            if (typeof detail === 'object') {
-                const messages = Object.entries(detail)
-                    .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
-                    .join('; ');
-                showError(messages || 'Operation failed.');
-            } else {
-                showError(detail || 'Operation failed.');
-            }
+        } catch (error) {
+            const message = errorMessage(error, 'Operation failed.');
+            setFormError(message);
+            showError(message);
         } finally {
             setLoading(false);
         }
@@ -125,201 +123,100 @@ export default function UsersPage() {
         setEditingUser(user);
         setUsername(user.username);
         setRole(user.role);
+        setElectionId(user.assigned_election?.id ?? null);
         setPassword('');
+        setFormError('');
         setShowForm(true);
     };
 
-    const handleDelete = async (user: User) => {
-        if (!confirm(`Delete user "${user.username}"?`)) return;
-
+    const handleDelete = async () => {
+        if (!userToDelete) return;
         setLoading(true);
         try {
-            await api.delete(`api/users/${user.id}/`);
+            await api.delete(`api/users/${userToDelete.id}/`);
             showSuccess('User deleted.');
+            setUserToDelete(null);
             await fetchUsers();
-        } catch (err: any) {
-            showError(err.response?.data?.detail || 'Failed to delete user.');
+        } catch (error) {
+            showError(errorMessage(error, 'Failed to delete user.'));
         } finally {
             setLoading(false);
         }
     };
 
-    const getRoleBadgeClass = (r: string) => {
-        switch (r) {
-            case 'superuser':
-                return 'bg-purple-100 text-purple-700';
-            case 'staff':
-                return 'bg-blue-100 text-blue-700';
-            case 'activator':
-                return 'bg-green-100 text-green-700';
-            default:
-                return 'bg-gray-100 text-gray-700';
-        }
+    const roleVariant = (userRole: User['role']): 'primary' | 'success' | 'warning' => {
+        if (userRole === 'activator') return 'success';
+        if (userRole === 'superuser') return 'warning';
+        return 'primary';
     };
 
     return (
-        <div className="space-y-6">
-            {/* Page Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <h1 className="text-xl font-semibold text-gray-900">Manage Users</h1>
-                <button
-                    onClick={() => {
-                        resetForm();
-                        setShowForm(true);
-                    }}
-                    className="inline-flex w-full sm:w-auto justify-center items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white transition"
-                >
-                    <PlusIcon/>
-                    Add User
-                </button>
+        <PageContainer className="users-page">
+            <div className="users-page-header">
+                <div>
+                    <h1 className="text-lg font-semibold text-gray-900">Manage users</h1>
+                    <p className="text-xs text-gray-500">Manage administrator accounts and access roles.</p>
+                </div>
+                <Button type="button" size="compact" leadingIcon={<FiPlus aria-hidden="true"/>}
+                        onClick={openCreateForm}>
+                    Add user
+                </Button>
             </div>
 
+            <div className="users-search-field">
+                <FiSearch aria-hidden="true"/>
+                <TextInput type="search" placeholder="Search by username" value={searchTerm}
+                           onChange={event => setSearchTerm(event.target.value)}
+                           aria-label="Search users by username"/>
+            </div>
+            {searchTerm &&
+                <Button type="button" variant="quiet" size="compact" onClick={() => setSearchTerm('')}>Clear
+                    search</Button>}
 
-            {/* Add/Edit User Form */}
-            {showForm && (
-                <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-                    <h2 className="text-base font-medium text-gray-900 mb-4">
-                        {editingUser ? 'Edit User' : 'Add New User'}
-                    </h2>
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div>
-                                <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="username">
-                                    Username
-                                </label>
-                                <input
-                                    id="username"
-                                    type="text"
-                                    value={username}
-                                    onChange={(e) => setUsername(e.target.value)}
-                                    required
-                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="Enter username"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="password">
-                                    Password {editingUser && <span className="text-gray-400">(leave blank to keep)</span>}
-                                </label>
-                                <input
-                                    id="password"
-                                    type="password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    required={!editingUser}
-                                    minLength={6}
-                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder={editingUser ? '••••••••' : 'Min 6 characters'}
-                                />
-                            </div>
-                            <div>
-                                <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="role">
-                                    Role
-                                </label>
-                                <select
-                                    id="role"
-                                    value={role}
-                                    onChange={(e) => setRole(e.target.value as any)}
-                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                >
-                                    <option value="staff">Staff</option>
-                                    <option value="activator">Activator</option>
-                                    <option value="superuser">Superuser</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div className="flex gap-3">
-                            <button
-                                type="submit"
-                                disabled={loading}
-                                className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-60 disabled:cursor-not-allowed transition"
-                            >
-                                {loading ? 'Saving…' : editingUser ? 'Update User' : 'Create User'}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={resetForm}
-                                className="px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 transition"
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    </form>
-                </section>
-            )}
-
-            {/* Users Table */}
-            <section className="bg-white rounded-xl border border-gray-200  overflow-hidden">
-                <div
-                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-5 border-b border-gray-100">
-                    <div className="flex items-center gap-4">
-                        <h2 className="text-base font-medium text-gray-900">
-                            Users
-                        </h2>
-                        {loading && <span className="text-xs text-gray-500">Loading…</span>}
-                    </div>
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
-                        <input
-                            type="text"
-                            placeholder="Search by username..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full sm:w-64 border border-blue-200 border-2 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        {searchTerm && (
-                            <span className="text-xs text-gray-500">
-                                {filteredUsers.length} of {users.length}
-                            </span>
-                        )}
-                    </div>
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="min-w-full text-sm">
+            <section className="users-table-section" aria-label="User records">
+                <div className="users-table-wrap">
+                    <table className="users-table">
+                        <caption className="sr-only">Managed users</caption>
                         <thead>
-                        <tr className="bg-blue-100 border-b border-gray-100">
-                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Username
-                            </th>
-                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        <tr>
+                            <th scope="col">Username</th>
+                            <th scope="col">Role</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Election</th>
+                            <th scope="col">Actions</th>
                         </tr>
                         </thead>
-                        <tbody className="divide-y  divide-gray-100">
-                        {filteredUsers.map((user: User) => (
-                            <tr key={user.id} className="hover:bg-gray-50 transition odd:bg-white even:bg-blue-50 ">
-                                <td className="px-5 py-2">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
-                                            <UserIcon/>
-                                        </div>
-                                        <span className="font-medium text-gray-900">{user.username}</span>
+                        <tbody>
+                        {filteredUsers.map(user => (
+                            <tr key={user.id}>
+                                <td data-label="Username">
+                                    <div className="users-identity">
+                                        <span>{user.username}</span>
                                     </div>
                                 </td>
-                                <td className="px-5 py-2">
-                                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getRoleBadgeClass(user.role)}`}>
-                                        {user.role}
-                                    </span>
+                                <td data-label="Role"><span
+                                    className={`users-status-text users-status-text--${roleVariant(user.role)}`}>{user.role}</span>
                                 </td>
-                                <td className="px-5 py-2">
-                                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${user.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-                                        {user.is_active ? 'Active' : 'Inactive'}
-                                    </span>
+                                <td data-label="Status"><span
+                                    className={`users-status-text users-status-text--${user.is_active ? 'success' : 'neutral'}`}>{user.is_active ? 'Active' : 'Inactive'}</span>
                                 </td>
-                                <td className="px-5 py-2">
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={() => handleEdit(user)}
-                                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                                            title="Edit user"
-                                        >
-                                            <EditIcon/>
+                                <td data-label="Election">
+                                    {user.assigned_election
+                                        ? `${user.assigned_election.name} (${user.assigned_election.year})`
+                                        : 'All elections'}
+                                </td>
+                                <td data-label="Actions">
+                                    <div className="users-actions">
+                                        <button type="button" className="users-icon-button users-icon-button--edit"
+                                                onClick={() => handleEdit(user)} aria-label={`Edit ${user.username}`}
+                                                title="Edit user">
+                                            <FiEdit2 aria-hidden="true"/>
                                         </button>
-                                        <button
-                                            onClick={() => handleDelete(user)}
-                                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition"
-                                            title="Delete user"
-                                        >
-                                            <TrashIcon/>
+                                        <button type="button" className="users-icon-button users-icon-button--delete"
+                                                onClick={() => setUserToDelete(user)}
+                                                aria-label={`Delete ${user.username}`} title="Delete user"
+                                                disabled={loading}>
+                                            <FiTrash2 aria-hidden="true"/>
                                         </button>
                                     </div>
                                 </td>
@@ -327,17 +224,91 @@ export default function UsersPage() {
                         ))}
                         {!loading && filteredUsers.length === 0 && (
                             <tr>
-                                <td colSpan={4} className="px-5 py-8 text-center text-gray-400">
-                                    {searchTerm
-                                        ? 'No users match your search.'
-                                        : 'No users found. Click "Add User" to create one.'}
-                                </td>
+                                <td colSpan={5}
+                                    className="users-empty-cell">{searchTerm ? 'No users match your search.' : 'No users found. Add a user to get started.'}</td>
                             </tr>
                         )}
                         </tbody>
                     </table>
                 </div>
             </section>
-        </div>
+
+            <Modal open={showForm} onClose={resetForm} title={editingUser ? 'Edit user' : 'Add user'}
+                   description={editingUser ? 'Update account details. Election assignment is read-only.' : 'Create an administrator account with a specific access role.'}
+                   className="users-modal">
+                <form onSubmit={handleSubmit} className="users-form">
+                    {formError && <Alert variant="error" title="Unable to save user">{formError}</Alert>}
+                    <div className="users-form-grid">
+                        <FormField id="username" label="Username" required>
+                            <TextInput type="text" value={username} onChange={event => setUsername(event.target.value)}
+                                       placeholder="Enter username"/>
+                        </FormField>
+                        <div className="users-password-field">
+                            <FormField id="password" label="Password" required={!editingUser}
+                            >
+                                <TextInput type="password" value={password}
+                                           onChange={event => setPassword(event.target.value)}
+                                           placeholder={editingUser ? 'Leave unchanged' : 'Enter password'}
+                                           minLength={6}/>
+                            </FormField>
+                            <FiLock aria-hidden="true"/>
+                        </div>
+                        <FormField id="role" label="Role" required>
+                            <SelectField value={role} onChange={event => {
+                                const nextRole = event.target.value as User['role'];
+                                setRole(nextRole);
+                                if (nextRole === 'superuser') setElectionId(null);
+                            }}>
+                                <option value="staff">Staff</option>
+                                <option value="activator">Activator</option>
+                                <option value="superuser">Superuser</option>
+                            </SelectField>
+                        </FormField>
+                        {editingUser ? (
+                            <FormField id="assigned-election" label="Assigned election"
+                                       helperText="This assignment cannot be changed after account creation.">
+                                <TextInput
+                                    id="assigned-election"
+                                    value={editingUser.assigned_election ? `${editingUser.assigned_election.name} (${editingUser.assigned_election.year})` : 'All elections'}
+                                    readOnly
+                                    aria-readonly="true"
+                                />
+                            </FormField>
+                        ) : role !== 'superuser' ? (
+                            <FormField id="assigned-election" label="Assigned election" required
+                                       helperText="Staff and activator accounts must belong to one election.">
+                                <SelectField
+                                    id="assigned-election"
+                                    value={electionId ?? ''}
+                                    onChange={event => setElectionId(event.target.value ? Number(event.target.value) : null)}
+                                >
+                                    <option value="">Select an election</option>
+                                    {elections.map((election: Election) => (
+                                        <option key={election.id} value={election.id}>
+                                            {election.name} ({election.year})
+                                        </option>
+                                    ))}
+                                </SelectField>
+                            </FormField>
+                        ) : null}
+                    </div>
+                    <div className="users-modal-actions">
+                        <Button type="button" variant="secondary" onClick={resetForm}>Cancel</Button>
+                        <Button
+                            type="submit"
+                            loading={loading}
+                            disabled={!editingUser && role !== 'superuser' && !electionId}
+                        >
+                            {editingUser ? 'Save changes' : 'Create user'}
+                        </Button>
+                    </div>
+                </form>
+            </Modal>
+
+            <ConfirmModal isOpen={Boolean(userToDelete)} onClose={() => setUserToDelete(null)} onConfirm={handleDelete}
+                          title="Delete user"
+                          message={userToDelete ? `Delete user “${userToDelete.username}”? This action cannot be undone.` : ''}
+                          confirmText="Delete user" cancelText="Cancel" type="danger"/>
+        </PageContainer>
     );
 }

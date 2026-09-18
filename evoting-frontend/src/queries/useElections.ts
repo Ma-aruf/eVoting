@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import api from '../apiConfig';
 import { queryKeys } from './queryKeys';
+import {useAuth} from '../hooks/useAuth';
 
 export interface Election {
   id: number;
@@ -12,8 +13,9 @@ export interface Election {
 }
 
 export const useElections = () => {
+  const {user} = useAuth();
   return useQuery({
-    queryKey: queryKeys.elections,
+    queryKey: [...queryKeys.elections, user?.username ?? null],
     queryFn: async (): Promise<Election[]> => {
       const res = await api.get('api/elections/');
       return Array.isArray(res.data) ? res.data : (res.data.results || []);

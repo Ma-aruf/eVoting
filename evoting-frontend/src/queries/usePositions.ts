@@ -59,17 +59,20 @@ export const useUpdatePosition = () => {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async ({ id, ...data }: {
+    mutationFn: async (input: {
       id: number;
       name: string;
       display_order: number;
+      election: number;
     }) => {
+      const {id, election, ...data} = input;
+      void election;
       const res = await api.patch(`api/positions/${id}/`, data);
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       showSuccess('Position updated successfully.');
-      queryClient.invalidateQueries({ queryKey: queryKeys.positions(null) }); // Invalidate all since we don't know the election
+      queryClient.invalidateQueries({ queryKey: queryKeys.positions(variables.election) });
     },
     onError: (err: any) => {
       const detail = err.response?.data?.detail;
@@ -86,9 +89,9 @@ export const useDeletePosition = () => {
       await api.delete(`api/positions/${position.id}/`);
       return position;
     },
-    onSuccess: () => {
+    onSuccess: (_, position) => {
       showSuccess('Position deleted successfully.');
-      queryClient.invalidateQueries({ queryKey: queryKeys.positions(null) }); // Invalidate all since we don't know the election
+      queryClient.invalidateQueries({ queryKey: queryKeys.positions(position.election) });
     },
     onError: (err: any) => {
       const detail = err.response?.data?.detail;

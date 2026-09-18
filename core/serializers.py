@@ -3,16 +3,72 @@ from .models import Election, Position, Candidate, Vote, Student, User
 from .utils import election_has_votes, ELECTION_CONFIGURATION_LOCKED_DETAIL
 
 
+class AssignedElectionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Election
+        fields = ["id", "name", "year"]
+
+
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, min_length=6)
+    election_id = serializers.PrimaryKeyRelatedField(
+        source="assigned_election",
+        queryset=Election.objects.all(),
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    assigned_election = AssignedElectionSerializer(read_only=True)
 
     class Meta:
         model = User
-        fields = ["id", "username", "role", "is_active", "password"]
+        fields = [
+            "id",
+            "username",
+            "role",
+            "is_active",
+            "password",
+            "election_id",
+            "assigned_election",
+        ]
         read_only_fields = ["id"]
+
+    def validate(self, attrs):
+        role = attrs.get("role", self.instance.role if self.instance else "staff")
+        election_supplied = "election_id" in self.initial_data
+
+        if self.instance:
+            if election_supplied:
+                raise serializers.ValidationError({
+                    "election_id": "Election assignment cannot be changed after account creation."
+                })
+
+            if role == "superuser" or self.instance.role == "superuser":
+                if role != self.instance.role:
+                    raise serializers.ValidationError({
+                        "role": "Superuser status cannot be changed through user management."
+                    })
+            elif self.instance.assigned_election_id is None:
+                raise serializers.ValidationError({
+                    "assigned_election": "This account must be assigned to an election before it can be edited."
+                })
+        elif role == "superuser":
+            if election_supplied:
+                raise serializers.ValidationError({
+                    "election_id": "Superusers must not be assigned to an election."
+                })
+        elif attrs.get("assigned_election") is None:
+            raise serializers.ValidationError({
+                "election_id": "Staff and activator accounts require an election assignment."
+            })
+
+        return attrs
 
     def create(self, validated_data):
         password = validated_data.pop("password")
+        role = validated_data.get("role", "staff")
+        validated_data["is_superuser"] = role == "superuser"
+        validated_data["is_staff"] = role == "superuser"
         user = User(**validated_data)
         user.set_password(password)
         user.save()
@@ -20,6 +76,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         password = validated_data.pop("password", None)
+        validated_data.pop("assigned_election", None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         if password:
@@ -41,6 +98,13 @@ class StudentSerializer(serializers.ModelSerializer):
         if not Election.objects.filter(id=value).exists():
             raise serializers.ValidationError("Invalid election ID.")
         return value
+
+    def validate(self, attrs):
+        if self.instance and "election_id" in self.initial_data:
+            raise serializers.ValidationError({
+                "election_id": "A student's election cannot be changed after creation."
+            })
+        return attrs
 
     def create(self, validated_data):
         """Create student with the specified election."""

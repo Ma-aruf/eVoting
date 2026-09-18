@@ -243,7 +243,7 @@ class VotingIntegrityTests(TestCase):
         self.assertTrue(self.student.is_active)
 
     def test_candidate_assignment_validation_is_field_level(self):
-        staff = User.objects.create_user("staff", password="x", role="staff")
+        staff = User.objects.create_user("staff", password="x", role="staff", assigned_election=self.election)
         self.client.force_authenticate(staff)
         response = self.client.post("/api/candidates/create/", {
             "student": self.other_candidate_student.id,
@@ -283,7 +283,7 @@ class VotingIntegrityTests(TestCase):
                 self.other_election, self.other_student
             )).status_code, 201
         )
-        staff = User.objects.create_user("results", password="x", role="staff")
+        staff = User.objects.create_user("results", password="x", role="staff", assigned_election=self.election)
         factory = APIRequestFactory()
         results_request = factory.get("/api/results/")
         force_authenticate(results_request, user=staff)
@@ -301,7 +301,7 @@ class VotingIntegrityTests(TestCase):
 
     def test_configuration_is_locked_after_first_vote(self):
         self.assertEqual(self.post(**self.headers()).status_code, 201)
-        staff = User.objects.create_user("lock-staff", password="x", role="staff")
+        staff = User.objects.create_user("lock-staff", password="x", role="staff", assigned_election=self.election)
         self.client.force_authenticate(staff)
         locked_detail = "Election configuration is locked because voting has already started."
 
@@ -383,7 +383,7 @@ class VotingIntegrityTests(TestCase):
             student_id="PRE-CANDIDATE", full_name="Pre Candidate", class_name="A",
             election=election,
         )
-        staff = User.objects.create_user("pre-staff", password="x", role="staff")
+        staff = User.objects.create_user("pre-staff", password="x", role="staff", assigned_election=election)
         self.client.force_authenticate(staff)
 
         created_position = self.client.post(

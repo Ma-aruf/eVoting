@@ -80,6 +80,6 @@ urlpatterns = [
     # Image upload
     path("upload/image/", ImageUploadView.as_view(), name="image-upload"),
 
-    # Public read-only viewsets (must come last)
+    # Router endpoints (must come last so explicit routes win)
     path("", include(router.urls)),
 ]
