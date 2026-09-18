@@ -68,9 +68,9 @@ class Candidate(models.Model):
 
 
 class Vote(models.Model):
-    election = models.ForeignKey(Election, on_delete=models.CASCADE)
-    position = models.ForeignKey(Position, on_delete=models.CASCADE)
-    candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE)
+    election = models.ForeignKey(Election, on_delete=models.PROTECT)
+    position = models.ForeignKey(Position, on_delete=models.PROTECT)
+    candidate = models.ForeignKey(Candidate, on_delete=models.PROTECT)
     voter_hash = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
 

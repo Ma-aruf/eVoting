@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/evoting.iml" filepath="$PROJECT_DIR$/.idea/evoting.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../nupsg/.idea/nupsg.iml" filepath="$PROJECT_DIR$/../nupsg/.idea/nupsg.iml" />
     </modules>
   </component>
 </project>

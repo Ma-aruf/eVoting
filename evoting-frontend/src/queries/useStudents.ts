@@ -54,12 +54,12 @@ export const useCreateStudent = () => {
             return res.data;
         },
         onSuccess: (_, variables) => {
-            showSuccess('Student added successfully.');
+            showSuccess('Voter added successfully.');
             queryClient.invalidateQueries({queryKey: queryKeys.students(variables.election_id)});
         },
         onError: (err: any) => {
             const detail = err.response?.data?.detail;
-            showError(detail || 'Failed to add student. Make sure the ID is unique within this election.');
+            showError(detail || 'Failed to add voter. Make sure the ID is unique within this election.');
         },
     });
 };
@@ -105,14 +105,14 @@ export const useUpdateStudent = () => {
                 queryClient.setQueryData(queryKeys.students(targetElection.id), context.previousStudents);
             }
             const detail = (err as any).response?.data?.detail;
-            showError(detail || 'Failed to update student.');
+            showError(detail || 'Failed to update voter.');
         },
         onSettled: () => {
             // Refetch to ensure server state
             queryClient.invalidateQueries({queryKey: queryKeys.students(targetElection.id)});
         },
         onSuccess: () => {
-            showSuccess('Student updated successfully.');
+            showSuccess('Voter updated successfully.');
         },
     });
 };
@@ -129,7 +129,7 @@ export const useDeleteStudent = () => {
             return student;
         },
         onSuccess: () => {
-            showSuccess('Student deleted successfully.');
+            showSuccess('Voter deleted successfully.');
             queryClient.invalidateQueries({queryKey: queryKeys.students(null)}); // Invalidate all since we don't know the election
         },
         onError: (err: any) => {
@@ -137,7 +137,7 @@ export const useDeleteStudent = () => {
                 showError(err.message);
             } else {
                 const detail = err.response?.data?.detail;
-                showError(detail || 'Failed to delete student.');
+                showError(detail || 'Failed to delete voter.');
             }
         },
     });
@@ -158,11 +158,11 @@ export const useBulkUploadStudents = () => {
             return res.data;
         },
         onSuccess: (data, variables) => {
-            showSuccess(data.detail || 'Upload completed');
+            showSuccess(data.detail || 'Voter import completed');
             queryClient.invalidateQueries({queryKey: queryKeys.students(variables.election_id)});
         },
         onError: (err: any) => {
-            showError(err.response?.data?.detail || 'Bulk upload failed');
+            showError(err.response?.data?.detail || 'Voter import failed');
         },
     });
 };

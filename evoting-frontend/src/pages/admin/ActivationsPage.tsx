@@ -1,295 +1,45 @@
-import {type FormEvent, type MouseEvent, useEffect, useState} from 'react';
+import {type FormEvent, type KeyboardEvent, useEffect, useMemo, useState} from 'react';
+import {FiCheckCircle, FiSearch, FiUsers, FiUserPlus, FiUserX} from 'react-icons/fi';
 import {useElections} from '../../queries/useElections';
-import {useStudents} from '../../queries/useStudents';
+import {useStudents, type Student} from '../../queries/useStudents';
 import {useDashboardStats} from '../../queries/useDashboard';
 import {useActivateStudent} from '../../queries/useActivations';
 import {showError} from '../../utils/toast';
-import {queryKeys} from '../../queries/queryKeys';
-import {useQueryClient} from "@tanstack/react-query";
+import PageContainer from '../../components/PageContainer';
+import PageHeader from '../../components/PageHeader';
+import FormField from '../../components/ui/FormField';
+import TextInput from '../../components/ui/TextInput';
+import SelectField from '../../components/ui/SelectField';
+import Button from '../../components/ui/Button';
+import Alert from '../../components/ui/Alert';
+import Badge from '../../components/ui/Badge';
+import LoadingState from '../../components/ui/LoadingState';
+import EmptyState from '../../components/ui/EmptyState';
+import ErrorState from '../../components/ui/ErrorState';
+import StatisticCard from '../../components/StatisticCard';
 
+type ApiError = {response?: {data?: {detail?: string}}};
+function errorMessage(error: unknown) { return (error as ApiError)?.response?.data?.detail || 'Activation failed. Please try again.'; }
 
 export default function ActivationsPage() {
-    const [selectedElectionId, setSelectedElectionId] = useState<number | null>(null);
-
-    // Queries
-    const {data: elections = [], isLoading: electionsLoading} = useElections();
-    const {data: students = [], isLoading: studentsLoading} = useStudents(selectedElectionId);
-    const {data: stats, isLoading: statsLoading} = useDashboardStats(selectedElectionId);
-    const [isActivating, setIsActivating] = useState(false)
-
-    // Unified filtering - only show inactive students for activation
-    const inactiveStudents = students.filter(student => !student.is_active && student.has_voted === false)
-
-    // Total inactive (not voted and voted) students
-    const totalInactiveStudents = inactiveStudents.length
-
-
-    // Mutations
-    const activateStudentMutation = useActivateStudent();
-
-    // Loading state
-    const loading = electionsLoading || studentsLoading || statsLoading || activateStudentMutation.isPending;
-
-    // Auto-select first election when data loads - prioritize active election
-    useEffect(() => {
-        if (elections.length > 0 && !selectedElectionId) {
-            // Find active election first
-            const activeElection = elections.find(e => e.is_active);
-            const targetElection = activeElection || elections[0];
-            setSelectedElectionId(targetElection.id);
-        }
-    }, [elections, selectedElectionId]);
-
-    const [studentQuery, setStudentQuery] = useState('');
-    const [studentDropdownOpen, setStudentDropdownOpen] = useState(false);
-    const [studentId, setStudentId] = useState('');
-
-    const queryClient = useQueryClient();
-    const activeElection = elections.find(e => e.is_active);
-
-
-    const handleActivate = async (e?: FormEvent | MouseEvent<HTMLButtonElement>) => {
-        e?.preventDefault();
-        const id = studentId.trim();
-        if (!id) return;
-
-        const activeStud = students.find(
-            (student) => student.student_id === id
-        );
-
-        if (activeStud?.is_active) {
-            showError('Student is already active');
-            return;
-        }
-
-        setIsActivating(true);
-
-        activateStudentMutation.mutate({
-            student_id: id,
-            election_id: selectedElectionId!
-        }, {
-            onSuccess: () => {
-                setStudentId('');
-                setStudentQuery('');
-
-                queryClient.invalidateQueries({
-                    queryKey: queryKeys.dashboard(activeElection?.id ?? null),
-                });
-
-
-            },
-            onError: (err: any) => {
-                showError(err.response?.data?.detail || 'Activation failed. Please try again.');
-            },
-            onSettled: () => {
-                setIsActivating(false);
-            }
-        });
-    };
-
-    const selectedStudent = students.find(s => s.student_id.toLowerCase() === studentId.toLowerCase()) ?? null;
-
-    // Unified filtering - search within inactive students only
-    const filteredStudentOptions = inactiveStudents.filter((s) => {
-        const q = studentQuery.toLowerCase().trim();
-        if (!q) return true;
-        return s.full_name.toLowerCase().includes(q) || s.student_id.toLowerCase().includes(q);
-    });
-
-    return (
-        <div className="space-y-0">
-            {activeElection?.is_active ? (
-                <>
-                    {/* Stat Cards */}
-                    <section className="">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {/* Active Students Card */}
-                            <div
-                                className="bg-gradient-to-br h-30 py-2 px-4 from-blue-400 to-blue-600 rounded-xl p-5 text-white relative overflow-hidden">
-                                <div className="absolute top-4 right-4 opacity-20">
-                                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                                              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                    </svg>
-                                </div>
-                                <div className="flex items-center gap-3 mb-3">
-                                    <p className="text-sm text-white/80">Total activated</p>
-                                </div>
-                                <h3 className="font-semibold text-lg">Active Students</h3>
-                                <p className="text-3xl font-bold mt-2">{stats?.active_students || 0}</p>
-                            </div>
-
-                            {/* Inactive Students Card */}
-                            <div
-                                className="bg-gradient-to-br h-30 from-cyan-600 to-cyan-900 rounded-xl py-2 px-4 text-white relative overflow-hidden">
-                                <div className="absolute top-4 right-4 opacity-20">
-                                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                                              d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                    </svg>
-                                </div>
-                                <div className="flex items-center gap-3 mb-3">
-                                    <p className="text-sm text-white/80">Inactive & Not Voted</p>
-                                </div>
-                                <h3 className="font-semibold text-lg">Available for Activation</h3>
-                                <p className="text-3xl font-bold mt-2">{totalInactiveStudents || 0}</p>
-                            </div>
-
-                            {/* Total Students Card */}
-                            <div
-                                className="bg-gradient-to-br h-30 py-2 px-4 from-blue-600 to-blue-900 rounded-xl p-5 text-white relative overflow-hidden">
-                                <div className="absolute top-4 right-4 opacity-20">
-                                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                                              d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
-                                    </svg>
-                                </div>
-                                <div className="flex items-center gap-3 mb-3">
-                                    <p className="text-sm text-white/80">Total students</p>
-                                </div>
-                                <h3 className="font-semibold text-lg">All Students</h3>
-                                <p className="text-3xl font-bold mt-2">{stats?.total_students || 0}</p>
-                            </div>
-                        </div>
-                    </section>
-
-                    {/* Election Selector */}
-                    <div className=" p-5">
-                        <div className="flex-1">
-                            <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="election-select">
-                                Select Election
-                            </label>
-                            <select
-                                id="election-select"
-                                value={selectedElectionId ?? ''}
-                                onChange={(e) => setSelectedElectionId(e.target.value ? Number(e.target.value) : null)}
-                                className="border border-blue-300 rounded-lg px-3 py-2 text-sm w-full md:w-72 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                            >
-                                {elections.length === 0 && <option value="">No elections available</option>}
-                                {elections.map(e => (
-                                    <option key={e.id} value={e.id}>{e.name} ({e.year})</option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-
-                    {/* Activate Card */}
-                    <section className="bg-white rounded-xl border border-gray-200 p-5">
-                        <div className="flex flex-col md:flex-row md:items-end gap-4">
-                            <div className="flex-1">
-                                <h2 className="text-base font-medium text-gray-900">Activate Student</h2>
-                                <p className="text-xs text-gray-500 mt-1">Type student name or ID, select from list,
-                                    then
-                                    activate.</p>
-                            </div>
-                        </div>
-
-                        <form className="mt-4 flex flex-col lg:flex-row gap-4 items-end" onSubmit={handleActivate}>
-                            <div className="flex-1">
-                                <label className="text-xs font-medium text-gray-600 mb-1 block"
-                                       htmlFor="student_search">
-                                    Student
-                                </label>
-                                <div className="relative">
-                                    <input
-                                        id="student_search"
-                                        type="text"
-                                        value={studentQuery}
-                                        onChange={(e) => {
-                                            setStudentQuery(e.target.value);
-                                            setStudentDropdownOpen(true);
-                                            setStudentId('');
-                                        }}
-                                        onFocus={() => setStudentDropdownOpen(true)}
-                                        onBlur={() => {
-                                            window.setTimeout(() => setStudentDropdownOpen(false), 150);
-                                        }}
-                                        placeholder="Type student name or ID..."
-                                        disabled={inactiveStudents.length === 0}
-                                        className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
-                                    />
-
-                                    {studentDropdownOpen && students.length > 0 && (
-                                        <div
-                                            className="absolute z-10 mt-2 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-64 overflow-auto">
-                                            {filteredStudentOptions.length === 0 ? (
-                                                <div className="px-3 py-2 text-sm text-gray-500">No matches</div>
-                                            ) : (
-                                                filteredStudentOptions.slice(0, 25).map((student) => (
-                                                    <button
-                                                        key={student.id}
-                                                        type="button"
-                                                        onMouseDown={(e) => {
-                                                            e.preventDefault();
-                                                            setStudentId(student.student_id);
-                                                            setStudentQuery(`${student.full_name} (${student.student_id})`);
-                                                            setStudentDropdownOpen(false);
-                                                        }}
-                                                        className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition"
-                                                    >
-                                                        <span
-                                                            className="font-medium text-gray-900">{student.full_name}</span>{' '}
-                                                        <span className="text-gray-500">({student.student_id})</span>
-                                                    </button>
-                                                ))
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div className="w-full lg:w-auto">
-                                <button
-                                    type="submit"
-                                    disabled={loading || !studentId.trim() || students.find(s => s.student_id === studentId)?.is_active || isActivating}
-                                    className="w-full px-4 py-2 rounded-lg text-sm font-medium bg-cyan-600 hover:bg-cyan-700 text-white disabled:opacity-60 disabled:cursor-not-allowed transition"
-
-                                >
-                                    {isActivating ? 'Processing…' : 'Activate'}
-                                </button>
-                            </div>
-                        </form>
-
-                        {selectedStudent && (
-                            <div
-                                className="mt-4 bg-gray-50 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                                <div>
-                                    <p className="text-sm font-medium text-gray-900">{selectedStudent.full_name}</p>
-                                    <p className="text-xs text-gray-500">{selectedStudent.student_id} • {selectedStudent.class_name}</p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <span
-                                        className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${selectedStudent.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-                                        {selectedStudent.is_active ? 'Active' : 'Inactive'}
-                                    </span>
-                                    <span
-                                        className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${selectedStudent.has_voted ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
-                                        {selectedStudent.has_voted ? 'Voted' : 'Not voted'}
-                                    </span>
-                                </div>
-                            </div>
-                        )}
-                    </section>
-                </>
-            ) : (
-                <section className="bg-red-100 border-yellow-200 rounded-lg p-6">
-                    <div className="flex items-center gap-3">
-                        <svg className="text-red-500" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
-                             viewBox="0 0 24 24" fill="none"
-                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path
-                                d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                            <line x1="12" y1="9" x2="12" y2="13"></line>
-                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                        </svg>
-                        <div>
-                            <h3 className="text-lg font-medium text-gray-800">No Active Election</h3>
-                            <p className="text-gray-700">Student activations are only available when an election is
-                                active.</p>
-                        </div>
-                    </div>
-                </section>
-            )}
-        </div>
-    );
+ const [selectedElectionId,setSelectedElectionId]=useState<number|null>(null); const [studentQuery,setStudentQuery]=useState(''); const [selectedStudentId,setSelectedStudentId]=useState(''); const [isOpen,setIsOpen]=useState(false); const [activeOption,setActiveOption]=useState(0); const listboxId='activation-student-options';
+ const electionsQuery=useElections(); const studentsQuery=useStudents(selectedElectionId); const statsQuery=useDashboardStats(selectedElectionId); const activateStudent=useActivateStudent(); const elections=useMemo(()=>electionsQuery.data??[],[electionsQuery.data]); const students=useMemo(()=>studentsQuery.data??[],[studentsQuery.data]); const activeElection=elections.find(e=>e.is_active); const availableStudents=useMemo(()=>students.filter(s=>!s.is_active&&!s.has_voted),[students]); const options=useMemo(()=>{const q=studentQuery.trim().toLowerCase();return availableStudents.filter(s=>!q||s.full_name.toLowerCase().includes(q)||s.student_id.toLowerCase().includes(q)).slice(0,25)},[availableStudents,studentQuery]); const selectedStudent=students.find(s=>s.student_id===selectedStudentId)??null; const isLoading=electionsQuery.isLoading||studentsQuery.isLoading||statsQuery.isLoading;
+ // eslint-disable-next-line react-hooks/set-state-in-effect
+ useEffect(()=>{if(selectedElectionId===null&&elections.length)setSelectedElectionId((activeElection??elections[0]).id)},[activeElection,elections,selectedElectionId]);
+ const chooseStudent=(student:Student)=>{setSelectedStudentId(student.student_id);setStudentQuery(student.full_name+' ('+student.student_id+')');setIsOpen(false);setActiveOption(0)};
+ const handleSearchKeyDown=(event:KeyboardEvent<HTMLInputElement>)=>{if(event.key==='ArrowDown'){event.preventDefault();setIsOpen(true);setActiveOption(i=>Math.min(i+1,Math.max(options.length-1,0)))}if(event.key==='ArrowUp'){event.preventDefault();setIsOpen(true);setActiveOption(i=>Math.max(i-1,0))}if(event.key==='Enter'&&isOpen&&options[activeOption]){event.preventDefault();chooseStudent(options[activeOption])}if(event.key==='Escape')setIsOpen(false)};
+ const handleActivate=(event:FormEvent)=>{event.preventDefault();if(!selectedElectionId||!selectedStudentId)return;activateStudent.mutate({student_id:selectedStudentId,election_id:selectedElectionId},{onSuccess:()=>{setSelectedStudentId('');setStudentQuery('');setIsOpen(false)},onError:error=>showError(errorMessage(error))})};
+ const queryError=electionsQuery.error||studentsQuery.error||statsQuery.error; const mutationError=activateStudent.error?errorMessage(activateStudent.error):null;
+ return <PageContainer><PageHeader title="Voter activation" description="Activate eligible voters for the active election."/>
+  {queryError&&<ErrorState title="Unable to load activation data" message={errorMessage(queryError)}/>}
+  {!activeElection&&!electionsQuery.isLoading&&<Alert variant="warning" title="No active election">Voter activation is only available when an election is active.</Alert>}
+  {activeElection&&<div className="space-y-5">
+   <section className="ui-section"><div className="grid gap-4 md:grid-cols-2 md:items-end"><FormField id="activation-election" label="Active election" helperText="Activation applies to the selected election only."><SelectField value={selectedElectionId??''} onChange={e=>setSelectedElectionId(e.target.value?Number(e.target.value):null)}>{elections.map(e=><option key={e.id} value={e.id}>{e.name} ({e.year}){e.is_active?' - Active':''}</option>)}</SelectField></FormField><p className="text-xs text-gray-500">Voters who have already voted cannot be activated again.</p></div></section>
+   <div className="grid gap-3 sm:grid-cols-3"><StatisticCard label="Total voters" value={statsQuery.data?.total_students??students.length} icon={<FiUsers aria-hidden="true"/>}/><StatisticCard label="Active voters" value={statsQuery.data?.active_students??students.filter(s=>s.is_active).length} icon={<FiCheckCircle aria-hidden="true"/>}/><StatisticCard label="Available to activate" value={availableStudents.length} icon={<FiUserPlus aria-hidden="true"/>}/></div>
+   <section className="ui-section"><div className="ui-section-heading"><div><h2>Activate a voter</h2><p>Search by voter ID or name, select a result, and confirm activation.</p></div><FiUserPlus className="text-xl text-blue-600" aria-hidden="true"/></div>
+    <form onSubmit={handleActivate} className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end"><FormField id="activation-student" label="Voter" helperText="Only inactive voters who have not voted appear in the list."><div className="relative"><div className="relative"><FiSearch className="absolute left-3 top-3 text-gray-400" aria-hidden="true"/><TextInput className="pl-9" value={studentQuery} onChange={e=>{setStudentQuery(e.target.value);setSelectedStudentId('');setIsOpen(true);setActiveOption(0)}} onFocus={()=>setIsOpen(true)} onKeyDown={handleSearchKeyDown} placeholder="Search name or voter ID" role="combobox" aria-expanded={isOpen} aria-controls={listboxId} aria-autocomplete="list" aria-activedescendant={isOpen&&options[activeOption]?'activation-option-'+options[activeOption].id:undefined} disabled={!availableStudents.length}/></div>
+     {isOpen&&<div id={listboxId} role="listbox" className="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 bg-white p-1 shadow-lg">{options.length?options.map((student,index)=><button id={'activation-option-'+student.id} key={student.id} type="button" role="option" aria-selected={index===activeOption} className={'block w-full rounded px-3 py-2 text-left text-sm '+(index===activeOption?'bg-blue-50 text-blue-900':'text-gray-700 hover:bg-gray-50')} onMouseDown={e=>e.preventDefault()} onClick={()=>chooseStudent(student)}><span className="font-medium">{student.full_name}</span><span className="ml-2 text-xs text-gray-500">{student.student_id} - {student.class_name}</span></button>):<p className="px-3 py-2 text-xs text-gray-500" role="status">No matching eligible voters.</p>}</div>}</div></FormField><Button type="submit" loading={activateStudent.isPending} disabled={!selectedStudentId||!selectedElectionId} leadingIcon={<FiUserPlus aria-hidden="true"/>}>Activate voter</Button></form>
+    {selectedStudent&&<div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md bg-gray-50 p-3"><div><p className="text-sm font-medium">{selectedStudent.full_name}</p><p className="text-xs text-gray-500">{selectedStudent.student_id} - {selectedStudent.class_name}</p></div><div className="flex gap-2"><Badge variant={selectedStudent.is_active?'success':'neutral'}>{selectedStudent.is_active?'Active':'Inactive'}</Badge><Badge variant={selectedStudent.has_voted?'primary':'neutral'}>{selectedStudent.has_voted?'Voted':'Not voted'}</Badge></div></div>}{mutationError&&<Alert variant="error" title="Activation failed" className="mt-4">{mutationError}</Alert>}</section>
+   {!isLoading&&!availableStudents.length&&<EmptyState title="No voters available" message="All voters are active, have voted, or are not present in this election." icon={<FiUserX aria-hidden="true"/>}/>} {isLoading&&<LoadingState title="Loading activation data" message="Fetching the selected election and eligible voters."/>}
+  </div>}</PageContainer>;
 }

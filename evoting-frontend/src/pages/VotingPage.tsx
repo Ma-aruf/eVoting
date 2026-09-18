@@ -238,7 +238,7 @@ export default function VotingPage() {
                 <div className="px-4 sm:px-6 py-2">
                     <div className="flex  flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div>
-                            <h1 className=" text-xl md:text-3xl font-bold text-amber-400">Student Voting Portal</h1>
+                            <h1 className=" text-xl md:text-3xl font-bold text-amber-400">Voter Voting Portal</h1>
                             <div className="flex flex-wrap items-center gap-3 text-md text-white/80 mt-2">
                                 <span>Welcome, <strong>{studentName}</strong></span>
                                 <span>•</span>

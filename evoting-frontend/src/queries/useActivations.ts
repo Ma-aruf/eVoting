@@ -67,7 +67,7 @@ export const useActivateStudent = () => {
 
         // 3️ Confirm + background sync
         onSuccess: (_, { election_id }) => {
-            showSuccess('Student activated successfully');
+        showSuccess('Voter activated successfully');
 
             queryClient.invalidateQueries({
                 queryKey: queryKeys.students(election_id),

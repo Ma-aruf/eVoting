@@ -38,3 +38,15 @@ def verify_voter_hmac(student_id: str, token: str) -> bool:
     expected_token = generate_voter_hmac(student_id)
     return hmac.compare_digest(expected_token, token)
 
+
+def election_has_votes(election_id) -> bool:
+    """Return whether an election has any stored historical votes."""
+    from .models import Vote
+
+    return Vote.objects.filter(election_id=election_id).exists()
+
+
+ELECTION_CONFIGURATION_LOCKED_DETAIL = (
+    "Election configuration is locked because voting has already started."
+)
+

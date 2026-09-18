@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Election, Position, Candidate, Vote, Student, User
+from .utils import election_has_votes, ELECTION_CONFIGURATION_LOCKED_DETAIL
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -59,6 +60,21 @@ class ElectionSerializer(serializers.ModelSerializer):
         model = Election
         fields = '__all__'
 
+    def validate(self, data):
+        if self.instance and election_has_votes(self.instance.pk):
+            protected_fields = {
+                "name", "year", "start_time", "end_time"
+            }
+            changed = [
+                field for field in protected_fields
+                if field in data and data[field] != getattr(self.instance, field)
+            ]
+            if changed:
+                raise serializers.ValidationError({
+                    "detail": ELECTION_CONFIGURATION_LOCKED_DETAIL
+                })
+        return data
+
 
 class PositionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -82,6 +98,16 @@ class CandidateSerializer(serializers.ModelSerializer):
         position = data.get('position')
         ballot_number = data.get('ballot_number')
         student = data.get('student')
+
+        # PATCH requests may omit either relationship; validate the effective pair.
+        effective_position = position or getattr(self.instance, 'position', None)
+        effective_student = student or getattr(self.instance, 'student', None)
+
+        if effective_position and effective_student:
+            if effective_student.election_id != effective_position.election_id:
+                raise serializers.ValidationError({
+                    'student': 'Candidate student must belong to the same election as the position.'
+                })
         
         # Validate student uniqueness (only if student is being changed/added)
         if student:
@@ -125,18 +151,25 @@ class MultiVoteSerializer(serializers.Serializer):
     """
     votes = serializers.ListField(
         child=serializers.DictField(child=serializers.IntegerField()),
-        allow_empty=False
+        allow_empty=True
     )
 
     def validate(self, data):
         votes_list = data["votes"]
+
+        if not votes_list:
+            raise serializers.ValidationError(
+                "A complete ballot must contain exactly one selection for every position."
+            )
 
         # Check duplicate positions in submission
         positions = [v.get("position") for v in votes_list]
         if None in positions:
             raise serializers.ValidationError("Each vote must include a 'position' id.")
         if len(positions) != len(set(positions)):
-            raise serializers.ValidationError("Duplicate positions in submission.")
+            raise serializers.ValidationError(
+                "A complete ballot must contain exactly one selection for every position."
+            )
 
         # Basic shape checks for election/candidate presence
         for v in votes_list:

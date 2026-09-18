@@ -1,252 +1,161 @@
-import {useEffect, useState} from 'react';
-import {Link, Outlet, useLocation} from 'react-router-dom';
+import {useCallback, useEffect, useRef, useState} from 'react';
+import {NavLink, Outlet, useLocation} from 'react-router-dom';
+import {
+    FiBarChart2,
+    FiCalendar,
+    FiCheckCircle,
+    FiGrid,
+    FiList,
+    FiLogOut,
+    FiMenu,
+    FiPlayCircle,
+    FiUser,
+    FiUsers,
+    FiX
+} from 'react-icons/fi';
+import type {IconType} from 'react-icons';
 import {useAuth} from '../hooks/useAuth';
+import PageContainer from './PageContainer';
 
-const DashboardIcon = () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
-    </svg>
-);
+type NavigationItem = { to: string; label: string; icon: IconType; roles: string[] };
 
-const UsersIcon = () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
-    </svg>
-);
+const navItems: NavigationItem[] = [
+    {to: '/admin/dashboard', label: 'Dashboard', icon: FiGrid, roles: ['superuser', 'staff']},
+    {to: '/admin/students', label: 'Voters', icon: FiUsers, roles: ['superuser', 'staff']},
+    {to: '/admin/elections', label: 'Elections', icon: FiCalendar, roles: ['superuser']},
+    {to: '/admin/manage-elections', label: 'Manage Elections', icon: FiPlayCircle, roles: ['superuser']},
+    {to: '/admin/positions', label: 'Positions', icon: FiList, roles: ['superuser']},
+    {to: '/admin/candidates', label: 'Candidates', icon: FiUser, roles: ['superuser', 'staff']},
+    {to: '/admin/activations', label: 'Activate Voters', icon: FiCheckCircle, roles: ['activator', 'superuser']},
+    {to: '/admin/results', label: 'Election Results', icon: FiBarChart2, roles: ['superuser', 'staff']},
+    {to: '/admin/users', label: 'Manage Users', icon: FiUsers, roles: ['superuser']},
+];
 
-const CalendarIcon = () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-    </svg>
-);
+function Navigation({items, onNavigate}: { items: NavigationItem[]; onNavigate?: () => void }) {
+    return <nav className="admin-navigation" aria-label="Admin navigation">
+        <ul>{items.map(({to, label, icon: Icon}) => (
+            <li key={to}><NavLink to={to} end onClick={onNavigate}
+                                  className={({isActive}) => 'admin-nav-link' + (isActive ? ' admin-nav-link--active' : '')}>
+                <Icon className="admin-nav-icon" aria-hidden="true"/><span>{label}</span>
+            </NavLink></li>
+        ))}</ul>
+    </nav>;
+}
 
-const PlayIcon = () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-    </svg>
-);
+function LogoutButton({onLogout}: { onLogout: () => void }) {
+    return <button type="button" className="admin-logout" onClick={onLogout}><FiLogOut className="admin-nav-icon"
+                                                                                       aria-hidden="true"/><span>Logout</span>
+    </button>;
+}
 
-const ListIcon = () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
-    </svg>
-);
+function Drawer({open, items, onClose, onLogout}: {
+    open: boolean;
+    items: NavigationItem[];
+    onClose: () => void;
+    onLogout: () => void
+}) {
+    const drawerRef = useRef<HTMLElement>(null);
 
-const UserIcon = () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-    </svg>
-);
+    useEffect(() => {
+        if (!open) return;
+        const drawer = drawerRef.current;
+        if (!drawer) return;
+        drawer.querySelector<HTMLElement>('button, a[href]')?.focus();
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                onClose();
+                return;
+            }
+            if (event.key !== 'Tab') return;
+            const elements = Array.from(drawer.querySelectorAll<HTMLElement>('button, a[href]'));
+            if (!elements.length) return;
+            const first = elements[0], last = elements[elements.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+                event.preventDefault();
+                last.focus();
+            }
+            if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first.focus();
+            }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [onClose, open]);
 
-const CheckIcon = () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-    </svg>
-);
-
-const ChartIcon = () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-    </svg>
-);
-
-const LogoutIcon = () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
-    </svg>
-);
-
-const AdminUsersIcon = () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
-    </svg>
-);
+    if (!open) return null;
+    return <div className="admin-drawer-layer" role="presentation" onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+    }}>
+        <aside ref={drawerRef} id="admin-mobile-drawer" className="admin-drawer" role="dialog" aria-modal="true"
+               aria-label="Admin navigation">
+            <div className="admin-drawer-header">
+                <div className="admin-brand"><span className="admin-brand-mark">eVoting</span><span
+                    className="admin-brand-subtitle">Admin Panel</span></div>
+                <button type="button" className="admin-icon-button" onClick={onClose}
+                        aria-label="Close navigation menu"><FiX aria-hidden="true"/></button>
+            </div>
+            <Navigation items={items} onNavigate={onClose}/>
+            <div className="admin-sidebar-footer"><LogoutButton onLogout={onLogout}/></div>
+        </aside>
+    </div>;
+}
 
 export default function AdminLayout() {
     const {user, logout} = useAuth();
     const location = useLocation();
-    const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [drawerOpen, setDrawerOpen] = useState(false);
+    const menuButtonRef = useRef<HTMLButtonElement>(null);
+    const wasOpenRef = useRef(false);
+    const visibleNav = navItems.filter(item => item.roles.includes(user?.role ?? ''));
+    const closeDrawer = useCallback(() => setDrawerOpen(false), []);
 
     useEffect(() => {
-        setSidebarOpen(false);
+        if (wasOpenRef.current && !drawerOpen) requestAnimationFrame(() => menuButtonRef.current?.focus());
+        wasOpenRef.current = drawerOpen;
+    }, [drawerOpen]);
+    useEffect(() => {
+        const frame = requestAnimationFrame(() => setDrawerOpen(false));
+        return () => cancelAnimationFrame(frame);
     }, [location.pathname]);
+    useEffect(() => {
+        if (!drawerOpen) return;
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = previousOverflow;
+        };
+    }, [drawerOpen]);
 
-    const navItems = [
-        {to: '/admin/dashboard', label: 'Dashboard', icon: DashboardIcon, roles: ['superuser', 'staff']},
-        {to: '/admin/students', label: 'Students', icon: UsersIcon, roles: ['superuser', 'staff']},
-        {to: '/admin/elections', label: 'Elections', icon: CalendarIcon, roles: ['superuser']},
-        {to: '/admin/manage-elections', label: 'Manage Elections', icon: PlayIcon, roles: ['superuser']},
-        {to: '/admin/positions', label: 'Positions', icon: ListIcon, roles: ['superuser']},
-        {to: '/admin/candidates', label: 'Candidates', icon: UserIcon, roles: ['superuser', 'staff']},
-        {to: '/admin/activations', label: 'Activate Voters', icon: CheckIcon, roles: ['activator', 'superuser']},
-        {to: '/admin/results', label: 'Election Results', icon: ChartIcon, roles: ['superuser', 'staff']},
-        {to: '/admin/users', label: 'Manage Users', icon: AdminUsersIcon, roles: ['superuser']},
-    ];
-
-    const visibleNav = navItems.filter(item => item.roles.includes(user?.role ?? ''));
-
-    return (
-        <div className="h-screen overflow-hidden bg-gray-100">
-            {/* Sidebar - Fixed */}
-            <aside
-                className="fixed top-0 left-0 hidden md:flex w-56 h-screen bg-gradient-to-b from-blue-700 via-blue-600 to-blue-500 text-white flex-col">
-                {/* Brand */}
-                <div className="px-5 py-6">
-                    <h1 className="text-xl font-bold tracking-wide">eVoting</h1>
-                    <p className="text-xs text-white/70 mt-1">Admin Panel</p>
-                </div>
-
-                {/* Navigation */}
-                <nav className="flex-1 px-3 space-y-1 overflow-y-auto">
-                    {visibleNav.map(item => {
-                        const isActive = location.pathname === item.to;
-                        const Icon = item.icon;
-                        return (
-                            <Link
-                                key={item.to}
-                                to={item.to}
-                                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
-                                    isActive
-                                        ? 'bg-white text-blue-700 font-medium shadow-sm'
-                                        : 'text-white/90 hover:bg-white/10'
-                                }`}
-                            >
-                                <Icon/>
-                                <span>{item.label}</span>
-                            </Link>
-                        );
-                    })}
-                </nav>
-
-                {/* Logout */}
-                <div className="px-3 pb-6">
-                    <button
-                        onClick={logout}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-white/90 hover:bg-white/10 transition-all"
-                    >
-                        <LogoutIcon/>
-                        <span>Logout</span>
-                    </button>
-                </div>
-            </aside>
-
-            <div
-                className={`fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity ${
-                    sidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-                }`}
-                onClick={() => setSidebarOpen(false)}
-            />
-
-            <aside
-                className={`fixed top-0 left-0 z-50 md:hidden w-72 max-w-[80vw] h-screen bg-gradient-to-b from-blue-700 via-blue-600 to-blue-500 text-white flex flex-col transform transition-transform duration-200 ${
-                    sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-                }`}
-            >
-                <div className="px-5 py-6 flex items-start justify-between">
-                    <div>
-                        <h1 className="text-xl font-bold tracking-wide">eVoting</h1>
-                        <p className="text-xs text-white/70 mt-1">Admin Panel</p>
-                    </div>
-                    <button
-                        type="button"
-                        onClick={() => setSidebarOpen(false)}
-                        className="p-2 rounded-lg hover:bg-white/10 transition"
-                        aria-label="Close sidebar"
-                    >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                  d="M6 18L18 6M6 6l12 12"/>
-                        </svg>
-                    </button>
-                </div>
-
-                <nav className="flex-1 px-3 space-y-1 overflow-y-auto">
-                    {visibleNav.map(item => {
-                        const isActive = location.pathname === item.to;
-                        const Icon = item.icon;
-                        return (
-                            <Link
-                                key={item.to}
-                                to={item.to}
-                                onClick={() => setSidebarOpen(false)}
-                                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${
-                                    isActive
-                                        ? 'bg-white text-blue-700 font-medium shadow-sm'
-                                        : 'text-white/90 hover:bg-white/10'
-                                }`}
-                            >
-                                <Icon/>
-                                <span>{item.label}</span>
-                            </Link>
-                        );
-                    })}
-                </nav>
-
-                <div className="px-3 pb-6">
-                    <button
-                        onClick={logout}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-white/90 hover:bg-white/10 transition-all"
-                    >
-                        <LogoutIcon/>
-                        <span>Logout</span>
-                    </button>
-                </div>
-            </aside>
-
-            {/* Main Area - Offset by sidebar width */}
-            <div className="md:ml-56 h-screen flex flex-col">
-                {/* Top Header - Fixed within main area */}
-                <header className="bg-sky-100 border-b border-sky-200 flex-shrink-0">
-                    <div className="flex items-center justify-between px-4 sm:px-6 py-3">
-                        <div className="flex items-center gap-3">
-                            <button
-                                type="button"
-                                className="md:hidden p-2 rounded-lg hover:bg-black/5 transition"
-                                onClick={() => setSidebarOpen(true)}
-                                aria-label="Open sidebar"
-                            >
-                                <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor"
-                                     viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                          d="M4 6h16M4 12h16M4 18h16"/>
-                                </svg>
-                            </button>
-
-                            {/* Search Bar */}
-                            <div className="relative flex-1 max-w-md">
-
-                            </div>
-                        </div>
-
-                        {/* User Info */}
-                        <div className="flex items-center gap-3 sm:gap-4 ml-4">
-                            <div className="text-right hidden sm:block">
-                                <p className="text-sm font-medium text-gray-900">{user?.username}</p>
-                                <p className="text-xs text-gray-500">{user?.role?.toUpperCase()}</p>
-                            </div>
-                            <div
-                                className="h-9 w-9 rounded-full bg-blue-600 text-white flex items-center justify-center font-semibold text-sm">
-                                {user?.username?.charAt(0).toUpperCase() || 'A'}
-                            </div>
-                        </div>
-                    </div>
-                </header>
-
-                {/* Content - Scrollable */}
-                <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
-                    <Outlet/>
-                </main>
+    const handleLogout = () => {
+        setDrawerOpen(false);
+        logout();
+    };
+    return <div className="admin-shell">
+        <aside className="admin-sidebar" aria-label="Admin navigation">
+            <div className="admin-sidebar-brand"><span className="admin-brand-mark">eVoting</span>
             </div>
+            <Navigation items={visibleNav}/>
+            <div className="admin-sidebar-footer"><LogoutButton onLogout={handleLogout}/></div>
+        </aside>
+        <Drawer open={drawerOpen} items={visibleNav} onClose={closeDrawer} onLogout={handleLogout}/>
+        <div className="admin-shell-content">
+            <header className="admin-topbar">
+                <div className="admin-topbar-leading">
+                    <button ref={menuButtonRef} type="button" className="admin-menu-button"
+                            onClick={() => setDrawerOpen(true)} aria-expanded={drawerOpen}
+                            aria-controls="admin-mobile-drawer" aria-label="Open navigation menu"><FiMenu
+                        aria-hidden="true"/></button>
+                    <span className="admin-topbar-title">Administration</span></div>
+                <div className="admin-account">
+                    <div className="admin-account-copy"><span
+                        className="admin-account-name">{user?.username ?? 'Administrator'}</span><span
+                        className="admin-account-role">{user?.role ?? 'Account'}</span></div>
+                    <span className="admin-avatar"
+                          aria-hidden="true">{(user?.username?.charAt(0) ?? 'A').toUpperCase()}</span></div>
+            </header>
+            <main className="admin-main" id="main-content"><PageContainer><Outlet/></PageContainer></main>
         </div>
-    );
+    </div>;
 }

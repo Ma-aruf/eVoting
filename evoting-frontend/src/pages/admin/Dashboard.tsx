@@ -1,162 +1,220 @@
-// pages/admin/Dashboard.tsx
-import {useAuth} from '../../hooks/useAuth';
+import {FiBarChart2, FiCalendar, FiCheckCircle, FiList, FiUsers} from 'react-icons/fi';
+
+import EmptyState from '../../components/ui/EmptyState';
+import ErrorState from '../../components/ui/ErrorState';
+import LoadingSkeleton from '../../components/ui/LoadingSkeleton';
+import StatisticCard from '../../components/StatisticCard';
+import {useDashboardStatsForElections} from '../../queries/useDashboard.ts';
 import {useElections} from '../../queries/useElections';
-import {useDashboardStats} from "../../queries/useDashboard.ts";
 
-const FolderIcon = () => (
-    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-              d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
-    </svg>
-);
+function formatDateTime(value: string | undefined) {
+    if (!value) return 'Not set';
 
-const UsersIcon = () => (
-    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-              d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
-    </svg>
-);
+    return new Date(value).toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+    });
+}
 
-const ListIcon = () => (
-    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
-    </svg>
-);
-
-const CalendarIcon = () => (
-    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-    </svg>
-);
 
 export default function Dashboard() {
-    useAuth();
 
-    // Queries
-    const {data: elections = [], isLoading: electionsLoading} = useElections();
-    const activeElection = elections.find(e => e.is_active) || null;
-    const {data: stats, isLoading: statsLoading} = useDashboardStats(activeElection?.id || null);
+    const electionsQuery = useElections();
+    const elections = electionsQuery.data ?? [];
 
-    // Loading state
-    const loading = electionsLoading || statsLoading;
+    const activeElections = elections.filter(election => election.is_active);
+    const activeElectionIds = activeElections.map(election => election.id);
 
-    const formatDateTime = (value: string | undefined) => {
-        if (!value) return '';
-        return new Date(value).toLocaleString(undefined, {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-        });
+    const statsQueries = useDashboardStatsForElections(activeElectionIds);
+    const stats = activeElections.length
+        ? statsQueries.statsByElectionId.get(activeElections[0].id)
+        : undefined;
+
+    const initialLoading =
+        electionsQuery.isLoading ||
+        (activeElections.length > 0 && statsQueries.isLoading);
+
+    const queryError = electionsQuery.isError;
+
+    const retry = () => {
+        void electionsQuery.refetch();
+
+        statsQueries.queries.forEach(query => void query.refetch());
     };
 
+    const metricValue = (value: number | undefined) => value ?? '—';
+
     return (
-        <div className="space-y-6">
-                 {/* Loading / Error States */}
-            {loading && (
-                <div className="absolute inset-0 z-50 flex items-center justify-center rounded-xl">
-                    <div className="bg-white/20 px-6 py-4 rounded-lg shadow-md flex items-center gap-3">
-                        <div
-                            className="w-6 h-6 border-2 border-gray-300 border-t-green-600 rounded-full animate-spin"></div>
-                        <span className="text-sm text-gray-700">Fetching statistics…</span>
-                    </div>
-                </div>
-            )}
-
-
-            {/* Stat Cards - Folder Style */}
-            <section>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {/* Active Election Card */}
-                    <div
-                        className="bg-gradient-to-br h-40 from-blue-600 to-blue-600 rounded-xl p-5 text-white relative overflow-hidden">
-                        <div className="absolute top-4 right-4 opacity-20">
-                            <CalendarIcon/>
-                        </div>
-                        <div className="flex items-center gap-3 mb-3">
-                            <div className="h-10 w-10 rounded-lg bg-white/10 flex items-center justify-center">
-                                <FolderIcon/>
-                            </div>
-                            <span className="text-xs font-medium bg-white/10 px-2 py-1 rounded">ACTIVE</span>
-                        </div>
-                        <h3 className="font-semibold text-lg">
-                            {activeElection ? activeElection.name : 'No Active Election'}
-                        </h3>
-
-                        {activeElection && (
-                            <p className="text-xs text-white/70 mt-2">
-                                {formatDateTime(activeElection.start_time)} - {formatDateTime(activeElection.end_time)}
-                            </p>
-                        )}
-                    </div>
-
-                    {/* Students Card */}
-                    <div
-                        className="bg-gradient-to-br h-40  from-cyan-600 to-cyan-600 rounded-xl p-5 text-white relative overflow-hidden">
-                        <div className="absolute top-4 right-4 opacity-20">
-                            <UsersIcon/>
-                        </div>
-                        <div className="flex items-center gap-3 mb-3">
-                            <p className="text-sm text-white/80 mt-1">Total registered voters</p>
-                        </div>
-                        <h3 className="font-semibold text-lg">Students</h3>
-                        <p className="text-3xl font-bold mt-2">{stats?.total_students || 0}</p>
-
-                    </div>
-
-                    {/* Elections Card */}
-                    <div
-                        className="bg-gradient-to-br h-40 from-blue-900 to-blue-900 rounded-xl p-5 text-white relative overflow-hidden">
-                        <div className="absolute top-4 right-4 opacity-20">
-                            <ListIcon/>
-                        </div>
-                        <div className="flex items-center gap-3 mb-3">
-                            <p className="text-sm text-white/80 mt-1">Total elections created</p>
-                        </div>
-                        <h3 className="font-semibold text-lg">Elections</h3>
-                        <p className="text-3xl font-bold mt-2">{elections.length}</p>
-                    </div>
-                </div>
-            </section>
-
-
-            {/* Active Election Details */}
-            {activeElection && (
-                <section>
-                    <h2 className="text-base font-medium text-gray-900 mb-4">Active Election Details</h2>
-                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                        <div className="p-5">
-                            <div className="flex items-start justify-between">
-                                <div className="flex gap-4">
-                                    <h3 className="font-semibold text-lg text-gray-900">{activeElection.name}</h3>
-                                    <p className="text-sm text-gray-500 mt-1">Year: {activeElection.year}</p>
-                                </div>
-                                <span
-                                    className="px-3 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
-                                    Active
-                                </span>
-                            </div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5">
-                                <div className="bg-green-200/40 rounded-lg p-3">
-                                    <p className="text-xs text-gray-500 uppercase">Positions</p>
-                                    <p className="text-xl font-bold text-blue-600">{stats?.total_positions || 0}</p>
-                                </div>
-                                <div className="bg-green-200/50 rounded-lg p-3">
-                                    <p className="text-xs text-gray-500 uppercase">Candidates</p>
-                                    <p className="text-xl font-bold text-blue-600">{stats?.total_candidates || 0}</p>
-                                </div>
-                                <div className="bg-green-200/60 rounded-lg p-3">
-                                    <p className="text-xs text-gray-500 uppercase">Start</p>
-                                    <p className="text-sm font-medium text-gray-900">{formatDateTime(activeElection.start_time)}</p>
-                                </div>
-                                <div className="bg-green-200/70 rounded-lg p-3">
-                                    <p className="text-xs text-gray-500 uppercase">End</p>
-                                    <p className="text-sm font-medium text-gray-900">{formatDateTime(activeElection.end_time)}</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+        <div className="dashboard-page">
+            {queryError ? (
+                <ErrorState
+                    title="Dashboard unavailable"
+                    message="We could not load the current election overview."
+                    action={
+                        <button
+                            type="button"
+                            className="ui-button ui-button--secondary ui-button--compact"
+                            onClick={retry}
+                        >
+                            Try again
+                        </button>
+                    }
+                />
+            ) : initialLoading ? (
+                <section
+                    className="dashboard-grid"
+                    aria-label="Loading dashboard statistics"
+                >
+                    <LoadingSkeleton
+                        lines={3}
+                        className="dashboard-skeleton-card"
+                    />
+                    <LoadingSkeleton
+                        lines={3}
+                        className="dashboard-skeleton-card"
+                    />
+                    <LoadingSkeleton
+                        lines={3}
+                        className="dashboard-skeleton-card"
+                    />
+                    <LoadingSkeleton
+                        lines={3}
+                        className="dashboard-skeleton-card"
+                    />
+                    <LoadingSkeleton
+                        lines={3}
+                        className="dashboard-skeleton-card"
+                    />
+                    <LoadingSkeleton
+                        lines={3}
+                        className="dashboard-skeleton-card"
+                    />
                 </section>
+            ) : (
+                <>
+                    <section
+                        className="dashboard-grid"
+                        aria-label="Election statistics"
+                    >
+                        <StatisticCard
+                            label="Registered voters"
+                            value={metricValue(stats?.total_students)}
+                            icon={<FiUsers/>}
+                            status="primary"
+                            layout="split"
+                        />
+
+                        <StatisticCard
+                            label="Activated voters"
+                            value={metricValue(stats?.active_students)}
+                            icon={<FiCheckCircle/>}
+                            status="success"
+                            layout="split"
+                        />
+
+                        <StatisticCard
+                            label="Voters voted"
+                            value={metricValue(stats?.voted_students)}
+                            icon={<FiBarChart2/>}
+                            status="strong"
+                            layout="split"
+                        />
+
+                        <StatisticCard
+                            label="Pending activations"
+                            value={metricValue(stats?.pending_activations)}
+                            icon={<FiUsers/>}
+                            status="warning"
+                            layout="split"
+                        />
+
+                        <StatisticCard
+                            label="Positions"
+                            value={metricValue(stats?.total_positions)}
+                            icon={<FiList/>}
+                            status="info"
+                            layout="split"
+                        />
+
+                        <StatisticCard
+                            label="Candidates"
+                            value={metricValue(stats?.total_candidates)}
+                            icon={<FiUsers/>}
+                            status="accent"
+                            layout="split"
+                        />
+                    </section>
+
+                    <section
+                        className="dashboard-section"
+                        aria-labelledby="active-elections-heading"
+                    >
+                        <div className="dashboard-section-heading">
+                            <div>
+                                <p className="dashboard-kicker">Active elections</p>
+                            </div>
+                        </div>
+
+                        {activeElections.length ? (
+                            <div className="active-election-list">
+                                {activeElections.map(election => {
+                                    const electionStats = statsQueries.statsByElectionId.get(election.id);
+                                    const electionStatsQuery = statsQueries.queries[activeElectionIds.indexOf(election.id)];
+                                    return <article className="active-election-card" key={election.id}>
+                                        <div className="active-election-header">
+                                                <FiCalendar className="active-election-icon" aria-hidden="true"/>
+                                                <div>
+                                                    <h3>{election.name}</h3>
+                                                    <p>Election year {election.year}</p>
+                                                </div>
+                                            </div>
+                                            {electionStatsQuery?.isError ?
+                                                <p className="active-election-error" role="alert">Statistics unavailable
+                                                    for this election.</p> : <dl className="active-election-details">
+                                                    <div className="election-detail-card election-detail-card--opens">
+                                                        <span className="election-detail-strip" aria-hidden="true"/>
+                                                        <div className="election-detail-content">
+                                                            <dt>Voting opens</dt>
+                                                            <dd>{formatDateTime(election.start_time)}</dd>
+                                                        </div>
+                                                    </div>
+                                                    <div className="election-detail-card election-detail-card--closes">
+                                                        <span className="election-detail-strip" aria-hidden="true"/>
+                                                        <div className="election-detail-content">
+                                                            <dt>Voting closes</dt>
+                                                            <dd>{formatDateTime(election.end_time)}</dd>
+                                                        </div>
+                                                    </div>
+                                                    <div className="election-detail-card election-detail-card--voted">
+                                                        <span className="election-detail-strip" aria-hidden="true"/>
+                                                        <div className="election-detail-content">
+                                                            <dt>Voters voted</dt>
+                                                            <dd>{metricValue(electionStats?.voted_students)}</dd>
+                                                        </div>
+                                                    </div>
+                                                    <div className="election-detail-card election-detail-card--pending">
+                                                        <span className="election-detail-strip" aria-hidden="true"/>
+                                                        <div className="election-detail-content">
+                                                            <dt>Pending activations</dt>
+                                                            <dd>{metricValue(electionStats?.pending_activations)}</dd>
+                                                        </div>
+                                                    </div>
+                                                </dl>}
+                                    </article>;
+                                })}
+                            </div>
+                        ) : (
+                            <EmptyState
+                                title="No active elections"
+                                message="Activate an election to see voter activity and election statistics here."
+                                icon={<FiCalendar/>}
+                            />
+                        )}
+                    </section>
+                </>
             )}
         </div>
     );

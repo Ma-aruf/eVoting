@@ -1,519 +1,903 @@
-import {type FormEvent, useEffect, useState, useMemo, useCallback} from 'react';
+
+import {type FormEvent, useMemo, useState} from 'react';
+import {
+    FiCheckCircle,
+    FiChevronLeft,
+    FiChevronRight,
+    FiEdit2,
+    FiFileText,
+    FiPlus,
+    FiSearch,
+    FiTrash2,
+    FiUploadCloud,
+    FiUsers,
+} from 'react-icons/fi';
+
+import EditStudentModal from '../../components/EditStudentModal';
+import StudentRow from '../../components/StudentRow';
+import ConfirmModal from '../../components/ConfirmModal';
+import StatisticCard from '../../components/StatisticCard';
+
+import FormField from '../../components/ui/FormField';
+import TextInput from '../../components/ui/TextInput';
+import SelectField from '../../components/ui/SelectField';
+import Button from '../../components/ui/Button';
+import Alert from '../../components/ui/Alert';
+import Badge from '../../components/ui/Badge';
+import LoadingState from '../../components/ui/LoadingState';
+import EmptyState from '../../components/ui/EmptyState';
+import ErrorState from '../../components/ui/ErrorState';
+import IconButton from '../../components/ui/IconButton';
+import Modal from '../../components/ui/Modal';
+
 import {useElections} from '../../queries/useElections';
 import {
+    type Student,
     useBulkUploadStudents,
     useCreateStudent,
     useDeleteStudent,
     useStudents,
-    useUpdateStudent
+    useUpdateStudent,
 } from '../../queries/useStudents';
-import {showError} from '../../utils/toast';
-import EditStudentModal from '../../components/EditStudentModal';
-import StudentRow from '../../components/StudentRow';
 
-interface Student {
-    id: number;
-    student_id: string;
-    full_name: string;
-    class_name: string;
-    has_voted: boolean;
-    is_active: boolean;
-    election?: {
-        id: number;
-        name: string;
-        year: number;
-    };
-}
+import {showError} from '../../utils/toast';
 
 const CLASS_OPTIONS = ['Form 1', 'Form 2', 'Form 3'];
 
-const UploadIcon = () => (
-    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
-    </svg>
-);
+type ActiveFilter = 'all' | 'active' | 'inactive';
+type VotedFilter = 'all' | 'voted' | 'not-voted';
 
-const PlusIcon = () => (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
-    </svg>
-);
-
-const UsersIcon = () => (
-    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-              d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
-    </svg>
-);
-
-const CheckCircleIcon = () => (
-    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-    </svg>
-);
-
-const VoteIcon = () => (
-    <svg xmlns="http://www.w3.org" viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="#2ecc71"
-         stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-        <polyline points="22 4 12 14.01 9 11.01"></polyline>
-    </svg>
-);
-
-export default function StudentsPage() {
-    // State
-    const [selectedElectionId, setSelectedElectionId] = useState<number | null>(null);
-
-    // Queries
-    const {data: elections = [], isLoading: electionsLoading} = useElections();
-    const {data: students = [], isLoading: studentsLoading} = useStudents(selectedElectionId);
-
-    // Mutations
-    const createStudent = useCreateStudent();
-    const updateStudent = useUpdateStudent();
-    const deleteStudent = useDeleteStudent();
-    const bulkUploadStudents = useBulkUploadStudents();
-
-    const loading = electionsLoading || studentsLoading || createStudent.isPending || updateStudent.isPending || deleteStudent.isPending || bulkUploadStudents.isPending;
-
-    // Toggle for add student form
-    const [showAddForm, setShowAddForm] = useState(false);
-
-    // Single student form state
-    const [studentId, setStudentId] = useState('');
-    const [fullName, setFullName] = useState('');
-    const [className, setClassName] = useState('');
-
-    // Edit modal state
-    const [editingStudent, setEditingStudent] = useState<Student | null>(null);
-
-    const [file, setFile] = useState<File | null>(null);
-
-    // Search and filter state
-    const [searchTerm, setSearchTerm] = useState('');
-    const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
-    const [votedFilter, setVotedFilter] = useState<'all' | 'voted' | 'not-voted'>('all');
-    const [classFilter, setClassFilter] = useState<string>('');
-
-    // Set initial election - prioritize active election
-    useEffect(() => {
-        if (elections.length > 0 && selectedElectionId === null) {
-            // Find active election first
-            const activeElection = elections.find(e => e.is_active);
-            const targetElection = activeElection || elections[0];
-            
-            if (targetElection.id !== selectedElectionId) {
-                setSelectedElectionId(targetElection.id);
-            }
-        }
-    }, [elections, selectedElectionId]);
-
-    const handleCreateStudent = async (e: FormEvent) => {
-        e.preventDefault();
-
-        if (!studentId.trim() || !fullName.trim() || !className) {
-            showError('Please fill in all required fields.');
-            return;
-        }
-
-        if (!selectedElectionId) {
-            showError('Please select an election.');
-            return;
-        }
-
-        createStudent.mutate({
-            student_id: studentId.trim(),
-            full_name: fullName.trim(),
-            class_name: className,
-            election_id: selectedElectionId!,
-        });
-
-        setStudentId('');
-        setFullName('');
-        setClassName('');
-        setShowAddForm(false);
+type ApiError = {
+    response?: {
+        data?: {
+            detail?: string;
+        };
     };
+};
 
-    const handleUpload = async (e: FormEvent) => {
-        e.preventDefault();
-        if (!file) return;
-        if (!selectedElectionId) {
-            showError('Please select an election before uploading.');
-            return;
-        }
+type UploadResult = {
+    detail?: string;
+    errors?: unknown;
+};
 
-        bulkUploadStudents.mutate({
-            file,
-            election_id: selectedElectionId,
-        });
+const message = (error: unknown, fallback: string) =>
+    (error as ApiError)?.response?.data?.detail || fallback;
 
-        setFile(null);
-    };
-
-    const openEditModal = useCallback((student: Student) => {
-        setEditingStudent(student);
-    }, []);
-
-    const closeEditModal = useCallback(() => {
-        setEditingStudent(null);
-    }, []);
-
-    const handleSaveEdit = useCallback((student: Student, fullName: string, className: string) => {
-        updateStudent.mutate({
-            id: student.id,
-            full_name: fullName,
-            class_name: className,
-        });
-
-        setEditingStudent(null);
-    }, []);
-
-    const handleDeleteStudent = useCallback((student: Student) => {
-        if (student.has_voted) {
-            showError('Cannot delete a student who has already voted.');
-            return;
-        }
-        if (!confirm(`Are you sure you want to delete ${student.full_name}?`)) return;
-
-        deleteStudent.mutate(student);
-    }, []);
-
-    const selectedElection = elections.find(e => e.id === selectedElectionId) || null;
-
-    // Get unique classes for filter dropdown - memoized for performance
-    const uniqueClasses = useMemo(() => 
-        Array.from(new Set(students.map(s => s.class_name))).sort(),
-        [students]
-    );
-
-    // Filter students by search term and filters - memoized for instant updates
-    const filteredStudents = useMemo(() => {
-        return students.filter(s => {
-            const matchesSearch = !searchTerm || (
-                s.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                s.student_id.toLowerCase().includes(searchTerm.toLowerCase())
-            );
-            
-            const matchesActive = activeFilter === 'all' || 
-                                  (activeFilter === 'active' && s.is_active) ||
-                                  (activeFilter === 'inactive' && !s.is_active);
-            
-            const matchesVoted = votedFilter === 'all' ||
-                                 (votedFilter === 'voted' && s.has_voted) ||
-                                 (votedFilter === 'not-voted' && !s.has_voted);
-            
-            const matchesClass = !classFilter || s.class_name === classFilter;
-            
-            return matchesSearch && matchesActive && matchesVoted && matchesClass;
-        });
-    }, [students, searchTerm, activeFilter, votedFilter, classFilter]);
-
+function StudentStatus({student}: {student: Student}) {
     return (
-        <div className="space-y-6 relative">
-            {/* Loading Overlay */}
-            {loading && (
-                <div className="absolute inset-0 z-50 flex items-center justify-center  rounded-xl">
-                    <div className="bg-white/20 px-6 py-4 rounded-lg shadow-md flex items-center gap-3">
-                        <div
-                            className="w-6 h-6 border-2 border-gray-300 border-t-green-600 rounded-full animate-spin"></div>
-                        <span className="text-sm text-gray-700">Loading students…</span>
-                    </div>
-                </div>
-            )}
+        <div className="student-status-stack">
+            <Badge variant={student.is_active ? 'success' : 'neutral'}>
+                {student.is_active ? 'Active' : 'Inactive'}
+            </Badge>
 
-            {/* Stat Cards */}
-            <section>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div
-                        className="bg-gradient-to-br h-35 from-blue-600 to-blue-600 rounded-xl p-5 text-white relative overflow-hidden">
-                        <div className="absolute top-4 right-4 opacity-20">
-                            <UsersIcon/>
-                        </div>
-                        <div className="flex items-center gap-3 mb-3">
-                            <p className="text-sm text-white/80">All students</p>
-                        </div>
-                        <h3 className="font-semibold text-lg">Total Students</h3>
-                        <p className="text-3xl font-bold mt-2">{students.length}</p>
-                    </div>
-
-                    <div
-                        className="bg-gradient-to-br h-35 from-cyan-600 to-cyan-600 rounded-xl p-5 text-white relative overflow-hidden">
-                        <div className="absolute top-4 right-4 opacity-20">
-                            <CheckCircleIcon/>
-                        </div>
-                        <div className="flex items-center gap-3 mb-3">
-                            <p className="text-sm text-white/80">Currently active</p>
-                        </div>
-                        <h3 className="font-semibold text-lg">Active</h3>
-                        <p className="text-3xl font-bold mt-2">{students.filter(s => s.is_active).length}</p>
-                    </div>
-
-                    <div
-                        className="bg-gradient-to-br h-35 from-blue-900 to-blue-900 rounded-xl p-5 text-white relative overflow-hidden">
-                        <div className="absolute top-4 right-4 opacity-20">
-                            <VoteIcon/>
-                        </div>
-                        <div className="flex items-center gap-3 mb-3">
-                            <p className="text-sm text-white/80">Already voted</p>
-                        </div>
-                        <h3 className="font-semibold text-lg">Voted</h3>
-                        <p className="text-3xl font-bold mt-2">{students.filter(s => s.has_voted).length}</p>
-                    </div>
-                </div>
-            </section>
-
-
-            {/* Page Header */}
-            <div className="flex justify-between gap-10">
-                <select
-                    id="election-select"
-                    value={selectedElectionId ?? ''}
-                    onChange={(e) => setSelectedElectionId(e.target.value ? Number(e.target.value) : null)}
-                    className="border border-gray-300 rounded-lg text-[13px] md:text-sm px-1 py-2  w-full md:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                    {elections.length === 0 && <option value="">No elections available</option>}
-                    {elections.map(e => (
-                        <option key={e.id} value={e.id} className="text-[6px] md:text-sm">{e.name} ({e.year})</option>
-                    ))}
-                </select>
-                <button
-                    onClick={() => setShowAddForm(!showAddForm)}
-                    className="flex w-full sm:w-auto justify-center items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition"
-                >
-                    <PlusIcon/>
-                    Add Student
-                </button>
-            </div>
-
-            {/* Election Selector */}
-
-
-            {/* Add Student Form - Collapsible */}
-            {showAddForm && (
-                <div className="bg-white rounded-xl flex flex-col  border border-gray-200 p-5">
-                    <h2 className="text-base font-medium text-gray-900 mb-4">Add New Student</h2>
-                    <form onSubmit={handleCreateStudent} className="flex flex-col md:flex-row gap-4 ">
-                        <div className="flex-1">
-                            <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="student_id">
-                                Student ID
-                            </label>
-                            <input
-                                id="student_id"
-                                type="text"
-                                value={studentId}
-                                onChange={(e) => setStudentId(e.target.value)}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                placeholder="e.g. 23KOSA001"
-                                required
-                            />
-                        </div>
-                        <div className="flex-1">
-                            <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="full_name">
-                                Full Name
-                            </label>
-                            <input
-                                id="full_name"
-                                type="text"
-                                value={fullName}
-                                onChange={(e) => setFullName(e.target.value)}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                placeholder="e.g. Ama Mensah"
-                                required
-                            />
-                        </div>
-                        <div className="flex-1">
-                            <label className="text-xs font-medium text-gray-600 mb-1 block" htmlFor="class_name">
-                                Class
-                            </label>
-                            <select
-                                id="class_name"
-                                value={className}
-                                onChange={(e) => setClassName(e.target.value)}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                required
-                            >
-                                <option value="">Select class...</option>
-                                {CLASS_OPTIONS.map(opt => (
-                                    <option key={opt} value={opt}>{opt}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <button
-                            type="submit"
-                            disabled={loading || !selectedElectionId}
-                            className="px-6 py-2 max-h-10 md:mt-5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg disabled:opacity-60 transition"
-                        >
-                            {loading ? 'Saving…' : 'Submit'}
-                        </button>
-                    </form>
-                    {!selectedElection && elections.length > 0 && (
-                        <p className="text-xs text-gray-500 mt-2">
-                            Select an election above before adding a student.
-                        </p>
-                    )}
-                </div>
-            )}
-
-            {/* Bulk Upload Section */}
-            <section className=" flex justify-between bg-white rounded-xl border border-gray-200 py-2 px-5">
-                <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
-                        <UploadIcon/>
-                    </div>
-                    <div>
-                        <h2 className="text-base font-medium text-gray-900">Bulk Upload from Excel</h2>
-                        <p className="text-xs text-gray-500">
-                            Required columns: <code className="bg-gray-100 px-1 rounded">student_id</code>, <code
-                            className="bg-gray-100 px-1 rounded">full_name</code>, <code
-                            className="bg-gray-100 px-1 rounded">class_name</code>
-                        </p>
-                    </div>
-                </div>
-                <form onSubmit={handleUpload} className="flex flex-col md:flex-row gap-4 items-start md:items-center">
-                    <input
-                        type="file"
-                        accept=".xlsx,.xls"
-                        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                        className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-600 hover:file:bg-blue-100"
-                    />
-                    <button
-                        type="submit"
-                        disabled={!file || !selectedElectionId}
-                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg disabled:opacity-60 transition"
-                    >
-                        {loading ? 'Uploading…' : 'Upload'}
-                    </button>
-                </form>
-                {!selectedElection && elections.length > 0 && (
-                    <p className="text-xs text-gray-500 mt-2">
-                        Select an election above before uploading students.
-                    </p>
-                )}
-            </section>
-
-            {/* Students Table */}
-            <section className="bg-white rounded-xl border border-gray-200  overflow-hidden">
-                <div className="p-5 border-b border-gray-100">
-                    {/* Election Title */}
-                    <div className="flex items-center gap-4 mb-4">
-                        <h2 className="text-base font-medium text-gray-900">
-                            Students {selectedElection ? `for ${selectedElection.name} (${selectedElection.year})` : ''}
-                        </h2>
-                        {loading && <span className="text-xs text-gray-500">Loading…</span>}
-                    </div>
-                    
-                    {/* Filters Container */}
-                    <div className="flex flex-col lg:flex-row gap-4">
-                        {/* Search Box */}
-                        <div className="flex-1 lg:flex-initial lg:w-48">
-                            <input
-                                type="text"
-                                placeholder="Search by name or ID..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                            />
-                        </div>
-                        
-                        {/* Active Filter */}
-                        <div className="flex-1 lg:flex-initial lg:w-32">
-                            <select
-                                value={activeFilter}
-                                onChange={(e) => setActiveFilter(e.target.value as any)}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                                <option value="all">All Active</option>
-                                <option value="active">Active</option>
-                                <option value="inactive">Inactive</option>
-                            </select>
-                        </div>
-                        
-                        {/* Voted Filter */}
-                        <div className="flex-1 lg:flex-initial lg:w-32">
-                            <select
-                                value={votedFilter}
-                                onChange={(e) => setVotedFilter(e.target.value as any)}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                                <option value="all">All Voted</option>
-                                <option value="voted">Voted</option>
-                                <option value="not-voted">Not Voted</option>
-                            </select>
-                        </div>
-                        
-                        {/* Class Filter */}
-                        <div className="flex-1 lg:flex-initial lg:w-40">
-                            <select
-                                value={classFilter}
-                                onChange={(e) => setClassFilter(e.target.value)}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                                <option value="">All Classes</option>
-                                {uniqueClasses.map(className => (
-                                    <option key={className} value={className}>{className}</option>
-                                ))}
-                            </select>
-                        </div>
-                        
-                        {/* Results Count */}
-                        {(searchTerm || activeFilter !== 'all' || votedFilter !== 'all' || classFilter) && (
-                            <div className="flex items-center">
-                                <span className="text-xs text-gray-500">
-                                    {filteredStudents.length} of {students.length}
-                                </span>
-                            </div>
-                        )}
-                    </div>
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="min-w-full text-sm">
-                        <thead>
-                        <tr className="bg-blue-100 border-b border-gray-100">
-                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Student
-                                ID
-                            </th>
-                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Class</th>
-                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Active</th>
-                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Has
-                                Voted
-                            </th>
-                            <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                        {filteredStudents.map((s) => (
-                            <StudentRow
-                                key={s.id}
-                                student={s}
-                                onEdit={openEditModal}
-                                onDelete={handleDeleteStudent}
-                            />
-                        ))}
-                        {filteredStudents.length === 0 && (
-                            <tr>
-                                <td colSpan={6} className="px-5 py-8 text-center text-gray-500">
-                                    {students.length === 0 
-                                        ? 'No students added yet.' 
-                                        : 'Select an election to view its students.'}
-                                </td>
-                            </tr>
-                        )}
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
-            {/* Edit Modal */}
-            <EditStudentModal
-                student={editingStudent}
-                onClose={closeEditModal}
-                onSave={handleSaveEdit}
-                loading={updateStudent.isPending}
-            />
+            <Badge variant={student.has_voted ? 'primary' : 'neutral'}>
+                {student.has_voted ? 'Voted' : 'Not voted'}
+            </Badge>
         </div>
     );
 }
 
+function StudentForm({
+    studentId,
+    fullName,
+    className,
+    pending,
+    onStudentIdChange,
+    onFullNameChange,
+    onClassChange,
+    onSubmit,
+    onCancel,
+}: {
+    studentId: string;
+    fullName: string;
+    className: string;
+    pending: boolean;
+    onStudentIdChange: (value: string) => void;
+    onFullNameChange: (value: string) => void;
+    onClassChange: (value: string) => void;
+    onSubmit: (event: FormEvent) => void;
+    onCancel: () => void;
+}) {
+    return (
+        <form onSubmit={onSubmit} className="student-form">
+            <FormField id="student-id" label="Voter ID" required>
+                <TextInput
+                    value={studentId}
+                    onChange={event => onStudentIdChange(event.target.value)}
+                    required
+                />
+            </FormField>
+
+            <FormField id="student-name" label="Full name" required>
+                <TextInput
+                    value={fullName}
+                    onChange={event => onFullNameChange(event.target.value)}
+                    required
+                />
+            </FormField>
+
+            <FormField id="student-class" label="Class" required>
+                <SelectField
+                    value={className}
+                    onChange={event => onClassChange(event.target.value)}
+                    required
+                >
+                    <option value="">Select class...</option>
+
+                    {CLASS_OPTIONS.map(option => (
+                        <option key={option} value={option}>
+                            {option}
+                        </option>
+                    ))}
+                </SelectField>
+            </FormField>
+
+            <div className="ui-modal-actions">
+                <Button
+                    type="button"
+                    variant="quiet"
+                    onClick={onCancel}
+                >
+                    Cancel
+                </Button>
+
+                <Button type="submit" loading={pending}>
+                    Save voter
+                </Button>
+            </div>
+        </form>
+    );
+}
+
+export default function StudentsPage() {
+    const [selectedElectionId, setSelectedElectionId] =
+        useState<number | null>(null);
+
+    const [showAdd, setShowAdd] = useState(false);
+    const [showImport, setShowImport] = useState(false);
+
+    const [studentId, setStudentId] = useState('');
+    const [fullName, setFullName] = useState('');
+    const [className, setClassName] = useState('');
+
+    const [file, setFile] = useState<File | null>(null);
+
+    const [editing, setEditing] = useState<Student | null>(null);
+    const [deleting, setDeleting] = useState<Student | null>(null);
+
+    const [search, setSearch] = useState('');
+    const [activeFilter, setActiveFilter] = useState<ActiveFilter>('all');
+    const [votedFilter, setVotedFilter] = useState<VotedFilter>('all');
+    const [classFilter, setClassFilter] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const pageSize = 10;
+
+    // Queries and mutations
+
+    const electionsQuery = useElections();
+    const studentsQuery = useStudents(selectedElectionId);
+
+    const create = useCreateStudent();
+    const update = useUpdateStudent();
+    const remove = useDeleteStudent();
+    const upload = useBulkUploadStudents();
+
+    const elections = useMemo(
+        () => electionsQuery.data ?? [],
+        [electionsQuery.data]
+    );
+
+    const students = useMemo(
+        () => studentsQuery.data ?? [],
+        [studentsQuery.data]
+    );
+
+    const selected =
+        elections.find(election => election.id === selectedElectionId) ?? null;
+
+    // Filter options and records
+
+    const classes = useMemo(
+        () =>
+            Array.from(
+                new Set(students.map(student => student.class_name))
+            ).sort(),
+        [students]
+    );
+
+    const filtered = useMemo(
+        () =>
+            students.filter(student => {
+                const query = search.toLowerCase().trim();
+
+                return (
+                    (
+                        !query ||
+                        student.full_name.toLowerCase().includes(query) ||
+                        student.student_id.toLowerCase().includes(query)
+                    ) &&
+                    (
+                        activeFilter === 'all' ||
+                        (activeFilter === 'active'
+                            ? student.is_active
+                            : !student.is_active)
+                    ) &&
+                    (
+                        votedFilter === 'all' ||
+                        (votedFilter === 'voted'
+                            ? student.has_voted
+                            : !student.has_voted)
+                    ) &&
+                    (
+                        !classFilter ||
+                        student.class_name === classFilter
+                    )
+                );
+            }),
+        [students, search, activeFilter, votedFilter, classFilter]
+    );
+
+    const hasFilters = Boolean(
+        search ||
+        activeFilter !== 'all' ||
+        votedFilter !== 'all' ||
+        classFilter
+    );
+    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    const visiblePage = Math.min(currentPage, totalPages);
+    const paginatedStudents = filtered.slice(
+        (visiblePage - 1) * pageSize,
+        visiblePage * pageSize
+    );
+
+    const queryError = electionsQuery.error || studentsQuery.error;
+    const loading = electionsQuery.isLoading || studentsQuery.isLoading;
+    const uploadResult = upload.data as UploadResult | undefined;
+
+    // Form handlers
+
+    const resetStudentForm = () => {
+        setStudentId('');
+        setFullName('');
+        setClassName('');
+    };
+
+    const handleCreate = (event: FormEvent) => {
+        event.preventDefault();
+
+        if (
+            !selectedElectionId ||
+            !studentId.trim() ||
+            !fullName.trim() ||
+            !className
+        ) {
+            showError('Select an election and complete all required fields.');
+            return;
+        }
+
+        create.mutate(
+            {
+                student_id: studentId.trim(),
+                full_name: fullName.trim(),
+                class_name: className,
+                election_id: selectedElectionId,
+            },
+            {
+                onSuccess: () => {
+                    resetStudentForm();
+                    setShowAdd(false);
+                },
+            }
+        );
+    };
+
+    const handleUpload = (event: FormEvent) => {
+        event.preventDefault();
+
+        if (file && selectedElectionId) {
+            upload.mutate(
+                {
+                    file,
+                    election_id: selectedElectionId,
+                },
+                {
+                    onSuccess: () => setFile(null),
+                }
+            );
+        }
+    };
+
+    const handleDelete = () => {
+        if (deleting && !deleting.has_voted) {
+            remove.mutate(deleting, {
+                onSettled: () => setDeleting(null),
+            });
+        }
+    };
+
+    const clearFilters = () => {
+        setSearch('');
+        setActiveFilter('all');
+        setVotedFilter('all');
+        setClassFilter('');
+        setCurrentPage(1);
+    };
+
+    return (
+        <div className="students-page">
+            {/* Election selector and page actions */}
+
+            <div className="voter-header">
+                <FormField
+                    id="students-election"
+                    label="Election"
+                >
+                    <SelectField
+                        value={selectedElectionId ?? ''}
+                        onChange={event => {
+                            setSelectedElectionId(
+                                event.target.value
+                                    ? Number(event.target.value)
+                                    : null
+                            );
+                            setCurrentPage(1);
+                        }}
+                    >
+                        <option value="" selected={true}>
+                            {elections.length
+                                ? 'Select an election'
+                                : 'No elections available'}
+                        </option>
+
+                        {elections.map(election => (
+                            <option
+                                key={election.id}
+                                value={election.id}
+                            >
+                                {election.name} ({election.year})
+                            </option>
+                        ))}
+                    </SelectField>
+                </FormField>
+
+                <div className="voter-header-buttons">
+                    <Button
+                        leadingIcon={<FiPlus aria-hidden="true" />}
+                        onClick={() => setShowAdd(true)}
+                    >
+                        Add voter
+                    </Button>
+
+                    <Button
+                        variant="secondary"
+                        className="voter-import-button"
+                        leadingIcon={<FiUploadCloud aria-hidden="true" />}
+                        onClick={() => setShowImport(true)}
+                    >
+                        Import voters
+                    </Button>
+                </div>
+            </div>
+
+            {/* Student statistics */}
+
+            {selected && (
+                <section
+                    className="students-statistics"
+                    aria-label="Voter statistics"
+                >
+                    <StatisticCard
+                        label="Total voters"
+                        value={students.length}
+                        icon={<FiUsers aria-hidden="true" />}
+                        status="primary"
+                        layout="split"
+                    />
+
+                    <StatisticCard
+                        label="Active voters"
+                        value={
+                            students.filter(student => student.is_active).length
+                        }
+                        icon={<FiCheckCircle aria-hidden="true" />}
+                        status="success"
+                        layout="split"
+                    />
+
+                    <StatisticCard
+                        label="Already voted"
+                        value={
+                            students.filter(student => student.has_voted).length
+                        }
+                        icon={<FiFileText aria-hidden="true" />}
+                        status="strong"
+                        layout="split"
+                    />
+                </section>
+            )}
+
+            {/* Query error */}
+
+            {queryError && (
+                <ErrorState
+                    title="Unable to load voters"
+                    message={message(queryError, 'Please try again.')}
+                />
+            )}
+
+            {/* Voter records */}
+
+            <section
+                className="students-records ui-section"
+                aria-labelledby="students-records-heading"
+            >
+                <div className="students-records-heading">
+                    <div>
+                        <h2 id="students-records-heading">
+                            {selected
+                                ? `Voters for ${selected.name}`
+                                : 'Voter records'}
+                        </h2>
+
+                        <p>
+                            {selected
+                                ? `${filtered.length} of ${students.length} records`
+                                : 'Select an election to view voter records.'}
+                        </p>
+                    </div>
+                </div>
+
+                {/* Filters */}
+
+                <div
+                    className="students-filter-toolbar"
+                    aria-label="Voter filters"
+                >
+                    <FormField
+                        id="student-search"
+                        label="Search by name or voter ID"
+                    >
+                        <div className="students-search-control">
+                            <FiSearch aria-hidden="true" />
+
+                            <TextInput
+                                value={search}
+                                onChange={event =>
+                                    (() => {
+                                        setSearch(event.target.value);
+                                        setCurrentPage(1);
+                                    })()
+                                }
+                                placeholder="Name or voter ID"
+                            />
+                        </div>
+                    </FormField>
+
+                    <FormField
+                        id="active-filter"
+                        label="Activation status"
+                    >
+                        <SelectField
+                            value={activeFilter}
+                                onChange={event =>
+                                    (() => {
+                                        setActiveFilter(
+                                            event.target.value as ActiveFilter
+                                        );
+                                        setCurrentPage(1);
+                                    })()
+                            }
+                        >
+                            <option value="all">All statuses</option>
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                        </SelectField>
+                    </FormField>
+
+                    <FormField
+                        id="voted-filter"
+                        label="Voting status"
+                    >
+                        <SelectField
+                            value={votedFilter}
+                                onChange={event =>
+                                    (() => {
+                                        setVotedFilter(
+                                            event.target.value as VotedFilter
+                                        );
+                                        setCurrentPage(1);
+                                    })()
+                            }
+                        >
+                            <option value="all">All statuses</option>
+                            <option value="voted">Voted</option>
+                            <option value="not-voted">Not voted</option>
+                        </SelectField>
+                    </FormField>
+
+                    <FormField
+                        id="class-filter"
+                        label="Class"
+                    >
+                        <SelectField
+                            value={classFilter}
+                            onChange={event => {
+                                setClassFilter(event.target.value);
+                                setCurrentPage(1);
+                            }}
+                        >
+                            <option value="">All classes</option>
+
+                            {classes.map(option => (
+                                <option key={option} value={option}>
+                                    {option}
+                                </option>
+                            ))}
+                        </SelectField>
+                    </FormField>
+
+                    {hasFilters && (
+                        <Button
+                            type="button"
+                            variant="quiet"
+                            size="compact"
+                            onClick={clearFilters}
+                        >
+                            Clear filters
+                        </Button>
+                    )}
+                </div>
+
+                {/* Loading and empty states */}
+
+                {loading && (
+                    <LoadingState
+                        title="Loading voters"
+                        message="Fetching records."
+                    />
+                )}
+
+                {!loading && !queryError && !selectedElectionId && (
+                    <EmptyState
+                        title="Select an election"
+                        message="Choose an election to view its voters."
+                    />
+                )}
+
+                {!loading &&
+                    !queryError &&
+                    selectedElectionId &&
+                    !students.length && (
+                        <EmptyState
+                            title="No voters yet"
+                            message="Add a voter or import an Excel workbook."
+                        />
+                    )}
+
+                {!loading &&
+                    !queryError &&
+                    selectedElectionId &&
+                    students.length > 0 &&
+                    !filtered.length && (
+                        <EmptyState
+                            title="No matching voters"
+                            message="Try clearing a filter or changing your search."
+                        />
+                    )}
+
+                {/* Desktop table and mobile cards */}
+
+                {!loading && !queryError && filtered.length > 0 && (
+                    <>
+                        <div className="students-table-wrap">
+                            <table className="ui-table students-table">
+                                <caption className="sr-only">
+                                    Voters for the selected election
+                                </caption>
+
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Voter ID</th>
+                                        <th scope="col">Full name</th>
+                                        <th scope="col">Class</th>
+                                        <th scope="col">Activation</th>
+                                        <th scope="col">Voting status</th>
+                                        <th scope="col" className="!text-right">Actions</th>
+                                    </tr>
+                                </thead>
+
+                                <tbody>
+                                    {paginatedStudents.map(student => (
+                                        <StudentRow
+                                            key={student.id}
+                                            student={student}
+                                            onEdit={setEditing}
+                                            onDelete={setDeleting}
+                                        />
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div className="students-mobile-list">
+                            {paginatedStudents.map(student => (
+                                <article
+                                    key={student.id}
+                                    className="student-mobile-card"
+                                >
+                                    <div className="student-mobile-card-heading">
+                                        <div>
+                                            <h3>{student.full_name}</h3>
+
+                                            <p>
+                                                {student.student_id} ·{' '}
+                                                {student.class_name}
+                                            </p>
+                                        </div>
+
+                                        <StudentStatus student={student} />
+                                    </div>
+
+                                    <dl className="student-mobile-details">
+                                        <div>
+                                            <dt>Activation</dt>
+                                            <dd>
+                                                {student.is_active
+                                                    ? 'Active'
+                                                    : 'Inactive'}
+                                            </dd>
+                                        </div>
+
+                                        <div>
+                                            <dt>Voting status</dt>
+                                            <dd>
+                                                {student.has_voted
+                                                    ? 'Voted'
+                                                    : 'Not voted'}
+                                            </dd>
+                                        </div>
+                                    </dl>
+
+                                    <div className="student-mobile-actions">
+                                        <IconButton
+                                            label={`Edit ${student.full_name}`}
+                                            icon={
+                                                <FiEdit2 aria-hidden="true" />
+                                            }
+                                            onClick={() =>
+                                                setEditing(student)
+                                            }
+                                        />
+
+                                        <IconButton
+                                            label={
+                                                student.has_voted
+                                                    ? 'Cannot delete a student who has voted'
+                                                    : `Delete ${student.full_name}`
+                                            }
+                                            icon={
+                                                <FiTrash2 aria-hidden="true" />
+                                            }
+                                            variant="danger"
+                                            disabled={student.has_voted}
+                                            onClick={() =>
+                                                setDeleting(student)
+                                            }
+                                        />
+                                    </div>
+                                </article>
+                            ))}
+                        </div>
+
+                        {totalPages > 1 && (
+                            <nav
+                                className="students-pagination"
+                                aria-label="Voter records pagination"
+                            >
+                                <span>
+                                    Page {visiblePage} of {totalPages}
+                                </span>
+                                <div>
+                                    <Button
+                                        type="button"
+                                        variant="quiet"
+                                        size="compact"
+                                        leadingIcon={
+                                            <FiChevronLeft aria-hidden="true" />
+                                        }
+                                        disabled={visiblePage === 1}
+                                        onClick={() =>
+                                            setCurrentPage(page =>
+                                                Math.max(page - 1, 1)
+                                            )
+                                        }
+                                    >
+                                        Previous
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="quiet"
+                                        size="compact"
+                                        trailingIcon={
+                                            <FiChevronRight aria-hidden="true" />
+                                        }
+                                        disabled={visiblePage === totalPages}
+                                        onClick={() =>
+                                            setCurrentPage(page =>
+                                                Math.min(page + 1, totalPages)
+                                            )
+                                        }
+                                    >
+                                        Next
+                                    </Button>
+                                </div>
+                            </nav>
+                        )}
+                    </>
+                )}
+            </section>
+
+            {/* Add voter modal */}
+
+            <Modal
+                open={showAdd}
+                onClose={() => setShowAdd(false)}
+                title="Add voter"
+                description={
+                    selected
+                        ? `Add an eligible voter to ${selected.name}.`
+                        : 'Select an election before adding a voter.'
+                }
+            >
+                <StudentForm
+                    studentId={studentId}
+                    fullName={fullName}
+                    className={className}
+                    pending={create.isPending}
+                    onStudentIdChange={setStudentId}
+                    onFullNameChange={setFullName}
+                    onClassChange={setClassName}
+                    onSubmit={handleCreate}
+                    onCancel={() => setShowAdd(false)}
+                />
+            </Modal>
+
+            {/* Import voters modal */}
+
+            <Modal
+                open={showImport}
+                onClose={() => setShowImport(false)}
+                title="Import voters"
+                description={
+                    selected
+                        ? `Import eligible voters into ${selected.name}.`
+                        : 'Select an election before importing voters.'
+                }
+            >
+                <form
+                    onSubmit={handleUpload}
+                    className="student-import-form"
+                >
+                    <Alert variant="info" title="Excel format">
+                        Use the existing Excel format with these columns:{' '}
+                        <code>student_id</code>,{' '}
+                        <code>full_name</code> and{' '}
+                        <code>class_name</code>. Accepted files are .xlsx
+                        and .xls.
+                    </Alert>
+
+                    <FormField
+                        id="student-file"
+                        label="Excel file"
+                        helperText={
+                            file
+                                ? `Selected file: ${file.name}`
+                                : 'Choose an Excel workbook.'
+                        }
+                    >
+                        <TextInput
+                            type="file"
+                            accept=".xlsx,.xls"
+                            onChange={event =>
+                                setFile(event.target.files?.[0] ?? null)
+                            }
+                        />
+                    </FormField>
+
+                    {upload.error && (
+                        <Alert
+                            variant="error"
+                            title="Import failed"
+                        >
+                            {message(
+                                upload.error,
+                                'Voter import failed. Check the file and try again.'
+                            )}
+                        </Alert>
+                    )}
+
+                    {uploadResult?.detail && !upload.error && (
+                        <Alert
+                            variant="success"
+                            title="Import complete"
+                        >
+                            {uploadResult.detail}
+                        </Alert>
+                    )}
+
+                    {uploadResult?.errors && (
+                        <Alert
+                            variant="warning"
+                            title="Some rows need attention"
+                        >
+                            <pre className="students-upload-errors">
+                                {JSON.stringify(
+                                    uploadResult.errors,
+                                    null,
+                                    2
+                                )}
+                            </pre>
+                        </Alert>
+                    )}
+
+                    <div className="ui-modal-actions">
+                        <Button
+                            type="button"
+                            variant="quiet"
+                            onClick={() => setShowImport(false)}
+                        >
+                            Cancel
+                        </Button>
+
+                        <Button
+                            type="submit"
+                            loading={upload.isPending}
+                            disabled={!file || !selectedElectionId}
+                            className="voter-import-button"
+                            leadingIcon={
+                                <FiUploadCloud aria-hidden="true" />
+                            }
+                        >
+                            Import voters
+                        </Button>
+                    </div>
+                </form>
+            </Modal>
+
+            {/* Edit voter modal */}
+
+            <EditStudentModal
+                student={editing}
+                onClose={() => setEditing(null)}
+                onSave={(student, name, classValue) =>
+                    update.mutate(
+                        {
+                            id: student.id,
+                            full_name: name,
+                            class_name: classValue,
+                        },
+                        {
+                            onSuccess: () => setEditing(null),
+                        }
+                    )
+                }
+                loading={update.isPending}
+            />
+
+            {/* Delete confirmation modal */}
+
+            <ConfirmModal
+                isOpen={Boolean(deleting)}
+                onClose={() => setDeleting(null)}
+                onConfirm={handleDelete}
+                title="Delete voter?"
+                message={
+                    deleting
+                        ? `Delete ${deleting.full_name}? This cannot be undone.`
+                        : ''
+                }
+                confirmText="Delete voter"
+            />
+        </div>
+    );
+}

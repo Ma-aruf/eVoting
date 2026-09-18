@@ -33,7 +33,7 @@ export default function SuccessPage() {
                     <div className="text-sm text-gray-500 space-y-2">
                         <p>You can now close this window or return to the login page.</p>
                         <p className="text-xs">
-                            For security reasons, you cannot vote again with the same student ID.
+                            For security reasons, you cannot vote again with the same voter ID.
                         </p>
                     </div>
 

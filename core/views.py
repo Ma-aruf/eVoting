@@ -4,6 +4,7 @@ import sys
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.db.models import ProtectedError
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from openpyxl import load_workbook
@@ -27,7 +28,11 @@ from .serializers import (
     MultiVoteSerializer,
     UserSerializer,
 )
-from .utils import generate_voter_hmac
+from .utils import (
+    generate_voter_hmac,
+    election_has_votes,
+    ELECTION_CONFIGURATION_LOCKED_DETAIL,
+)
 
 User = get_user_model()
 
@@ -97,7 +102,13 @@ class StudentViewSet(viewsets.ModelViewSet):
                 {"detail": "Cannot delete a student who has already voted."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        return super().destroy(request, *args, **kwargs)
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response(
+                {"detail": "Student cannot be deleted because votes exist for a related candidate."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 class BulkStudentUploadView(APIView):
@@ -244,11 +255,21 @@ class PositionCreateView(APIView):
     def post(self, request):
         serializer = PositionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        if election_has_votes(serializer.validated_data["election"].pk):
+            return Response(
+                {"detail": ELECTION_CONFIGURATION_LOCKED_DETAIL},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         position = serializer.save()
         return Response(PositionSerializer(position).data, status=status.HTTP_201_CREATED)
 
     def put(self, request, pk):
         position = get_object_or_404(Position, pk=pk)
+        if election_has_votes(position.election_id):
+            return Response(
+                {"detail": ELECTION_CONFIGURATION_LOCKED_DETAIL},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         serializer = PositionSerializer(
             position,
             data=request.data,
@@ -266,7 +287,18 @@ class PositionCreateView(APIView):
 
     def delete(self, request, pk):
         position = get_object_or_404(Position, pk=pk)
-        position.delete()
+        if election_has_votes(position.election_id):
+            return Response(
+                {"detail": ELECTION_CONFIGURATION_LOCKED_DETAIL},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            position.delete()
+        except ProtectedError:
+            return Response(
+                {"detail": "Position cannot be deleted because votes exist for it."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         return Response(
             {"detail": "Position deleted successfully"},
             status=status.HTTP_204_NO_CONTENT
@@ -298,12 +330,45 @@ class CandidateCreateView(APIView):
     def post(self, request):
         serializer = CandidateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        if election_has_votes(serializer.validated_data["position"].election_id):
+            return Response(
+                {"detail": ELECTION_CONFIGURATION_LOCKED_DETAIL},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         candidate = serializer.save()
         return Response(CandidateSerializer(candidate).data, status=status.HTTP_201_CREATED)
 
     # EDIT
     def put(self, request, pk):
         candidate = get_object_or_404(Candidate, pk=pk)
+        election_locked = election_has_votes(candidate.position.election_id)
+        if election_locked and any(
+            field in request.data
+            and str(request.data[field]) != str(getattr(candidate, f"{field}_id"))
+            for field in ("student", "position")
+        ):
+            return Response(
+                {"detail": ELECTION_CONFIGURATION_LOCKED_DETAIL},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if election_locked and "ballot_number" in request.data and (
+            str(request.data["ballot_number"]) != str(candidate.ballot_number)
+        ):
+            return Response(
+                {"detail": ELECTION_CONFIGURATION_LOCKED_DETAIL},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if Vote.objects.filter(candidate=candidate).exists():
+            changing_assignment = any(
+                field in request.data
+                and str(request.data[field]) != str(getattr(candidate, f"{field}_id"))
+                for field in ("student", "position")
+            )
+            if changing_assignment:
+                return Response(
+                    {"detail": "Candidate assignment cannot be changed after votes exist."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         serializer = CandidateSerializer(
             candidate,
             data=request.data,
@@ -322,7 +387,18 @@ class CandidateCreateView(APIView):
     # DELETE
     def delete(self, request, pk):
         candidate = get_object_or_404(Candidate, pk=pk)
-        candidate.delete()
+        if election_has_votes(candidate.position.election_id):
+            return Response(
+                {"detail": ELECTION_CONFIGURATION_LOCKED_DETAIL},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            candidate.delete()
+        except ProtectedError:
+            return Response(
+                {"detail": "Candidate cannot be deleted because votes exist for it."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         return Response(
             {"detail": "Candidate deleted successfully"},
             status=status.HTTP_204_NO_CONTENT
@@ -446,6 +522,13 @@ class MultiVoteView(APIView):
                     pk=student_user.pk
                 )
 
+                authenticated_election_id = request.META.get("HTTP_X_ELECTION_ID")
+                if str(student.election_id) != str(authenticated_election_id):
+                    return Response(
+                        {"detail": "Voter election context is invalid."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+
                 now = timezone.now()
 
                 if not getattr(student, "is_active", False):
@@ -466,6 +549,26 @@ class MultiVoteView(APIView):
                         status=status.HTTP_403_FORBIDDEN,
                     )
 
+                election_position_ids = set(
+                    Position.objects.filter(
+                        election_id=student.election_id
+                    ).values_list("id", flat=True)
+                )
+                submitted_position_ids = [vote["position"] for vote in data["votes"]]
+                if (
+                    len(submitted_position_ids) != len(election_position_ids)
+                    or set(submitted_position_ids) != election_position_ids
+                ):
+                    return Response(
+                        {
+                            "detail": (
+                                "A complete ballot must contain exactly one selection "
+                                "for every position in the election."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
                 votes_to_create = []
                 election_cache = {}
                 position_cache = {}
@@ -474,6 +577,15 @@ class MultiVoteView(APIView):
                     election_id = vote_data["election"]
                     position_id = vote_data["position"]
                     candidate_id = vote_data["candidate"]
+
+                    if (
+                        str(election_id) != str(authenticated_election_id)
+                        or election_id != student.election_id
+                    ):
+                        return Response(
+                            {"detail": "Every vote must belong to the authenticated election."},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
 
                     # Load and validate election (must be active and within window)
                     election = election_cache.get(election_id)
@@ -529,6 +641,12 @@ class MultiVoteView(APIView):
                             status=status.HTTP_400_BAD_REQUEST,
                         )
 
+                    if candidate.student.election_id != election.pk:
+                        return Response(
+                            {"detail": "Candidate does not belong to election."},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
                     # Ensure no existing vote for that position by this voter token
                     if Vote.objects.filter(
                             voter_hash=token, position_id=position_id
@@ -565,9 +683,9 @@ class MultiVoteView(APIView):
                 {"detail": "Student not found."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        except Exception as e:
+        except Exception:
             return Response(
-                {"detail": str(e)},
+                {"detail": "Vote submission could not be completed."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -899,7 +1017,10 @@ class PositionStatsView(APIView):
         unique_voters = Vote.objects.filter(election=election).values('voter_hash').distinct().count()
 
         # Votes actually cast for this position
-        position_votes = Vote.objects.filter(position=position).count()
+        position_votes = Vote.objects.filter(
+            election=election,
+            position=position
+        ).count()
 
         skipped = max(0, unique_voters - position_votes)
 
@@ -943,6 +1064,7 @@ class ElectionResultsView(APIView):
 
             for candidate in candidates:
                 vote_count = Vote.objects.filter(
+                    election=election,
                     candidate=candidate,
                     position=position
                 ).count()
@@ -1010,17 +1132,19 @@ class CandidatesForPositionView(APIView):
             )
 
         try:
+            position = Position.objects.get(pk=position_id)
             candidates = Candidate.objects.filter(position_id=position_id).select_related('student').order_by('ballot_number')
-        except ValueError:
+        except (ValueError, Position.DoesNotExist):
             return Response(
-                {"detail": "Invalid position_id."},
-                status=status.HTTP_400_BAD_REQUEST,
+                {"detail": "Position not found."},
+                status=status.HTTP_404_NOT_FOUND,
             )
 
         result = []
 
         for candidate in candidates:
             vote_count = Vote.objects.filter(
+                election=position.election,
                 candidate_id=candidate.id,
                 position_id=position_id
             ).count()

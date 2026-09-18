@@ -45,7 +45,7 @@ export default function ResultsPage() {
         const csvRows = [];
 
         // Header row
-        csvRows.push(['Election', 'Position', 'Candidate', 'Student ID', 'Votes', 'Percentage'].join(','));
+        csvRows.push(['Election', 'Position', 'Candidate', 'Voter ID', 'Votes', 'Percentage'].join(','));
 
         // Data rows
         results.positions.forEach(position => {

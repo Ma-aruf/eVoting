@@ -44,9 +44,10 @@ class MultiVoteViewTests(TestCase):
             student=self.student_b, position=self.position2
         )
 
-        token = make_voter_hmac(self.student.student_id)
+        token = make_voter_hmac(f"{self.student.student_id}_{self.election.id}")
         self.headers = {
             "HTTP_X_STUDENT_ID": self.student.student_id,
+            "HTTP_X_ELECTION_ID": str(self.election.id),
             "HTTP_X_VOTER_TOKEN": token,
         }
 
