@@ -57,8 +57,7 @@ export default function StudentLoginPage() {
         }
     };
 
-    return <AuthLayout title="Voter Login" description="Enter your voter ID to access the election ballot."
-    >
+    return <AuthLayout title="Voter Login">
         <form onSubmit={handleSubmit} className="auth-form">
             {error && <Alert variant="error" title="Unable to continue">{error}</Alert>}
             <FormField id="student-id" label="Voter ID" required>
