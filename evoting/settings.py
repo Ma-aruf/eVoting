@@ -68,10 +68,10 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_BROWSER_XSS_FILTER = True
     X_FRAME_OPTIONS = 'DENY'
-    
+
     # Restrict ALLOWED_HOSTS in production
     ALLOWED_HOSTS = []
-    
+
     # Add Railway domain
     railway_domain = get_env("RAILWAY_PUBLIC_DOMAIN")
     if railway_domain:
@@ -79,15 +79,15 @@ if not DEBUG:
             railway_domain,
             f"*.{railway_domain}",
         ])
-    
+
     # Add any custom domains
     custom_domains = get_env('ALLOWED_DOMAINS', '')
     if custom_domains:
         ALLOWED_HOSTS.extend([domain.strip() for domain in custom_domains.split(',')])
-    
+
     # Always allow localhost and Railway health checks
     ALLOWED_HOSTS.extend(["localhost", "127.0.0.1", "0.0.0.0", "healthcheck.railway.app", ""])
-    
+
     # Remove duplicates while preserving order
     seen = set()
     ALLOWED_HOSTS = [host for host in ALLOWED_HOSTS if not (host in seen or seen.add(host))]
@@ -216,8 +216,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5175",
     "http://127.0.0.1:5173",
-    "https://kasec-evoting.onrender.com",
-    "https://kasec-evoting-7lkj.onrender.com"
+    "https://myevoting.onrender.com/",
+    "https://web-production-a9bba.up.railway.app"
 ]
 
 # Add Railway domain dynamically
@@ -231,8 +231,6 @@ if get_env("RAILWAY_PUBLIC_DOMAIN"):
 # For development, allow all origins
 if get_env("DEBUG", default=False, cast=bool):
     CORS_ALLOW_ALL_ORIGINS = True
-
-
 
 CORS_ALLOW_HEADERS = [
     'accept',
@@ -251,8 +249,11 @@ CORS_ALLOW_HEADERS = [
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5175",
-    "https://kasec-evoting.onrender.com",
-    "https://kasec-evoting-7lkj.onrender.com"
+    "http://localhost:5173",
+    "http://127.0.0.1:5175",
+    "http://127.0.0.1:5173",
+    "https://myevoting.onrender.com/",
+    "https://web-production-a9bba.up.railway.app"
 ]
 
 # Add Railway domain dynamically for CSRF
@@ -262,7 +263,6 @@ if get_env("RAILWAY_PUBLIC_DOMAIN"):
         f"https://{railway_domain}",
         f"http://{railway_domain}",
     ])
-
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
@@ -358,9 +358,9 @@ LOGGING = {
             'style': '{',
         },
         'security': {
-                'format': '{levelname} {asctime} {message}',
-                'style': '{',
-            },
+            'format': '{levelname} {asctime} {message}',
+            'style': '{',
+        },
     },
     'handlers': {
         'file': {
