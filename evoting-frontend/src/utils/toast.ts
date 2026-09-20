@@ -9,12 +9,22 @@ const baseOptions = {
     draggable: true,
 };
 
+const baseStyle = {
+    borderRadius: '0.5rem',
+    boxShadow: '0 3px 12px rgba(16, 45, 86, 0.12)',
+    fontFamily: 'Roboto, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    fontSize: '0.8rem',
+    fontWeight: '500',
+};
+
 export const showSuccess = (message: string) => {
     toast.success(message, {
         ...baseOptions,
         style: {
-            background: '#0891b2',
+            ...baseStyle,
+            background: '#178a55',
             color: '#ffffff',
+            border: '1px solid #146a43',
         },
     });
 };
@@ -23,8 +33,10 @@ export const showError = (message: string) => {
     toast.error(message, {
         ...baseOptions,
         style: {
-            background: '#1e3a5f',
+            ...baseStyle,
+            background: '#c62828',
             color: '#ffffff',
+            border: '1px solid #9e1f1f',
         },
     });
 };
@@ -33,8 +45,10 @@ export const showInfo = (message: string) => {
     toast.info(message, {
         ...baseOptions,
         style: {
-            background: '#1e3a5f',
+            ...baseStyle,
+            background: '#1d4f91',
             color: '#ffffff',
+            border: '1px solid #163d73',
         },
     });
 };
@@ -43,8 +57,10 @@ export const showWarning = (message: string) => {
     toast.warning(message, {
         ...baseOptions,
         style: {
-            background: '#ca8a04',
+            ...baseStyle,
+            background: '#a96700',
             color: '#ffffff',
+            border: '1px solid #8a5500',
         },
     });
 };

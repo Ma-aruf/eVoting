@@ -807,13 +807,24 @@ export default function StudentsPage() {
                                 : 'Choose an Excel workbook.'
                         }
                     >
-                        <TextInput
-                            type="file"
-                            accept=".xlsx,.xls"
-                            onChange={event =>
-                                setFile(event.target.files?.[0] ?? null)
-                            }
-                        />
+                        <div className="file-picker-wrapper">
+                            <label htmlFor="student-file-input" className="file-picker-label">
+                                <span className="file-picker-emoji">📁</span>
+                                <span className="file-picker-text">
+                                    {file ? file.name : 'Click to pick a file'}
+                                </span>
+                                <span className="file-picker-hint">.xlsx, .xls</span>
+                            </label>
+                            <input
+                                id="student-file-input"
+                                type="file"
+                                accept=".xlsx,.xls"
+                                className="file-picker-input"
+                                onChange={event =>
+                                    setFile(event.target.files?.[0] ?? null)
+                                }
+                            />
+                        </div>
                     </FormField>
 
                     {upload.error && (

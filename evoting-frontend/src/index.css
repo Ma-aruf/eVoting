@@ -3829,3 +3829,60 @@ a {
         padding: var(--space-4);
     }
 }
+
+/* File picker styles */
+.file-picker-wrapper {
+    position: relative;
+}
+
+.file-picker-input {
+    position: absolute;
+    width: 0.1px;
+    height: 0.1px;
+    opacity: 0;
+    overflow: hidden;
+    z-index: -1;
+}
+
+.file-picker-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    min-height: 8rem;
+    padding: var(--space-5);
+    border: 2px dashed var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-primary-soft);
+    cursor: pointer;
+    transition: border-color var(--motion-fast) var(--ease-standard),
+                background var(--motion-fast) var(--ease-standard);
+}
+
+.file-picker-label:hover {
+    border-color: var(--color-primary);
+    background: #e0e7ff;
+}
+
+.file-picker-label:focus-within {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+.file-picker-emoji {
+    font-size: 2.5rem;
+    line-height: 1;
+}
+
+.file-picker-text {
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    text-align: center;
+}
+
+.file-picker-hint {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+}
