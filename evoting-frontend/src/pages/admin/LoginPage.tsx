@@ -35,7 +35,7 @@ export default function LoginPage() {
         }
     };
 
-    return <AuthLayout title="Administrator sign in" description="Sign in to manage elections, voters and results." securityMessage="Administrator access is limited to authorized election staff." eyebrow="Administration">
+    return <AuthLayout title="Administrator Login">
         <form onSubmit={handleSubmit} className="auth-form">
             {error && <Alert variant="error" title="Sign-in unsuccessful">{error}</Alert>}
             <FormField id="admin-username" label="Username" required>

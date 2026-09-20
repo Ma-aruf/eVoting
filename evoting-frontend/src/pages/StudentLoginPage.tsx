@@ -10,7 +10,7 @@ import FormField from '../components/ui/FormField';
 import TextInput from '../components/ui/TextInput';
 import {clearVoterSession} from '../api/voterApi';
 
-type ApiError = {response?: {status?: number; data?: {detail?: string}}};
+type ApiError = { response?: { status?: number; data?: { detail?: string } } };
 
 function getVoterLoginError(error: unknown) {
     const apiError = error as ApiError;
@@ -27,7 +27,7 @@ export default function StudentLoginPage() {
     const [loading, setLoading] = useState(false);
     const location = useLocation();
     const [error, setError] = useState<string | null>(
-        (location.state as {message?: string} | null)?.message ?? null
+        (location.state as { message?: string } | null)?.message ?? null
     );
     const navigate = useNavigate();
     const queryClient = useQueryClient();
@@ -57,13 +57,17 @@ export default function StudentLoginPage() {
         }
     };
 
-    return <AuthLayout title="Voter access" description="Enter your voter ID to access the election ballot." securityMessage="Only activated voters can continue to the ballot." eyebrow="Voter voting">
+    return <AuthLayout title="Voter Login" description="Enter your voter ID to access the election ballot."
+    >
         <form onSubmit={handleSubmit} className="auth-form">
             {error && <Alert variant="error" title="Unable to continue">{error}</Alert>}
-            <FormField id="student-id" label="Voter ID" required helperText="Use the voter ID provided by your school or election committee.">
-                <TextInput autoComplete="username" inputMode="text" value={studentId} onChange={(event) => setStudentId(event.target.value.toUpperCase())} placeholder="e.g. STU-001" required autoFocus/>
+            <FormField id="student-id" label="Voter ID" required>
+                <TextInput autoComplete="username" inputMode="text" value={studentId}
+                           onChange={(event) => setStudentId(event.target.value.toUpperCase())}
+                           placeholder="e.g. STU-001" required autoFocus/>
             </FormField>
-            <Button type="submit" className="auth-submit" loading={loading} disabled={!studentId.trim()} leadingIcon={<FiUser aria-hidden="true"/>} trailingIcon={<FiArrowRight aria-hidden="true"/>}>
+            <Button type="submit" className="auth-submit" loading={loading} disabled={!studentId.trim()}
+                    leadingIcon={<FiUser aria-hidden="true"/>} trailingIcon={<FiArrowRight aria-hidden="true"/>}>
                 Enter voting portal
             </Button>
         </form>

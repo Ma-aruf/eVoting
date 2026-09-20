@@ -28,7 +28,7 @@
     --color-primary-dark: #102d56;
     --color-primary-soft: #eef4ff;
     --color-background: #f6f8fb;
-    --color-surface: #fff;
+    --color-surface: #ffffff;
     --color-text: #172033;
     --color-text-secondary: #667085;
     --color-border: #dfe5ee;
@@ -3634,11 +3634,26 @@ a {
     justify-content: space-between;
     padding: clamp(var(--space-5), 5vw, var(--space-8));
     color: #fff;
-    background: var(--color-primary-dark);
+    background: url('/login.png') center/cover no-repeat;
+    position: relative;
+}
+
+.auth-presentation::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.02);
 }
 
 .auth-brand-lockup, .auth-card-heading, .auth-security-message, .auth-trust-note {
     display: flex;
+    position: relative;
+    z-index: 1;
+}
+
+#auth-page-title {
+    color: rgb(36, 81, 154);
+    font-weight: 600;
 }
 
 .auth-brand-lockup {
@@ -3647,9 +3662,14 @@ a {
 }
 
 .auth-brand-mark {
-    font-size: 1.35rem;
+    font-size: 1.7rem;
+    color: rgb(36, 81, 154);
     font-weight: 700;
     letter-spacing: -.02em;
+}
+
+.auth-brand-mark span {
+    color: goldenrod;
 }
 
 .auth-brand-subtitle, .auth-eyebrow, .auth-mobile-eyebrow {
@@ -3719,8 +3739,8 @@ a {
 .auth-card {
     width: min(100%, 28rem);
     padding: clamp(var(--space-5), 4vw, var(--space-6));
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
+    border: 3px solid var(--color-border);
+    border-radius: var(--radius-sm);
     background: var(--color-surface);
     box-shadow: var(--shadow-md);
 }
@@ -3771,6 +3791,10 @@ a {
 @media (max-width: 63.99rem) {
     .auth-layout {
         display: block;
+    }
+
+    .auth-presentation {
+        background: var(--color-surface);
     }
 
     .auth-presentation {

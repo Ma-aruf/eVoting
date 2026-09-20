@@ -178,7 +178,7 @@ export default function UsersPage() {
                     <table className="users-table">
                         <caption className="sr-only">Managed users</caption>
                         <thead>
-                        <tr>
+                        <tr className="bg-cyan-700">
                             <th scope="col">Username</th>
                             <th scope="col">Role</th>
                             <th scope="col">Status</th>
@@ -246,7 +246,7 @@ export default function UsersPage() {
                         <div className="users-password-field">
                             <FormField id="password" label="Password" required={!editingUser}
                             >
-                                <TextInput type="password" value={password}
+                                <TextInput type="text" value={password}
                                            onChange={event => setPassword(event.target.value)}
                                            placeholder={editingUser ? 'Leave unchanged' : 'Enter password'}
                                            minLength={6}/>
