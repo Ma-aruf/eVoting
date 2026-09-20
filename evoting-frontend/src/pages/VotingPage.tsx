@@ -204,21 +204,6 @@ export default function VotingPage() {
         }
     }, [currentPositionIndex, positions.length]);
 
-    const handleLogout = async () => {
-        const confirmed = await confirmModal.confirm({
-            title: 'Logout',
-            message: 'Are you sure you want to logout? Your votes will not be saved.',
-            confirmText: 'Logout',
-            cancelText: 'Cancel',
-            type: 'warning'
-        });
-
-        if (confirmed) {
-            clearVoterSession();
-            queryClient.removeQueries({queryKey: ['votingData']});
-            navigate('/');
-        }
-    };
 
     if (loading) {
         return (
@@ -273,7 +258,7 @@ export default function VotingPage() {
     return (
         <div className="min-h-screen bg-gray-100 flex flex-col">
             {/* Header */}
-            <header className="bg-blue-900 shadow-sm flex-shrink-0">
+            <header className="bg-cyan-800 shadow-sm flex-shrink-0">
                 <div className="px-4 sm:px-6 py-2">
                     <div className="flex  flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div>
@@ -281,21 +266,14 @@ export default function VotingPage() {
                                 <span>Welcome, <strong>{studentName}</strong></span>
                                 <span>•</span>
                                 <span className="text-white">ID: {studentId}</span>
-                                {activeElection && (
-                                    <>
-                                        <span>•</span>
-                                        <span
-                                            className="text-rose-300 font-medium">{activeElection.name} ({activeElection.year})</span>
-                                    </>
-                                )}
                             </div>
                         </div>
-                        <button
-                            onClick={handleLogout}
-                            className="w-20  sm:w-auto px-3 py-1 bg-red-400 text-sm rounded-lg hover:bg-red-500 transition-all"
-                        >
-                            Logout
-                        </button>
+                        {activeElection && (
+                                    <>
+                                        <span
+                                            className="text-white font-medium">{activeElection.name} ({activeElection.year})</span>
+                                    </>
+                                )}
                     </div>
                 </div>
             </header>
@@ -313,56 +291,27 @@ export default function VotingPage() {
 
                     return (
                         <div className="w-full   max-w-6xl">
-                            {/* Position Indicator */}
-                            <div className="flex flex-wrap items-center justify-center gap-2 mb-2">
-                                {positions.map((_, idx) => (
-                                    <button
-                                        key={idx}
-                                        onClick={() => setCurrentPositionIndex(idx)}
-                                        className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full transition-all cursor-pointer ${
-                                            idx === currentPositionIndex
-                                                ? 'bg-blue-600 scale-125'
-                                                : idx < currentPositionIndex
-                                                    ? 'bg-green-500'
-                                                    : 'bg-gray-300'
-                                        }`}
-                                    />
-                                ))}
-                                {/* Submit Card Indicator */}
-                                <button
-                                    onClick={() => setCurrentPositionIndex(positions.length)}
-                                    className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full transition-all cursor-pointer ${
-                                        currentPositionIndex === positions.length
-                                            ? 'bg-green-600 scale-125'
-                                            : currentPositionIndex > positions.length
-                                                ? 'bg-green-500'
-                                                : 'bg-gray-300'
-                                    }`}
-                                />
-                            </div>
-
-                            {/* Position Card or Submit Card */}
+                                                      {/* Position Card or Submit Card */}
                             {isSubmitCard ? (
                                 // Submit Card
                                 <div className="flex flex-col lg:flex-row gap-6 max-w-[100%] max-h-[calc(100vh-50px)]">
                                     {/* Left Side - Submit Container (60%) */}
                                     <div className="w-full lg:w-3/5 p-6">
                                         <div className="text-center flex items-center justify-center flex-col">
-                                            <h4 className="text-gray-800 text-xl mb-4">Review your selections and submit when ready.</h4>
+                                            <p className="text-gray-800 text-base mb-4">Review your selections and submit when ready.</p>
 
                                             <div className="mb-4">
                                                 <div className=" flec inline-block bg-gray-100 rounded-full px-8 py-4">
-                                                    <span className="text-gray-800 text-5xl font-bold">{timeLeft}</span>
-                                                    <span className="text-gray-600 text-2xl ml-2">seconds</span>
+                                                    <span className="text-cyan-800 text-7xl font-bold">{timeLeft}</span>
                                                 </div>
                                             </div>
 
-                                            <p className="text-gray-600 text-base mb-6">Votes will be submitted automatically when time runs out</p>
+                                            <p className="text-gray-600 text-sm mb-6">Votes will be submitted automatically when time runs out</p>
 
                                             <button
                                                 onClick={handleSubmitVotes}
                                                 disabled={submitting}
-                                                className="w-full sm:w-auto px-12 py-4 bg-green-600 text-white text-xl font-bold rounded-lg hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all shadow-lg submit-button-glow gentle-attention"
+                                                className="w-full sm:w-auto px-12 py-4 bg-emerald-600 text-white text-xl font-bold rounded-lg hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all shadow-lg submit-button-glow gentle-attention"
                                             >
                                                 {submitting ? (
                                                     <>
@@ -401,7 +350,7 @@ export default function VotingPage() {
                                                     )}
                                                     <button
                                                         onClick={() => setCurrentPositionIndex(positionIndex)}
-                                                        className="px-3 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 transition"
+                                                        className="px-3 py-1 bg-cyan-700 text-white text-xs rounded-sm hover:bg-cyan-800 transition"
                                                     >
                                                         Change
                                                     </button>
@@ -433,10 +382,10 @@ export default function VotingPage() {
                                                         return (
                                                             <div
                                                                 key={candidate.id}
-                                                                className={`flex relative flex-col items-center p-4 sm:p-3 rounded-sm border-2 transition-all w-[165px] sm:w-[190px] h-[260px] sm:h-[290px] cursor-pointer ${
+                                                                className={`flex relative flex-col items-center p-4 sm:p-3 rounded-sm ring-1 ring-cyan-600 shadow-lg transition-all w-[165px] sm:w-[190px] h-[260px] sm:h-[290px] cursor-pointer ${
                                                                     isSelected
-                                                                        ? 'border-green-500 bg-green-50 ring-1 ring-green-200 shadow-md'
-                                                                        : 'border-cyan-600 hover:border-blue-300 hover:bg-blue-50 hover:shadow-md'
+                                                                        ? ' bg-emerald-50 ring-1 ring-emerald-500 shadow-md'
+                                                                        : 'border-cyan-600 hover:border-blue-300 hover:bg-cyan-100 hover:shadow-md'
                                                                 }`}
                                                                 onClick={() => position && handleSelectCandidate(position.id, candidate)}
                                                             >
@@ -467,10 +416,10 @@ export default function VotingPage() {
 
                                                                 {/* Vote Indicator */}
                                                                 <div
-                                                                    className={`w-full py-2 px-4 rounded-lg text-sm font-medium flex items-center justify-center gap-2 ${
+                                                                    className={`w-full py-2 px-4 rounded-sm text-sm font-medium flex items-center justify-center gap-2 ${
                                                                         isSelected
-                                                                            ? 'bg-green-600 text-white'
-                                                                            : 'bg-blue-600 text-white'
+                                                                            ? 'bg-emerald-600 text-white'
+                                                                            : 'bg-cyan-700 text-white'
                                                                     }`}>
                                                                     {isSelected ? (
                                                                         <>
