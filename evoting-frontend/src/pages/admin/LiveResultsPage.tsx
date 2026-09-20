@@ -1,5 +1,5 @@
 import {useMemo, type CSSProperties} from 'react';
-import {FiActivity, FiAlertCircle, FiClock, FiUsers, FiX} from 'react-icons/fi';
+import {FiAlertCircle, FiClock, FiUsers, FiX} from 'react-icons/fi';
 import {useLocation, useNavigate} from 'react-router-dom';
 import {useAuth} from '../../hooks/useAuth';
 import {useElections} from '../../queries/useElections';
@@ -110,11 +110,9 @@ export default function LiveResultsPage() {
 
     return (
         <main className="live-results-page">
-            <header className="live-results-header">
+            <header className="live-results-header bg-cyan-900">
                 <div className="live-results-heading">
-                    <div className="live-results-heading-icon" aria-hidden="true"><FiActivity /></div>
                     <div>
-                        <p className="live-results-eyebrow">Live Results</p>
                         <h1>{results?.election_name ?? election.name}</h1>
                     </div>
                 </div>

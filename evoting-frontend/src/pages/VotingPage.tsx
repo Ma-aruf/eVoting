@@ -1,11 +1,9 @@
 import {useCallback, useEffect, useMemo, useState} from 'react';
 import {useQueryClient} from '@tanstack/react-query';
 import {useNavigate} from 'react-router-dom';
-import {FiAlertCircle, FiCheck, FiCheckCircle, FiLoader, FiUserPlus} from 'react-icons/fi';
+import {FiAlertCircle, FiCheck, FiCheckCircle, FiLoader, FiThumbsUp, FiUserPlus} from 'react-icons/fi';
 import {clearVoterSession, getVoterSession, voterApi} from '../api/voterApi';
 import {type Candidate, useVotingData} from '../hooks/useVotingData';
-import ConfirmModal from '../components/ConfirmModal';
-import {useConfirmModal} from '../hooks/useConfirmModal';
 
 interface SelectedVote {
     position_id: number;
@@ -23,10 +21,8 @@ export default function VotingPage() {
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
     const [currentPositionIndex, setCurrentPositionIndex] = useState(0);
-    const [timeLeft, setTimeLeft] = useState(45);
-
-    // Confirm Modal
-    const confirmModal = useConfirmModal();
+    const [timeLeft, setTimeLeft] = useState(15);
+    const [isChangingVote, setIsChangingVote] = useState(false);
 
     // Get student info and election context from session
     const studentId = sessionStorage.getItem('student_id');
@@ -99,7 +95,14 @@ export default function VotingPage() {
             )
         );
         // Auto-advance to next position after voting
-        if (currentPositionIndex < positions.length - 1) {
+        if (isChangingVote) {
+            // If changing a vote, return to submit card after selection
+            setTimeout(() => {
+                setCurrentPositionIndex(positions.length);
+                setIsChangingVote(false);
+                setTimeLeft(15);
+            }, 300);
+        } else if (currentPositionIndex < positions.length - 1) {
             setTimeout(() => setCurrentPositionIndex(prev => prev + 1), 300);
         } else if (currentPositionIndex === positions.length - 1) {
             // Advance to submit card when last position is voted
@@ -260,7 +263,7 @@ export default function VotingPage() {
             {/* Header */}
             <header className="bg-cyan-800 shadow-sm flex-shrink-0">
                 <div className="px-4 sm:px-6 py-2">
-                    <div className="flex  flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div>
                             <div className="flex flex-wrap items-center gap-3 text-md text-white/80 mt-2">
                                 <span>Welcome, <strong>{studentName}</strong></span>
@@ -290,8 +293,8 @@ export default function VotingPage() {
                         : null;
 
                     return (
-                        <div className="w-full   max-w-6xl">
-                                                      {/* Position Card or Submit Card */}
+                        <div className="w-full max-w-6xl">
+                            {/* Position Card or Submit Card */}
                             {isSubmitCard ? (
                                 // Submit Card
                                 <div className="flex flex-col lg:flex-row gap-6 max-w-[100%] max-h-[calc(100vh-50px)]">
@@ -301,7 +304,7 @@ export default function VotingPage() {
                                             <p className="text-gray-800 text-base mb-4">Review your selections and submit when ready.</p>
 
                                             <div className="mb-4">
-                                                <div className=" flec inline-block bg-gray-100 rounded-full px-8 py-4">
+                                                <div className="inline-block bg-gray-100 rounded-full px-8 py-4">
                                                     <span className="text-cyan-800 text-7xl font-bold">{timeLeft}</span>
                                                 </div>
                                             </div>
@@ -349,7 +352,10 @@ export default function VotingPage() {
                                                         </div>
                                                     )}
                                                     <button
-                                                        onClick={() => setCurrentPositionIndex(positionIndex)}
+                                                        onClick={() => {
+                                                            setIsChangingVote(true);
+                                                            setCurrentPositionIndex(positionIndex);
+                                                        }}
                                                         className="px-3 py-1 bg-cyan-700 text-white text-xs rounded-sm hover:bg-cyan-800 transition"
                                                     >
                                                         Change
@@ -364,7 +370,7 @@ export default function VotingPage() {
                                 <div className="flex flex-col max-w-[100%] max-h-[calc(100vh-50px)]">
                                     {/* Position Header */}
                                     <div className="px-4 sm:px-6 py-1 my-4">
-                                        <div className="flex flex-colsm:flex-row sm:items-center sm:justify-center gap-3">
+                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-center gap-3">
                                             <div className="flex justify-center">
                                                 <h3 className="text-2xl  font-bold">{position?.name}</h3>
                                             </div>
@@ -382,10 +388,10 @@ export default function VotingPage() {
                                                         return (
                                                             <div
                                                                 key={candidate.id}
-                                                                className={`flex relative flex-col items-center p-4 sm:p-3 rounded-sm ring-1 ring-cyan-600 shadow-lg transition-all w-[165px] sm:w-[190px] h-[260px] sm:h-[290px] cursor-pointer ${
+                                                                className={`flex relative flex-col items-center p-4 sm:p-3 rounded-sm shadow-lg transition-all w-[165px] sm:w-[190px] h-[260px] sm:h-[290px] cursor-pointer ${
                                                                     isSelected
-                                                                        ? ' bg-emerald-50 ring-1 ring-emerald-500 shadow-md'
-                                                                        : 'border-cyan-600 hover:border-blue-300 hover:bg-cyan-100 hover:shadow-md'
+                                                                        ? 'bg-emerald-50 ring-1 ring-emerald-500 shadow-md'
+                                                                        : 'border border-cyan-600 hover:border-blue-300 hover:bg-cyan-100 hover:shadow-md'
                                                                 }`}
                                                                 onClick={() => position && handleSelectCandidate(position.id, candidate)}
                                                             >
@@ -405,8 +411,8 @@ export default function VotingPage() {
                                                                         </span>
                                                                     )}
                                                                 </div>
-                                                                <div className="flex absolute top-0 right-1 ">
-                                                                    <div className=" text-cyan-700 font-bold text-5xl">{candidate.ballot_number}</div>
+                                                                <div className="flex absolute top-0 right-1">
+                                                                    <div className="text-cyan-700 font-bold text-5xl">{candidate.ballot_number}</div>
                                                                 </div>
 
                                                                 {/* Candidate Name */}
@@ -416,10 +422,10 @@ export default function VotingPage() {
 
                                                                 {/* Vote Indicator */}
                                                                 <div
-                                                                    className={`w-full py-2 px-4 rounded-sm text-sm font-medium flex items-center justify-center gap-2 ${
+                                                                    className={`w-full py-2 px-4 rounded-sm text-sm font-medium flex items-center justify-center gap-2 transition-colors duration-200 ${
                                                                         isSelected
                                                                             ? 'bg-emerald-600 text-white'
-                                                                            : 'bg-cyan-700 text-white'
+                                                                            : 'bg-cyan-700 hover:bg-emerald-600 text-white'
                                                                     }`}>
                                                                     {isSelected ? (
                                                                         <>
@@ -427,7 +433,10 @@ export default function VotingPage() {
                                                                             Selected
                                                                         </>
                                                                     ) : (
-                                                                        'Vote'
+                                                                        <>
+                                                                            <FiThumbsUp className="w-4 h-4" aria-hidden="true" />
+                                                                            Vote
+                                                                        </>
                                                                     )}
                                                                 </div>
                                                             </div>
@@ -446,8 +455,6 @@ export default function VotingPage() {
                                 </div>
                             )}
 
-                            {/* Summary below card */}
-
                             {error && (
                                 <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
                                     <p className="text-sm text-red-700">{error}</p>
@@ -457,18 +464,6 @@ export default function VotingPage() {
                     );
                 })()}
             </div>
-
-            {/* Confirm Modal */}
-            <ConfirmModal
-                isOpen={confirmModal.isOpen}
-                onClose={confirmModal.handleClose}
-                onConfirm={confirmModal.handleConfirm}
-                title={confirmModal.options.title}
-                message={confirmModal.options.message}
-                confirmText={confirmModal.options.confirmText}
-                cancelText={confirmModal.options.cancelText}
-                type={confirmModal.options.type}
-            />
         </div>
     );
 }
