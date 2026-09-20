@@ -8,7 +8,7 @@ from django.db.models import ProtectedError
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from openpyxl import load_workbook
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, serializers
 from rest_framework.exceptions import ParseError
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import AllowAny
@@ -23,7 +23,7 @@ from .permissions import (
     IsAdminUser,
     IsElectionDataViewer,
     IsStaffOrSuperUser,
-    IsActivatorOrSuperUser,
+    CanActivateVoters,
     IsStaffOrSuperUserOrReadOnlyActivator,
     IsSuperUser,
 )
@@ -509,7 +509,6 @@ class ElectionManageView(APIView):
         Accepts JSON: { "election_id": 1, "is_active": true }
         Multiple elections can be active simultaneously.
         """
-        print("Inside post")
         election_id = request.data.get("election_id")
         is_active = request.data.get("is_active")
         
@@ -528,6 +527,8 @@ class ElectionManageView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        is_active = serializers.BooleanField().run_validation(is_active)
+
         try:
             election = get_scoped_election_or_404(request.user, election_id)
         except Election.DoesNotExist:
@@ -539,11 +540,11 @@ class ElectionManageView(APIView):
         with transaction.atomic():
             # Allow multiple elections to be active simultaneously
             # Students are scoped by election_id, so no vote mixing occurs
-            election.is_active = bool(is_active)
+            election.is_active = is_active
             election.save(update_fields=["is_active"])
             
             # Log election status change
-            action = "STARTED" if bool(is_active) else "STOPPED"
+            action = "STARTED" if is_active else "STOPPED"
             self.security_logger.info(
                 f"ELECTION_{action}: election_id={election_id}, election_name={election.name}, "
                 f"user={user.username if user else 'unknown'}, ip={client_ip}"
@@ -801,10 +802,10 @@ class MeView(APIView):
 
 class StudentActivationView(APIView):
     """
-    Toggle `is_active` on a Student. Only activator or superuser may call.
+    Toggle `is_active` on a Student within the staff/activator's election scope.
     Accepts JSON: { "student_id": "S12345", "election_id": 1, "is_active": true }
     """
-    permission_classes = [IsActivatorOrSuperUser]
+    permission_classes = [CanActivateVoters]
     
     security_logger = logging.getLogger('security')
     
@@ -868,7 +869,9 @@ class StudentActivationView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        if bool(is_active) and not election.is_active:
+        is_active = serializers.BooleanField().run_validation(is_active)
+
+        if is_active and not election.is_active:
             self.security_logger.warning(
                 f"ACTIVATION_DENIED_INACTIVE_ELECTION: student_id={student_id}, election_id={election_id}, "
                 f"user={user.username if user else 'unknown'}, ip={client_ip}"
@@ -900,7 +903,7 @@ class StudentActivationView(APIView):
 
         # Check current status for better message
         current_status = student.is_active
-        new_status = bool(is_active)
+        new_status = is_active
 
         if current_status == new_status:
             status_text = "active" if current_status else "inactive"

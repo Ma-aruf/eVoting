@@ -5,7 +5,7 @@ import TextInput from './ui/TextInput';
 import SelectField from './ui/SelectField';
 import Button from './ui/Button';
 
-interface Student { id: number; student_id: string; full_name: string; class_name: string; has_voted: boolean; is_active: boolean; election?: {id: number; name: string; year: number}; }
+import type {Student} from '../queries/useStudents';
 interface EditStudentModalProps { student: Student | null; onClose: () => void; onSave: (student: Student, fullName: string, className: string) => void; loading?: boolean; }
 const CLASS_OPTIONS = ['Form 1', 'Form 2', 'Form 3'];
 

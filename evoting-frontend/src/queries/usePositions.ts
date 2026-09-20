@@ -28,7 +28,6 @@ export const usePositions = (electionId: number | null) => {
     },
     enabled: !!electionId,
     staleTime: 30 * 1000, // 30 seconds
-    placeholderData: (previousData) => previousData,
   });
 };
 

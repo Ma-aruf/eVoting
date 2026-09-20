@@ -4,19 +4,7 @@ import {FiEdit2, FiTrash2} from 'react-icons/fi';
 
 import IconButton from './ui/IconButton';
 
-interface Student {
-    id: number;
-    student_id: string;
-    full_name: string;
-    class_name: string;
-    has_voted: boolean;
-    is_active: boolean;
-    election?: {
-        id: number;
-        name: string;
-        year: number;
-    };
-}
+import type {Student} from '../queries/useStudents';
 
 interface StudentRowProps {
     student: Student;

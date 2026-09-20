@@ -48,6 +48,10 @@ class IsActivatorOrSuperUser(HasRole):
     allowed_roles = ["activator", "superuser"]
 
 
+class CanActivateVoters(HasRole):
+    allowed_roles = ["staff", "activator", "superuser"]
+
+
 class IsStaffOrSuperUserOrReadOnlyActivator(BasePermission):
     def has_permission(self, request, view):
         user = request.user

@@ -5,7 +5,7 @@ import {useQueryClient} from '@tanstack/react-query';
 import {useElections} from '../../queries/useElections';
 import {useAuth} from '../../hooks/useAuth';
 import {type Position, usePositions} from '../../queries/usePositions';
-import {type Student, useStudents} from '../../queries/useStudents';
+import {type Student, getStudentElectionId, useStudents} from '../../queries/useStudents';
 import {
     type Candidate,
     useCandidates,
@@ -129,7 +129,7 @@ function CandidateForm({
                 label="Election"
             >
                 {scopedRole ? (
-                    <TextInput value={electionId ? String(electionId) : 'Assigned election unavailable'} readOnly aria-readonly="true" />
+                    <TextInput value={elections.find(election => election.id === electionId)?.name ?? 'Assigned election unavailable'} readOnly aria-readonly="true" />
                 ) : (
                     <SelectField
                         value={electionId ?? ''}
@@ -287,7 +287,9 @@ export default function CandidatesPage() {
         ? user?.assignedElection?.id ?? null
         : selectedElectionId;
     const positionsQuery = usePositions(effectiveElectionId);
-    const editPositionsQuery = usePositions(editElectionId);
+    const effectiveEditElectionId = isScopedRole ? user?.assignedElection?.id ?? null : editElectionId;
+    const editPositionsQuery = usePositions(editingCandidate ? effectiveEditElectionId : null);
+    const editStudentsQuery = useStudents(editingCandidate ? effectiveEditElectionId : null);
     const studentsQuery = useStudents(effectiveElectionId);
     const candidatesQuery = useCandidates(selectedPositionId, effectiveElectionId);
 
@@ -316,6 +318,8 @@ export default function CandidatesPage() {
         () => studentsQuery.data ?? [],
         [studentsQuery.data]
     );
+
+    const editStudents = editStudentsQuery.data ?? [];
 
     const candidates = useMemo(
         () => candidatesQuery.data ?? [],
@@ -497,6 +501,12 @@ export default function CandidatesPage() {
             return;
         }
 
+        if (!students.some(student => student.id === studentId && getStudentElectionId(student) === effectiveElectionId) ||
+            !positions.some(position => position.id === selectedPositionId && position.election === effectiveElectionId)) {
+            showError('Select a voter and position from the selected election.');
+            return;
+        }
+
         createMutation.mutate(
             {
                 student: studentId,
@@ -555,8 +565,14 @@ export default function CandidatesPage() {
             !editingCandidate ||
             !editStudentId ||
             !editPositionId ||
-            !editElectionId
+            !effectiveEditElectionId
         ) {
+            return;
+        }
+
+        if (!editStudents.some(student => student.id === editStudentId && getStudentElectionId(student) === effectiveEditElectionId) ||
+            !editPositions.some(position => position.id === editPositionId && position.election === effectiveEditElectionId)) {
+            showError('Select a voter and position from the selected election.');
             return;
         }
 
@@ -586,7 +602,7 @@ export default function CandidatesPage() {
                 id: editingCandidate.id,
                 student: editStudentId,
                 position: editPositionId,
-                election_id: editElectionId,
+                election_id: effectiveEditElectionId,
                 photo_url: editPhotoUrl.trim() || '',
                 ballot_number: editingCandidate.ballot_number,
             },
@@ -799,6 +815,7 @@ export default function CandidatesPage() {
                     mode="create"
                     locked={votingStarted}
                     electionId={effectiveElectionId}
+                    elections={elections}
                     positionId={selectedPositionId}
                     positions={positions}
                     students={students}
@@ -1025,16 +1042,18 @@ export default function CandidatesPage() {
                     <CandidateForm
                         mode="edit"
                         locked={votingStarted}
-                        electionId={editElectionId}
+                        electionId={effectiveEditElectionId}
                         positionId={editPositionId}
                         positions={editPositions}
                         elections={elections}
                         scopedRole={isScopedRole}
                         editableContext
-                        students={students}
+                        students={editStudents}
                         onElectionChange={id => {
                             setEditElectionId(id);
                             setEditPositionId(null);
+                            setEditStudentId(null);
+                            setEditStudentQuery('');
                         }}
                         onPositionChange={setEditPositionId}
                         studentId={editStudentId}

@@ -1,7 +1,8 @@
-import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import {useMutation, useQueryClient} from '@tanstack/react-query';
 import api from '../apiConfig';
 import {queryKeys} from './queryKeys';
 import {showError, showSuccess} from '../utils/toast';
+import {useElections} from './useElections';
 
 export interface Election {
     id: number;
@@ -13,15 +14,7 @@ export interface Election {
 }
 
 export const useManageElections = () => {
-    return useQuery({
-        queryKey: queryKeys.elections,
-        queryFn: async (): Promise<Election[]> => {
-            const res = await api.get('api/elections/manage/');
-            const data = res.data;
-            return Array.isArray(data) ? data : (data.results || []);
-        },
-        staleTime: 30 * 1000, // 30 seconds
-    });
+    return useElections();
 };
 
 export const useToggleElection = () => {

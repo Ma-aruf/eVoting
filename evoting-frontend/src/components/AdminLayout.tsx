@@ -23,10 +23,10 @@ const navItems: NavigationItem[] = [
     {to: '/admin/dashboard', label: 'Dashboard', icon: FiGrid, roles: ['superuser', 'staff']},
     {to: '/admin/students', label: 'Voters', icon: FiUsers, roles: ['superuser', 'staff']},
     {to: '/admin/elections', label: 'Elections', icon: FiCalendar, roles: ['superuser']},
-    {to: '/admin/manage-elections', label: 'Manage Elections', icon: FiPlayCircle, roles: ['superuser']},
-    {to: '/admin/positions', label: 'Positions', icon: FiList, roles: ['superuser']},
+    {to: '/admin/manage-elections', label: 'Manage Elections', icon: FiPlayCircle, roles: ['superuser', 'staff']},
+    {to: '/admin/positions', label: 'Positions', icon: FiList, roles: ['superuser', 'staff']},
     {to: '/admin/candidates', label: 'Candidates', icon: FiUser, roles: ['superuser', 'staff']},
-    {to: '/admin/activations', label: 'Activate Voters', icon: FiCheckCircle, roles: ['activator', 'superuser']},
+    {to: '/admin/activations', label: 'Activate Voters', icon: FiCheckCircle, roles: ['activator', 'superuser', 'staff']},
     {to: '/admin/results', label: 'Election Results', icon: FiBarChart2, roles: ['superuser', 'staff']},
     {to: '/admin/users', label: 'Manage Users', icon: FiUsers, roles: ['superuser']},
 ];

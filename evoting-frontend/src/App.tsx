@@ -102,7 +102,7 @@ function App() {
                             <Route
                                 path="manage-elections"
                                 element={
-                                    <ProtectedRoute allowedRoles={['superuser']}>
+                                    <ProtectedRoute allowedRoles={['superuser', 'staff']}>
                                         <ManageElectionsPage/>
                                     </ProtectedRoute>
                                 }
@@ -110,7 +110,7 @@ function App() {
                             <Route
                                 path="positions"
                                 element={
-                                    <ProtectedRoute allowedRoles={['superuser']}>
+                                    <ProtectedRoute allowedRoles={['superuser', 'staff']}>
                                         <PositionsPage/>
                                     </ProtectedRoute>
                                 }
@@ -126,7 +126,7 @@ function App() {
                             <Route
                                 path="activations"
                                 element={
-                                    <ProtectedRoute allowedRoles={['activator', 'superuser']}>
+                                    <ProtectedRoute allowedRoles={['activator', 'superuser', 'staff']}>
                                         <ActivationsPage/>
                                     </ProtectedRoute>
                                 }

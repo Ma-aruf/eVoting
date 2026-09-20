@@ -17,6 +17,7 @@ import SelectField from '../../components/ui/SelectField';
 import TextInput from '../../components/ui/TextInput';
 
 import {useConfirmModal} from '../../hooks/useConfirmModal';
+import {useAuth} from '../../hooks/useAuth';
 import {type Election, useElections} from '../../queries/useElections';
 import {
     type Position,
@@ -41,8 +42,11 @@ function mutationMessage(error: unknown, fallback: string) {
 }
 
 export default function PositionsPage() {
-    const [selectedElectionId, setSelectedElectionId] =
+    const {user} = useAuth();
+    const isScopedRole = user?.role !== 'superuser';
+    const [chosenElectionId, setSelectedElectionId] =
         useState<number | null>(null);
+    const selectedElectionId = isScopedRole ? user?.assignedElection?.id ?? null : chosenElectionId;
 
     const [showCreateForm, setShowCreateForm] = useState(false);
     const [positionName, setPositionName] = useState('');
@@ -76,7 +80,7 @@ export default function PositionsPage() {
     // Select an election automatically
 
     useEffect(() => {
-        if (electionList.length === 0 || selectedElectionId !== null) {
+        if (isScopedRole || electionList.length === 0 || selectedElectionId !== null) {
             return;
         }
 
@@ -89,7 +93,7 @@ export default function PositionsPage() {
         );
 
         return () => cancelAnimationFrame(frame);
-    }, [electionList, selectedElectionId]);
+    }, [electionList, isScopedRole, selectedElectionId]);
 
     // Create position
 
@@ -260,7 +264,9 @@ export default function PositionsPage() {
                     id="position-election"
                     label="Election"
                 >
-                    <SelectField
+                    {isScopedRole ? (
+                        <TextInput value={user?.assignedElection ? `${user.assignedElection.name} (${user.assignedElection.year})` : 'Assigned election unavailable'} readOnly />
+                    ) : <SelectField
                         value={selectedElectionId ?? ''}
                         onChange={event =>
                             setSelectedElectionId(
@@ -282,7 +288,7 @@ export default function PositionsPage() {
                                 {election.name} ({election.year})
                             </option>
                         ))}
-                    </SelectField>
+                    </SelectField>}
                 </FormField>
 
                 <FormField

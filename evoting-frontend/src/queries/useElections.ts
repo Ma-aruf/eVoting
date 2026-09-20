@@ -15,11 +15,15 @@ export interface Election {
 export const useElections = () => {
   const {user} = useAuth();
   return useQuery({
-    queryKey: [...queryKeys.elections, user?.username ?? null],
+    queryKey: [...queryKeys.elections, user?.username ?? null, user?.role, user?.assignedElection?.id ?? null],
     queryFn: async (): Promise<Election[]> => {
       const res = await api.get('api/elections/');
-      return Array.isArray(res.data) ? res.data : (res.data.results || []);
+      const elections: Election[] = Array.isArray(res.data) ? res.data : (res.data.results || []);
+      return user?.role === 'superuser'
+        ? elections
+        : elections.filter(election => election.id === user?.assignedElection?.id);
     },
+    enabled: !!user,
     staleTime: 2 * 60 * 1000, // 2 minutes
   });
 };

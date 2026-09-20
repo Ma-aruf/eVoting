@@ -93,7 +93,7 @@ export default function ActivationsPage() {
     );
 
     const activeElection = elections.find(
-        election => election.is_active
+        election => election.id === effectiveElectionId && election.is_active
     );
 
     const availableStudents = useMemo(
@@ -200,7 +200,7 @@ export default function ActivationsPage() {
     const handleActivate = (event: FormEvent) => {
         event.preventDefault();
 
-        if (!effectiveElectionId || !selectedStudentId) {
+        if (!effectiveElectionId || !activeElection || !selectedStudent || selectedStudent.is_active || selectedStudent.has_voted) {
             return;
         }
 
@@ -304,7 +304,12 @@ export default function ActivationsPage() {
                             ) : (
                                 <SelectField
                                     value={effectiveElectionId ?? ''}
-                                    onChange={event => setSelectedElectionId(event.target.value ? Number(event.target.value) : null)}
+                                    onChange={event => {
+                                        setSelectedElectionId(event.target.value ? Number(event.target.value) : null);
+                                        setSelectedStudentId('');
+                                        setStudentQuery('');
+                                        setIsOpen(false);
+                                    }}
                                 >
                                     {activeElections.map(election => (
                                         <option key={election.id} value={election.id}>

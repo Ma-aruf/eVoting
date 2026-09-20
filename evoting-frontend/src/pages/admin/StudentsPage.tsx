@@ -33,6 +33,7 @@ import {useElections} from '../../queries/useElections';
 import {useAuth} from '../../hooks/useAuth';
 import {
     type Student,
+    getStudentElectionId,
     useBulkUploadStudents,
     useCreateStudent,
     useDeleteStudent,
@@ -409,6 +410,7 @@ export default function StudentsPage() {
                     <Button
                         leadingIcon={<FiPlus aria-hidden="true"/>}
                         onClick={() => setShowAdd(true)}
+                        disabled={!effectiveElectionId}
                     >
                         Add voter
                     </Button>
@@ -418,6 +420,7 @@ export default function StudentsPage() {
                         className="voter-import-button"
                         leadingIcon={<FiUploadCloud aria-hidden="true"/>}
                         onClick={() => setShowImport(true)}
+                        disabled={!effectiveElectionId}
                     >
                         Import voters
                     </Button>
@@ -884,7 +887,7 @@ export default function StudentsPage() {
                             id: student.id,
                             full_name: name,
                             class_name: classValue,
-                            election_id: student.election?.id ?? effectiveElectionId!,
+                            election_id: getStudentElectionId(student) ?? effectiveElectionId!,
                         },
                         {
                             onSuccess: () => setEditing(null),

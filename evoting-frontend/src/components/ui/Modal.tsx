@@ -3,6 +3,7 @@ import {
     type ReactNode,
     type RefObject,
     useEffect,
+    useEffectEvent,
     useId,
     useRef,
 } from 'react';
@@ -36,6 +37,7 @@ export default function Modal({
 
     const dialogRef = useRef<HTMLDivElement>(null);
     const restoreRef = useRef<HTMLElement | null>(null);
+    const closeFromKeyboard = useEffectEvent(onClose);
 
     useEffect(() => {
         if (!open) return;
@@ -60,7 +62,7 @@ export default function Modal({
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
                 event.preventDefault();
-                onClose();
+                closeFromKeyboard();
                 return;
             }
 
@@ -97,7 +99,7 @@ export default function Modal({
 
             requestAnimationFrame(() => restoreRef.current?.focus());
         };
-    }, [initialFocusRef, onClose, open]);
+    }, [initialFocusRef, open]);
 
     if (!open) return null;
 

@@ -10,12 +10,15 @@ export interface Student {
     class_name: string;
     has_voted: boolean;
     is_active: boolean;
-    election?: {
+    election?: number | {
         id: number;
         name: string;
         year: number;
     };
 }
+
+export const getStudentElectionId = (student: Student) =>
+    typeof student.election === 'number' ? student.election : student.election?.id;
 
 export const useStudents = (electionId: number | null) => {
     return useQuery({
@@ -34,7 +37,6 @@ export const useStudents = (electionId: number | null) => {
         },
         enabled: !!electionId,
         staleTime: 30 * 1000, // 30 seconds
-        placeholderData: (previousData) => previousData,
     });
 };
 
@@ -73,7 +75,10 @@ export const useUpdateStudent = () => {
             class_name: string;
             election_id: number;
         }) => {
-            const res = await api.patch(`api/students/${id}/`, data);
+            const res = await api.patch(`api/students/${id}/`, {
+                full_name: data.full_name,
+                class_name: data.class_name,
+            });
             return res.data;
         },
         onMutate: async (variables) => {
@@ -126,7 +131,7 @@ export const useDeleteStudent = () => {
         },
         onSuccess: (_data, student) => {
             showSuccess('Voter deleted successfully.');
-            queryClient.invalidateQueries({queryKey: queryKeys.students(student.election?.id ?? null)});
+            queryClient.invalidateQueries({queryKey: queryKeys.students(getStudentElectionId(student) ?? null)});
         },
         onError: (err: any) => {
             if (err.message === 'Cannot delete a student who has already voted.') {

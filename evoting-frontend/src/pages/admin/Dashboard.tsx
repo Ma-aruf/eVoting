@@ -6,6 +6,7 @@ import LoadingSkeleton from '../../components/ui/LoadingSkeleton';
 import StatisticCard from '../../components/StatisticCard';
 import {useDashboardStatsForElections} from '../../queries/useDashboard.ts';
 import {useElections} from '../../queries/useElections';
+import {useAuth} from '../../hooks/useAuth';
 
 function formatDateTime(value: string | undefined) {
     if (!value) return 'Not set';
@@ -21,21 +22,21 @@ function formatDateTime(value: string | undefined) {
 
 
 export default function Dashboard() {
-
+    const {user} = useAuth();
     const electionsQuery = useElections();
     const elections = electionsQuery.data ?? [];
 
-    const activeElections = elections.filter(election => election.is_active);
-    const activeElectionIds = activeElections.map(election => election.id);
+    const visibleElections = user?.role === 'staff' ? elections : elections.filter(election => election.is_active);
+    const visibleElectionIds = visibleElections.map(election => election.id);
 
-    const statsQueries = useDashboardStatsForElections(activeElectionIds);
-    const stats = activeElections.length
-        ? statsQueries.statsByElectionId.get(activeElections[0].id)
+    const statsQueries = useDashboardStatsForElections(visibleElectionIds);
+    const stats = visibleElections.length
+        ? statsQueries.statsByElectionId.get(visibleElections[0].id)
         : undefined;
 
     const initialLoading =
         electionsQuery.isLoading ||
-        (activeElections.length > 0 && statsQueries.isLoading);
+        (visibleElections.length > 0 && statsQueries.isLoading);
 
     const queryError = electionsQuery.isError;
 
@@ -154,21 +155,22 @@ export default function Dashboard() {
                     >
                         <div className="dashboard-section-heading">
                             <div>
-                                <p className="dashboard-kicker">Active elections</p>
+                                <p className="dashboard-kicker">{user?.role === 'staff' ? 'Assigned election' : 'Active elections'}</p>
                             </div>
                         </div>
 
-                        {activeElections.length ? (
+                        {visibleElections.length ? (
                             <div className="active-election-list">
-                                {activeElections.map(election => {
+                                {visibleElections.map(election => {
                                     const electionStats = statsQueries.statsByElectionId.get(election.id);
-                                    const electionStatsQuery = statsQueries.queries[activeElectionIds.indexOf(election.id)];
+                                    const electionStatsQuery = statsQueries.queries[visibleElectionIds.indexOf(election.id)];
                                     return <article className="active-election-card" key={election.id}>
                                         <div className="active-election-header">
                                                 <FiCalendar className="active-election-icon" aria-hidden="true"/>
                                                 <div>
                                                     <h3>{election.name}</h3>
                                                     <p>Election year {election.year}</p>
+                                                    <p>{election.is_active ? 'Active' : 'Inactive'}</p>
                                                 </div>
                                             </div>
                                             {electionStatsQuery?.isError ?
@@ -208,8 +210,8 @@ export default function Dashboard() {
                             </div>
                         ) : (
                             <EmptyState
-                                title="No active elections"
-                                message="Activate an election to see voter activity and election statistics here."
+                                title={user?.role === 'staff' ? 'Assigned election unavailable' : 'No active elections'}
+                                message={user?.role === 'staff' ? 'Your assigned election could not be found.' : 'Activate an election to see voter activity and election statistics here.'}
                                 icon={<FiCalendar/>}
                             />
                         )}
