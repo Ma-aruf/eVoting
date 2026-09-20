@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import {useCallback, useEffect, useMemo, useState} from 'react';
 import {useQueryClient} from '@tanstack/react-query';
 import {useNavigate} from 'react-router-dom';
 import {FiAlertCircle, FiCheck, FiCheckCircle, FiLoader, FiUserPlus} from 'react-icons/fi';
@@ -23,6 +23,7 @@ export default function VotingPage() {
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
     const [currentPositionIndex, setCurrentPositionIndex] = useState(0);
+    const [timeLeft, setTimeLeft] = useState(45);
 
     // Confirm Modal
     const confirmModal = useConfirmModal();
@@ -47,8 +48,11 @@ export default function VotingPage() {
 
     // Extract data from React Query result
     const activeElection = votingData?.election ?? null;
-    const positions = votingData?.positions ?? [];
-    const candidatesByPosition = votingData?.candidatesByPosition ?? {};
+    const positions = useMemo(() => votingData?.positions ?? [], [votingData?.positions]);
+    const candidatesByPosition = useMemo(
+        () => votingData?.candidatesByPosition ?? {},
+        [votingData?.candidatesByPosition]
+    );
 
     // Initialize selected votes when positions are loaded
     useEffect(() => {
@@ -97,10 +101,16 @@ export default function VotingPage() {
         // Auto-advance to next position after voting
         if (currentPositionIndex < positions.length - 1) {
             setTimeout(() => setCurrentPositionIndex(prev => prev + 1), 300);
+        } else if (currentPositionIndex === positions.length - 1) {
+            // Advance to submit card when last position is voted
+            setTimeout(() => {
+                setCurrentPositionIndex(prev => prev + 1);
+                setTimeLeft(45);
+            }, 300);
         }
     };
 
-    const handleSubmitVotes = async () => {
+    const handleSubmitVotes = useCallback(async () => {
         if (!studentId || !voterToken || !electionId) {
             navigate('/');
             return;
@@ -174,7 +184,25 @@ export default function VotingPage() {
         } finally {
             setSubmitting(false);
         }
-    };
+    }, [activeElection?.id, electionId, navigate, positions.length, queryClient, selectedVotes, studentId, voterToken]);
+
+    // Keep the existing timed auto-submit behavior for the final review card.
+    useEffect(() => {
+        if (currentPositionIndex === positions.length && timeLeft > 0 && !submitting) {
+            const timer = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
+            return () => clearInterval(timer);
+        }
+
+        if (currentPositionIndex === positions.length && timeLeft === 0 && !submitting) {
+            void handleSubmitVotes();
+        }
+    }, [currentPositionIndex, handleSubmitVotes, positions.length, submitting, timeLeft]);
+
+    useEffect(() => {
+        if (currentPositionIndex === positions.length) {
+            setTimeLeft(15);
+        }
+    }, [currentPositionIndex, positions.length]);
 
     const handleLogout = async () => {
         const confirmed = await confirmModal.confirm({
@@ -242,8 +270,6 @@ export default function VotingPage() {
         );
     }
 
-    const selectedCount = selectedVotes.filter(v => v.candidate_id !== null).length;
-
     return (
         <div className="min-h-screen bg-gray-100 flex flex-col">
             {/* Header */}
@@ -251,7 +277,6 @@ export default function VotingPage() {
                 <div className="px-4 sm:px-6 py-2">
                     <div className="flex  flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div>
-                            <h1 className=" text-xl md:text-3xl font-bold text-amber-400">Voter Voting Portal</h1>
                             <div className="flex flex-wrap items-center gap-3 text-md text-white/80 mt-2">
                                 <span>Welcome, <strong>{studentName}</strong></span>
                                 <span>•</span>
@@ -279,10 +304,12 @@ export default function VotingPage() {
             {/* Main Content - Centered Single Position */}
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col items-center">
                 {positions.length > 0 && (() => {
-                    const position = positions[currentPositionIndex];
-                    const candidates = candidatesByPosition[position.id] || [];
-                    const selectedVote = selectedVotes.find(v => v.position_id === position.id);
-                    const isLastPosition = currentPositionIndex === positions.length - 1;
+                    const isSubmitCard = currentPositionIndex === positions.length;
+                    const position = isSubmitCard ? null : positions[currentPositionIndex];
+                    const candidates = position ? (candidatesByPosition[position.id] || []) : [];
+                    const selectedVote = position
+                        ? selectedVotes.find(v => v.position_id === position.id)
+                        : null;
 
                     return (
                         <div className="w-full   max-w-6xl">
@@ -301,134 +328,174 @@ export default function VotingPage() {
                                         }`}
                                     />
                                 ))}
+                                {/* Submit Card Indicator */}
+                                <button
+                                    onClick={() => setCurrentPositionIndex(positions.length)}
+                                    className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full transition-all cursor-pointer ${
+                                        currentPositionIndex === positions.length
+                                            ? 'bg-green-600 scale-125'
+                                            : currentPositionIndex > positions.length
+                                                ? 'bg-green-500'
+                                                : 'bg-gray-300'
+                                    }`}
+                                />
                             </div>
 
-                            {/* Position Card */}
-                            <div
-                                className=" rounded border border-gray-200 flex flex-col max-w-[100%] max-h-[calc(100vh-50px)]">
-                                {/* Position Header */}
-                                <div
-                                    className="px-4 sm:px-6 py-2  bg-blue-300 rounded-t">
-                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                                        <div className="flex justify-center">
-                                            <h3 className="text-2xl  font-bold text-black/70">{position.name}</h3>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            {selectedVote?.candidate_id && (
-                                                <span
-                                                    className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
-                                                    <FiCheck className="w-4 h-4 mr-1" aria-hidden="true" />
-                                                    Voted
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
+                            {/* Position Card or Submit Card */}
+                            {isSubmitCard ? (
+                                // Submit Card
+                                <div className="flex flex-col lg:flex-row gap-6 max-w-[100%] max-h-[calc(100vh-50px)]">
+                                    {/* Left Side - Submit Container (60%) */}
+                                    <div className="w-full lg:w-3/5 p-6">
+                                        <div className="text-center flex items-center justify-center flex-col">
+                                            <h4 className="text-gray-800 text-xl mb-4">Review your selections and submit when ready.</h4>
 
-                                {/* Candidates - Centered with fit width */}
-                                <div className="p-3 sm:p-1 flex-1 overflow-y-auto">
-                                    {candidates.length > 0 ? (
-                                        <div className="flex  justify-center">
-                                            <div className="inline-flex h-75  flex-wrap justify-center gap-4">
-                                                {candidates.map((candidate) => {
-                                                    const isSelected = selectedVote?.candidate_id === candidate.id;
-
-                                                    return (
-                                                        <div
-                                                            key={candidate.id}
-                                                            className={`flex relative flex-col items-center p-4 sm:p-3 rounded-xl border-2 transition-all w-[155px] sm:w-[190px] h-[260px] sm:h-[290px] cursor-pointer ${
-                                                                isSelected
-                                                                    ? 'border-green-500 bg-green-50 ring-1 ring-green-200 shadow-md'
-                                                                    : 'border-blue-200 hover:border-blue-300 hover:bg-blue-50 hover:shadow-md'
-                                                            }`}
-                                                            onClick={() => handleSelectCandidate(position.id, candidate)}
-                                                        >
-
-                                                            {/* Candidate Photo */}
-                                                            <div
-                                                                className="w-28 h-28 md:w-35 md:h-35 mt-5 rounded-full overflow-hidden bg-gray-100 mb-3 flex items-center justify-center border-2 border-white shadow relative">
-                                                                {candidate.photo_url ? (
-                                                                    <img
-                                                                        src={candidate.photo_url}
-                                                                        alt={candidate.student_name}
-                                                                        className="w-full h-full object-cover"
-                                                                    />
-                                                                ) : (
-                                                                    <span className="text-3xl font-bold text-gray-400">
-                                                                        {candidate.student_name.charAt(0)}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            <div className="flex absolute top-0 right-1 ">
-                                                                <div className=" text-cyan-700 font-bold text-5xl">{candidate.ballot_number}</div>
-                                                            </div>
-
-                                                            {/* Candidate Name */}
-                                                            <h4 className="text-sm font-semibold text-gray-800 text-center mb-3 line-clamp-2 h-10">
-                                                                {candidate.student_name}
-                                                            </h4>
-
-                                                            {/* Vote Indicator */}
-                                                            <div
-                                                                className={`w-full py-2 px-4 rounded-lg text-sm font-medium flex items-center justify-center gap-2 ${
-                                                                    isSelected
-                                                                        ? 'bg-green-600 text-white'
-                                                                        : 'bg-blue-600 text-white'
-                                                                }`}>
-                                                                {isSelected ? (
-                                                                    <>
-                                                                        <FiCheck className="w-4 h-4" aria-hidden="true" />
-                                                                        Selected
-                                                                    </>
-                                                                ) : (
-                                                                    'Vote'
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
+                                            <div className="mb-4">
+                                                <div className=" flec inline-block bg-gray-100 rounded-full px-8 py-4">
+                                                    <span className="text-gray-800 text-5xl font-bold">{timeLeft}</span>
+                                                    <span className="text-gray-600 text-2xl ml-2">seconds</span>
+                                                </div>
                                             </div>
-                                        </div>
-                                    ) : (
-                                        <div className="text-center py-8 text-gray-500">
-                                            <FiUserPlus className="mx-auto h-12 w-12 text-gray-400" aria-hidden="true" />
-                                            <p className="mt-2">No candidates for this position</p>
-                                        </div>
-                                    )}
 
-                                </div>
+                                            <p className="text-gray-600 text-base mb-6">Votes will be submitted automatically when time runs out</p>
 
-                                {/* Navigation Footer */}
-                                <div className="px-4 sm:px-6 py-4 bg-gray-50 border-t rounded-b-xl">
-                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                                        <div className="text-sm text-gray-500">
-                                            {selectedCount} of {positions.length} completed
-                                        </div>
-
-                                        {isLastPosition ? (
                                             <button
                                                 onClick={handleSubmitVotes}
-                                                disabled={submitting || selectedCount !== positions.length}
-                                                className="w-full sm:w-auto gentle-attention  px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg disabled:opacity-60 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
+                                                disabled={submitting}
+                                                className="w-full sm:w-auto px-12 py-4 bg-green-600 text-white text-xl font-bold rounded-lg hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all shadow-lg submit-button-glow gentle-attention"
                                             >
                                                 {submitting ? (
                                                     <>
-                                                        <FiLoader className="animate-spin h-4 w-4 text-white" aria-hidden="true" />
+                                                        <FiLoader className="animate-spin h-6 w-6 inline mr-2" aria-hidden="true" />
                                                         Submitting...
                                                     </>
                                                 ) : (
                                                     <>
-                                                        <FiCheckCircle className="w-4 h-4" aria-hidden="true" />
-                                                        Submit Votes
+                                                        <FiCheckCircle className="w-6 h-6 inline mr-2" aria-hidden="true" />
+                                                        Submit Now
                                                     </>
                                                 )}
                                             </button>
-                                        ) : (
-                                            <p></p>
-                                        )}
+                                        </div>
+                                    </div>
+
+                                    {/* Right Side - Vote Summary (40%) */}
+                                    <div className="w-full lg:w-2/5 flex flex-wrap justify-center gap-3 overflow-y-auto p-4 bg-gray-50 rounded-xl">
+                                        {selectedVotes.map((vote) => {
+                                            const positionIndex = positions.findIndex(p => p.id === vote.position_id);
+                                            return (
+                                                <div key={vote.position_id} className="flex flex-col items-center">
+                                                    <h4 className="font-bold text-gray-800 text-center mb-2 text-xs">{vote.position_name}</h4>
+                                                    {vote.candidate_photo ? (
+                                                        <img
+                                                            src={vote.candidate_photo}
+                                                            alt={vote.candidate_name}
+                                                            className="w-23 h-23 rounded-full object-cover mb-2 border-2 border-green-500"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-14 h-14 rounded-full bg-gray-200 flex items-center justify-center mb-2 border-2 border-green-500">
+                                                            <span className="text-lg font-bold text-gray-500">
+                                                                {vote.candidate_name.charAt(0)}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                    <button
+                                                        onClick={() => setCurrentPositionIndex(positionIndex)}
+                                                        className="px-3 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 transition"
+                                                    >
+                                                        Change
+                                                    </button>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
-                            </div>
+                            ) : (
+                                // Position Card
+                                <div className="flex flex-col max-w-[100%] max-h-[calc(100vh-50px)]">
+                                    {/* Position Header */}
+                                    <div className="px-4 sm:px-6 py-1 my-4">
+                                        <div className="flex flex-colsm:flex-row sm:items-center sm:justify-center gap-3">
+                                            <div className="flex justify-center">
+                                                <h3 className="text-2xl  font-bold">{position?.name}</h3>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Candidates - Centered with fit width */}
+                                    <div className="p-3 sm:p-1 flex-1 overflow-y-auto">
+                                        {candidates.length > 0 ? (
+                                            <div className="flex  justify-center">
+                                                <div className="inline-flex h-75  flex-wrap justify-center gap-4">
+                                                    {candidates.map((candidate) => {
+                                                        const isSelected = selectedVote?.candidate_id === candidate.id;
+
+                                                        return (
+                                                            <div
+                                                                key={candidate.id}
+                                                                className={`flex relative flex-col items-center p-4 sm:p-3 rounded-sm border-2 transition-all w-[165px] sm:w-[190px] h-[260px] sm:h-[290px] cursor-pointer ${
+                                                                    isSelected
+                                                                        ? 'border-green-500 bg-green-50 ring-1 ring-green-200 shadow-md'
+                                                                        : 'border-cyan-600 hover:border-blue-300 hover:bg-blue-50 hover:shadow-md'
+                                                                }`}
+                                                                onClick={() => position && handleSelectCandidate(position.id, candidate)}
+                                                            >
+
+                                                                {/* Candidate Photo */}
+                                                                <div
+                                                                    className="w-28 h-28 md:w-35 md:h-35 mt-5 rounded-full overflow-hidden bg-gray-100 mb-3 flex items-center justify-center border-2 border-white shadow relative">
+                                                                    {candidate.photo_url ? (
+                                                                        <img
+                                                                            src={candidate.photo_url}
+                                                                            alt={candidate.student_name}
+                                                                            className="w-full h-full object-cover"
+                                                                        />
+                                                                    ) : (
+                                                                        <span className="text-3xl font-bold text-gray-400">
+                                                                            {candidate.student_name.charAt(0)}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex absolute top-0 right-1 ">
+                                                                    <div className=" text-cyan-700 font-bold text-5xl">{candidate.ballot_number}</div>
+                                                                </div>
+
+                                                                {/* Candidate Name */}
+                                                                <h4 className="text-sm font-semibold text-gray-800 text-center mb-3 line-clamp-2 h-10">
+                                                                    {candidate.student_name}
+                                                                </h4>
+
+                                                                {/* Vote Indicator */}
+                                                                <div
+                                                                    className={`w-full py-2 px-4 rounded-lg text-sm font-medium flex items-center justify-center gap-2 ${
+                                                                        isSelected
+                                                                            ? 'bg-green-600 text-white'
+                                                                            : 'bg-blue-600 text-white'
+                                                                    }`}>
+                                                                    {isSelected ? (
+                                                                        <>
+                                                                            <FiCheck className="w-4 h-4" aria-hidden="true" />
+                                                                            Selected
+                                                                        </>
+                                                                    ) : (
+                                                                        'Vote'
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="text-center py-8 text-gray-500">
+                                                <FiUserPlus className="mx-auto h-12 w-12 text-gray-400" aria-hidden="true" />
+                                                <p className="mt-2">No candidates for this position</p>
+                                            </div>
+                                        )}
+
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Summary below card */}
 

@@ -953,6 +953,19 @@ a {
     animation: gentle-shake .6s ease-in-out 15;
 }
 
+@keyframes green-pulse {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+    }
+    50% {
+        box-shadow: 0 0 0 15px rgba(34, 197, 94, 0);
+    }
+}
+
+.submit-button-glow {
+    animation: green-pulse 2s ease-in-out infinite;
+}
+
 .ui-button, .ui-icon-button, .ui-control {
     transition: border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard)
 }
