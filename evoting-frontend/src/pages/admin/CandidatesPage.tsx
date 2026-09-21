@@ -662,7 +662,7 @@ export default function CandidatesPage() {
         deleteMutation.error;
 
     return (
-        <PageContainer>
+        <PageContainer className="candidates-page">
             {/* Page header */}
             <Button
                 leadingIcon={<FiPlus aria-hidden="true"/>}
@@ -874,6 +874,7 @@ export default function CandidatesPage() {
                             label="Search"
                         >
                             <TextInput
+                                className="candidate-search-input"
                                 value={searchTerm}
                                 onChange={event =>
                                     setSearchTerm(event.target.value)

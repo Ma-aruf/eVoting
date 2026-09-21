@@ -196,6 +196,7 @@ export default function PositionsPage() {
     return (
         <>
             <Button
+                className="positions-page-action"
                 leadingIcon={<FiPlus aria-hidden="true"/>}
                 onClick={() =>
                     setShowCreateForm(value => !value)
@@ -438,7 +439,7 @@ export default function PositionsPage() {
             {/* Position register */}
 
             <section
-                className="management-panel"
+                className="management-panel positions-register"
                 aria-labelledby="positions-heading"
             >
                 <div className="management-panel-heading">
@@ -531,7 +532,7 @@ export default function PositionsPage() {
                             <tbody>
                             {filteredPositions.map(position => (
                                 <tr key={position.id}>
-                                    <td data-label="Position">
+                                    <td className="management-table-cell--primary" data-label="Position">
                                         {position.name}
                                     </td>
 

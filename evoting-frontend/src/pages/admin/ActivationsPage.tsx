@@ -232,7 +232,7 @@ export default function ActivationsPage() {
         : null;
 
     return (
-        <PageContainer>
+        <PageContainer className="activations-page">
             {/* Query error */}
 
             {queryError && (
@@ -270,6 +270,8 @@ export default function ActivationsPage() {
                                 students.length
                             }
                             icon={<FiUsers aria-hidden="true" />}
+                            status="primary"
+                            layout="split"
                         />
 
                         <StatisticCard
@@ -281,12 +283,16 @@ export default function ActivationsPage() {
                                 ).length
                             }
                             icon={<FiCheckCircle aria-hidden="true" />}
+                            status="success"
+                            layout="split"
                         />
 
                         <StatisticCard
                             label="Available to activate"
                             value={availableStudents.length}
                             icon={<FiUserPlus aria-hidden="true" />}
+                            status="info"
+                            layout="split"
                         />
                     </div>
 

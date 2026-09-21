@@ -147,18 +147,10 @@ export default function ElectionsPage() {
             >
                 <div className="elections-section-heading">
                     <div>
-                        <p className="dashboard-kicker">
-                            Election register
-                        </p>
 
                         <h2 id="all-elections-heading">
                             All elections
                         </h2>
-
-                        <p>
-                            {elections.length} election
-                            {elections.length === 1 ? '' : 's'} configured.
-                        </p>
                     </div>
                 </div>
 
@@ -211,7 +203,7 @@ export default function ElectionsPage() {
                             <tbody>
                             {elections.map(election => (
                                 <tr key={election.id}>
-                                    <td data-label="Name">
+                                    <td className="management-table-cell--primary" data-label="Name">
                                         {election.name}
                                     </td>
 
@@ -293,7 +285,7 @@ export default function ElectionsPage() {
                         </div>
                     </section>
 
-                    <section className="election-form-section">
+                    <section className="election-form-section election-form-section--schedule">
                         <h3 className="election-form-section-title">Voting schedule</h3>
                         <div className="election-form-dates">
                             <FormField
@@ -326,9 +318,6 @@ export default function ElectionsPage() {
                                 />
                             </FormField>
                         </div>
-                        <p className="election-form-helper">
-                            Times follow the application&apos;s configured timezone.
-                        </p>
                     </section>
 
                     <label className="election-checkbox">

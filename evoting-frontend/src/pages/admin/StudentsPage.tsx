@@ -466,6 +466,7 @@ export default function StudentsPage() {
                     aria-label="Voter filters"
                 >
                     <FormField
+                        className="students-filter-primary"
                         id="student-search"
                         label="Search by name or voter ID"
                     >

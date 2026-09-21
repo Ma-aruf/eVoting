@@ -134,7 +134,7 @@ export default function ManageElectionsPage() {
             {/* Election status controls */}
 
             <section
-                className="management-panel"
+                className="management-panel manage-elections-status"
                 aria-labelledby="status-heading"
             >
                 <div className="management-panel-heading">
@@ -208,7 +208,7 @@ export default function ManageElectionsPage() {
                             <tbody>
                                 {elections.map(election => (
                                     <tr key={election.id}>
-                                        <td data-label="Election">
+                                        <td className="management-table-cell--primary" data-label="Election">
                                             {election.name}
 
                                             <span className="table-secondary">

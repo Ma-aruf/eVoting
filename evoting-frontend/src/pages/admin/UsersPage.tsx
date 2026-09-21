@@ -189,7 +189,7 @@ export default function UsersPage() {
                         <tbody>
                         {filteredUsers.map(user => (
                             <tr key={user.id}>
-                                <td data-label="Username">
+                                <td className="users-table-identity" data-label="Username">
                                     <div className="users-identity">
                                         <span>{user.username}</span>
                                     </div>
