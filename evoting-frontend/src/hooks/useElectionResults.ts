@@ -1,44 +1,12 @@
 import {useEffect, useState} from 'react';
 import api from '../apiConfig'; // adjust path as needed
+import type {Election} from '../types/election';
+import {mapElectionResults, type ElectionResult, type ElectionResultsResponse} from '../queries/useResults';
+
+export type {CandidateResult, ElectionResult, PositionResult} from '../queries/useResults';
 
 // ────────────────────────────────────────────────
 // Interfaces (you can move them to a separate types file)
-interface Election {
-    id: number;
-    name: string;
-    year: number;
-    is_active: boolean;
-}
-
-export interface CandidateResult {
-    id: number;
-    student_id: string;
-    candidate_name: string;
-    photo_url?: string;
-    vote_count: number;
-    percentage: number;
-}
-
-export interface PositionResult {
-    position_id: number;
-    position_name: string;
-    display_order: number;
-    total_votes: number;
-    skipped_votes: number;
-    skipped_percentage: number;
-    candidates: CandidateResult[];
-}
-
-export interface ElectionResult {
-    election_id: number;
-    election_name: string;
-    year: number;
-    total_voters: number;
-    voters_voted: number;
-    voter_turnout: number;
-    positions: PositionResult[];
-}
-
 // ────────────────────────────────────────────────
 
 export function useElectionResults() {
@@ -48,7 +16,7 @@ export function useElectionResults() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // Fetch list of elections + auto-select active one
+    // Fetch elections and prefer the currently open one.
     useEffect(() => {
         let ignore = false;
 
@@ -57,19 +25,17 @@ export function useElectionResults() {
                 setLoading(true);
                 setError(null);
 
-                const res = await api.get('api/elections/');
-                let data = res.data?.results ?? res.data;
-
-                if (!Array.isArray(data)) data = [];
+                const res = await api.get<Election[] | {results?: Election[]}>('api/elections/');
+                const data = Array.isArray(res.data) ? res.data : res.data.results ?? [];
 
                 if (ignore) return;
 
                 setElections(data);
 
                 // Auto-select logic
-                const active = data.find((e: Election) => e.is_active);
-                if (active) {
-                    setSelectedElectionId(active.id);
+                const openElection = data.find(e => e.voting_open);
+                if (openElection) {
+                    setSelectedElectionId(openElection.id);
                 } else if (data.length > 0) {
                     setSelectedElectionId(data[0].id);
                 }
@@ -103,34 +69,8 @@ export function useElectionResults() {
                 setError(null);
 
                 // Use single comprehensive endpoint
-                const resultsRes = await api.get(`api/elections/${selectedElectionId}/results/`);
-                const data = resultsRes.data;
-
-                // Map backend response to frontend format
-                const finalResult: ElectionResult = {
-                    election_id: data.election_id,
-                    election_name: data.election_name,
-                    year: data.year,
-                    total_voters: data.total_students,
-                    voters_voted: data.students_who_voted,
-                    voter_turnout: data.voter_turnout_percentage,
-                    positions: data.positions.map((pos: any) => ({
-                        position_id: pos.position_id,
-                        position_name: pos.position_name,
-                        display_order: pos.display_order,
-                        total_votes: pos.total_valid_votes + pos.skipped_votes,
-                        skipped_votes: pos.skipped_votes,
-                        skipped_percentage: pos.skip_percentage,
-                        candidates: pos.candidates.map((cand: any) => ({
-                            id: cand.id,
-                            student_id: cand.student_id,
-                            candidate_name: cand.candidate_name,
-                            photo_url: cand.photo_url || undefined,
-                            vote_count: cand.vote_count,
-                            percentage: cand.percentage
-                        }))
-                    }))
-                };
+                const resultsRes = await api.get<ElectionResultsResponse>(`api/elections/${selectedElectionId}/results/`);
+                const finalResult = mapElectionResults(resultsRes.data);
 
                 if (!ignore) setResults(finalResult);
             } catch (err) {

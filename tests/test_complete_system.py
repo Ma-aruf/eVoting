@@ -16,13 +16,13 @@ def test_complete_system():
     print("=" * 50)
     
     # Get elections
-    elections = list(Election.objects.all().values('id', 'name', 'is_active'))
+    elections = list(Election.objects.all().values('id', 'name', 'voting_enabled'))
     if len(elections) < 2:
         print('❌ Need at least 2 elections for comprehensive test')
         return
     
-    active_election = next((e for e in elections if e['is_active']), None)
-    inactive_election = next((e for e in elections if not e['is_active']), None)
+    active_election = next((e for e in elections if e['voting_enabled']), None)
+    inactive_election = next((e for e in elections if not e['voting_enabled']), None)
     
     if not active_election or not inactive_election:
         print('❌ Need one active and one inactive election')

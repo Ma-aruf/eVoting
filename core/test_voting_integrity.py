@@ -26,14 +26,14 @@ class VotingIntegrityTests(TestCase):
             year=2026,
             start_time=now - timedelta(hours=1),
             end_time=now + timedelta(hours=1),
-            is_active=True,
+            voting_enabled=True,
         )
         self.other_election = Election.objects.create(
             name="Election B",
             year=2026,
             start_time=now - timedelta(hours=1),
             end_time=now + timedelta(hours=1),
-            is_active=True,
+            voting_enabled=True,
         )
         self.position = Position.objects.create(
             name="President", election=self.election, display_order=1
@@ -193,8 +193,8 @@ class VotingIntegrityTests(TestCase):
         self.assertEqual(self.post(**self.headers()).status_code, 403)
         self.student.is_active = True
         self.student.save(update_fields=["is_active"])
-        self.election.is_active = False
-        self.election.save(update_fields=["is_active"])
+        self.election.voting_enabled = False
+        self.election.save(update_fields=["voting_enabled"])
         self.assertEqual(self.post(**self.headers()).status_code, 403)
 
     def test_voting_window_is_enforced(self):
@@ -213,7 +213,19 @@ class VotingIntegrityTests(TestCase):
         response = self.client.post("/api/voter/login/", {"student_id": "SAME"}, format="json")
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.data["election"]["id"], self.election.id)
+        self.assertTrue(response.data["can_vote_now"])
+        self.assertEqual(response.data["election"]["status"], "open")
+        self.assertTrue(response.data["election"]["voting_open"])
         self.assertNotEqual(same_id.election_id, other.election_id)
+
+    def test_voter_login_keeps_409_for_multiple_eligible_open_elections(self):
+        self.make_student("AMBIGUOUS", election=self.election, active=True)
+        self.make_student("AMBIGUOUS", election=self.other_election, active=True)
+        response = self.client.post(
+            "/api/voter/login/", {"student_id": "AMBIGUOUS"}, format="json"
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("multiple elections", response.data["detail"].lower())
 
     def test_repeated_submission_does_not_create_extra_votes(self):
         headers = self.headers()
@@ -303,7 +315,7 @@ class VotingIntegrityTests(TestCase):
         self.assertEqual(self.post(**self.headers()).status_code, 201)
         staff = User.objects.create_user("lock-staff", password="x", role="staff", assigned_election=self.election)
         self.client.force_authenticate(staff)
-        locked_detail = "Election configuration is locked because voting has already started."
+        locked_detail = "Candidate and ballot changes are locked because votes have already been cast."
 
         create_position = self.client.post(
             "/api/positions/create/",
@@ -336,7 +348,7 @@ class VotingIntegrityTests(TestCase):
 
         for data in (
             {"student": new_student.id},
-            {"position": self.position_two.id},
+            {"position": self.position_two.id, "ballot_number": 9},
             {"ballot_number": 8},
         ):
             response = self.client.put(
@@ -354,7 +366,7 @@ class VotingIntegrityTests(TestCase):
         )
         with self.assertRaises(Exception) as raised:
             changed_election.is_valid(raise_exception=True)
-        self.assertIn(locked_detail, str(raised.exception))
+        self.assertIn("Election settings cannot be changed after voting activity.", str(raised.exception))
 
         for is_active in (False, True):
             response = self.client.patch(
@@ -372,9 +384,9 @@ class VotingIntegrityTests(TestCase):
     def test_configuration_operations_are_allowed_before_first_vote(self):
         election = Election.objects.create(
             name="Unstarted", year=2028,
-            start_time=timezone.now() - timedelta(hours=1),
-            end_time=timezone.now() + timedelta(hours=1),
-            is_active=True,
+            start_time=timezone.now() + timedelta(hours=1),
+            end_time=timezone.now() + timedelta(hours=2),
+            voting_enabled=True,
         )
         position = Position.objects.create(
             name="Initial", election=election, display_order=1
@@ -445,7 +457,7 @@ class ConcurrentVoteTests(TransactionTestCase):
         election = Election.objects.create(
             name="Concurrent", year=2026,
             start_time=now - timedelta(minutes=1),
-            end_time=now + timedelta(minutes=10), is_active=True
+            end_time=now + timedelta(minutes=10), voting_enabled=True
         )
         position = Position.objects.create(name="President", election=election, display_order=1)
         student = Student.objects.create(

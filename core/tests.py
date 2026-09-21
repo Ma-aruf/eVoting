@@ -21,7 +21,7 @@ class MultiVoteViewTests(TestCase):
             year=2025,
             start_time=now - timedelta(hours=1),
             end_time=now + timedelta(hours=1),
-            is_active=True,
+            voting_enabled=True,
         )
         self.position1 = Position.objects.create(
             name="President", election=self.election, display_order=1
@@ -87,8 +87,8 @@ class MultiVoteViewTests(TestCase):
         self.assertEqual(resp.status_code, 400, resp.content)
 
     def test_rejects_inactive_election(self):
-        self.election.is_active = False
-        self.election.save(update_fields=["is_active"])
+        self.election.voting_enabled = False
+        self.election.save(update_fields=["voting_enabled"])
         payload = {
             "votes": [
                 {
@@ -111,7 +111,7 @@ class BulkStudentUploadTests(TestCase):
             year=2025,
             start_time=timezone.now() - timedelta(hours=1),
             end_time=timezone.now() + timedelta(hours=1),
-            is_active=False,  # Not active for bulk upload
+            voting_enabled=False,  # Voting disabled during bulk upload
         )
         self.user = User.objects.create_user(
             username="staff", password="pass", role="staff", assigned_election=self.election

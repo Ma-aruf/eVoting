@@ -1,14 +1,9 @@
 import {useQuery} from '@tanstack/react-query';
 import {getVoterSession, voterApi} from '../api/voterApi';
+import type {VoterElection} from '../types/election';
+import {voterLifecycleMessage} from '../utils/electionLifecycle';
 
-interface Election {
-    id: number;
-    name: string;
-    year: number;
-    start_time: string;
-    end_time: string;
-    is_active: boolean;
-}
+type Election = VoterElection;
 
 interface Position {
     id: number;
@@ -28,30 +23,19 @@ interface Candidate {
 
 interface VotingData {
     election: Election;
+    can_vote_now: boolean;
     positions: Position[];
     candidatesByPosition: Record<number, Candidate[]>;
 }
 
 const fetchVotingData = async (): Promise<VotingData> => {
     const session = getVoterSession();
-    const electionName = sessionStorage.getItem('election_name');
-    const electionYear = sessionStorage.getItem('election_year');
-
     if (!session) {
-        throw new Error('No election context found. Please login again.');
+        throw new Error('Your voter session is no longer valid. Please sign in again.');
     }
-
-    const electionId = session.electionId;
-
-    // Build election object from session data
-    const activeElection: Election = {
-        id: parseInt(electionId, 10),
-        name: electionName || '',
-        year: parseInt(electionYear || '0', 10),
-        start_time: '',
-        end_time: '',
-        is_active: true
-    };
+    if (!session.canVoteNow || !session.election.voting_open || session.election.status !== 'open') {
+        throw new Error(voterLifecycleMessage(session.election.status));
+    }
 
     // 2. Get positions for this election
     const positionsRes = await voterApi.getPositions(session);
@@ -94,7 +78,8 @@ const fetchVotingData = async (): Promise<VotingData> => {
     await Promise.all(candidatePromises);
 
     return {
-        election: activeElection,
+        election: session.election,
+        can_vote_now: session.canVoteNow,
         positions,
         candidatesByPosition: candidatesMap
     };
@@ -107,7 +92,7 @@ export function useVotingData(enabled: boolean = true) {
     return useQuery({
         queryKey: ['votingData', electionId, studentId],
         queryFn: fetchVotingData,
-        enabled: enabled && !!session,
+        enabled: enabled && !!session && session.canVoteNow && session.election.voting_open && session.election.status === 'open',
     });
 }
 

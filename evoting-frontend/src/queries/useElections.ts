@@ -1,29 +1,38 @@
 import { useQuery } from '@tanstack/react-query';
+import type {AxiosResponse} from 'axios';
 import api from '../apiConfig';
+import { useAuth } from '../hooks/useAuth';
+import type { Election } from '../types/election';
 import { queryKeys } from './queryKeys';
-import {useAuth} from '../hooks/useAuth';
 
-export interface Election {
-  id: number;
-  name: string;
-  year: number;
-  start_time: string;
-  end_time: string;
-  is_active: boolean;
-}
+type ElectionsPage = { results?: Election[]; next?: string | null };
 
-export const useElections = () => {
-  const {user} = useAuth();
+export type { Election } from '../types/election';
+
+export const useElections = (options?: { refetchInterval?: number | false }) => {
+  const { user } = useAuth();
   return useQuery({
     queryKey: [...queryKeys.elections, user?.username ?? null, user?.role, user?.assignedElection?.id ?? null],
     queryFn: async (): Promise<Election[]> => {
-      const res = await api.get('api/elections/');
-      const elections: Election[] = Array.isArray(res.data) ? res.data : (res.data.results || []);
+      const elections: Election[] = [];
+        let nextUrl: string | null = 'api/elections/';
+
+      while (nextUrl) {
+        const response: AxiosResponse<ElectionsPage | Election[]> = await api.get<ElectionsPage | Election[]>(nextUrl);
+        if (Array.isArray(response.data)) {
+          elections.push(...response.data);
+          break;
+        }
+        elections.push(...(response.data.results ?? []));
+        nextUrl = response.data.next ?? null;
+      }
+
       return user?.role === 'superuser'
         ? elections
         : elections.filter(election => election.id === user?.assignedElection?.id);
     },
     enabled: !!user,
-    staleTime: 2 * 60 * 1000, // 2 minutes
+    staleTime: 2 * 60 * 1000,
+    refetchInterval: options?.refetchInterval ?? false,
   });
 };

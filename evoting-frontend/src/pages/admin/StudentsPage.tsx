@@ -2,7 +2,7 @@ import {type FormEvent, useMemo, useState} from 'react';
 import {
     FiCheckCircle,
     FiChevronLeft,
-    FiChevronRight,
+    FiChevronRight, FiDownloadCloud,
     FiEdit2,
     FiFileText,
     FiPlus,
@@ -177,7 +177,7 @@ export default function StudentsPage() {
 
     // Queries and mutations
 
-    const electionsQuery = useElections();
+    const electionsQuery = useElections({refetchInterval: 45_000});
     const effectiveElectionId = isScopedRole
         ? user?.assignedElection?.id ?? null
         : selectedElectionId;
@@ -347,7 +347,7 @@ export default function StudentsPage() {
                     />
 
                     <StatisticCard
-                        label="Active voters"
+                        label="Activated voters"
                         value={
                             students.filter(student => student.is_active).length
                         }
@@ -371,40 +371,40 @@ export default function StudentsPage() {
             <div className="voter-header">
                 <div className="voter-header-election">
                     <FormField
-                    id="students-election"
-                    label="Election"
-                >
-                    {isScopedRole ? (
-                        <TextInput
-                            value={selected ? `${selected.name} (${selected.year})` : 'Assigned election unavailable'}
-                            readOnly
-                            aria-readonly="true"
-                        />
-                    ) : (
-                        <SelectField
-                            value={effectiveElectionId ?? ''}
-                            onChange={event => {
-                                setSelectedElectionId(
-                                    event.target.value
-                                        ? Number(event.target.value)
-                                        : null
-                                );
-                                setCurrentPage(1);
-                            }}
-                        >
-                            <option value="">
-                                {elections.length
-                                    ? 'Select an election'
-                                    : 'No elections available'}
-                            </option>
-                            {elections.map(election => (
-                                <option key={election.id} value={election.id}>
-                                    {election.name} ({election.year})
+                        id="students-election"
+                        label="Election"
+                    >
+                        {isScopedRole ? (
+                            <TextInput
+                                value={selected ? `${selected.name} (${selected.year})` : 'Assigned election unavailable'}
+                                readOnly
+                                aria-readonly="true"
+                            />
+                        ) : (
+                            <SelectField
+                                value={effectiveElectionId ?? ''}
+                                onChange={event => {
+                                    setSelectedElectionId(
+                                        event.target.value
+                                            ? Number(event.target.value)
+                                            : null
+                                    );
+                                    setCurrentPage(1);
+                                }}
+                            >
+                                <option value="">
+                                    {elections.length
+                                        ? 'Select an election'
+                                        : 'No elections available'}
                                 </option>
-                            ))}
-                        </SelectField>
-                    )}
-                </FormField>
+                                {elections.map(election => (
+                                    <option key={election.id} value={election.id}>
+                                        {election.name} ({election.year})
+                                    </option>
+                                ))}
+                            </SelectField>
+                        )}
+                    </FormField>
                 </div>
                 <div className="voter-header-buttons">
                     <Button
@@ -445,17 +445,11 @@ export default function StudentsPage() {
             >
                 <div className="students-records-heading">
                     <div>
-                        <h2 id="students-records-heading">
+                        <h2 id="students-records-heading" className="text-2xl font-bold">
                             {selected
                                 ? `Voters for ${selected.name}`
                                 : 'Voter records'}
                         </h2>
-
-                        <p>
-                            {selected
-                                ? `${filtered.length} of ${students.length} records`
-                                : 'Select an election to view voter records.'}
-                        </p>
                     </div>
                 </div>
 
@@ -792,21 +786,29 @@ export default function StudentsPage() {
                     className="student-import-form"
                 >
                     <Alert variant="info" title="Excel format">
-                        Use the existing Excel format with these columns:{' '}
-                        <code>student_id</code>,{' '}
-                        <code>full_name</code> and{' '}
-                        <code>class_name</code>. Accepted files are .xlsx
-                        and .xls.
+                        <div className="space-y-2">
+                            <p>Use an Excel sheet with exactly these columns:</p>
+                            <div className="space-y-1">
+                                <code className="ps-6 text-red-400">student_id</code>
+                                <br/>
+                                <code className="ps-6 text-red-400">full_name</code>
+                                <br/>
+                                <code className="ps-6 text-red-400">class_name</code>
+                            </div>
+                            <a
+                                href="/student-import-sample.csv"
+                                download="student-import-sample.csv"
+                                className="inline-flex items-center gap-2 mt-2 text-sm text-blue-600 hover:text-blue-800 underline"
+                            >
+                                <FiDownloadCloud className="text-emerald-700" aria-hidden="true"/>
+                                <p className="text-emerald-700">Download sample file</p>
+                            </a>
+                        </div>
                     </Alert>
 
                     <FormField
                         id="student-file"
                         label="Excel file"
-                        helperText={
-                            file
-                                ? `Selected file: ${file.name}`
-                                : 'Choose an Excel workbook.'
-                        }
                     >
                         <div className="file-picker-wrapper">
                             <label htmlFor="student-file-input" className="file-picker-label">
@@ -814,7 +816,7 @@ export default function StudentsPage() {
                                 <span className="file-picker-text">
                                     {file ? file.name : 'Click to pick a file'}
                                 </span>
-                                <span className="file-picker-hint">.xlsx, .xls</span>
+                                <span className="file-picker-hint">.xlsx, .xls, .csv</span>
                             </label>
                             <input
                                 id="student-file-input"

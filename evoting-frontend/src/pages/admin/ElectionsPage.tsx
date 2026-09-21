@@ -1,5 +1,5 @@
 import {type FormEvent, useState} from 'react';
-import {FiCalendar, FiCheckCircle, FiClock, FiPlus,} from 'react-icons/fi';
+import {FiCalendar, FiCheckCircle, FiClock, FiEdit2, FiPlus} from 'react-icons/fi';
 import StatisticCard from '../../components/StatisticCard';
 
 import Modal from '../../components/ui/Modal';
@@ -12,12 +12,16 @@ import ErrorState from '../../components/ui/ErrorState';
 import LoadingState from '../../components/ui/LoadingState';
 
 import {useElections} from '../../queries/useElections';
-import {useCreateElection} from '../../queries/useElectionsMutations';
+import {useCreateElection, useUpdateElectionSchedule} from '../../queries/useElectionsMutations';
+import type {Election} from '../../types/election';
+import {electionStatusPresentation} from '../../utils/electionLifecycle';
 
 type ApiError = {
     response?: {
         data?: {
             detail?: string;
+            start_time?: string | string[];
+            end_time?: string | string[];
         };
     };
 };
@@ -32,13 +36,25 @@ function formatDateTime(value: string) {
     });
 }
 
+function toDateTimeLocalValue(value: string) {
+    const date = new Date(value);
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+        .toISOString()
+        .slice(0, 16);
+}
+
 function mutationMessage(error: unknown, fallback: string) {
-    return (error as ApiError).response?.data?.detail || fallback;
+    const data = (error as ApiError).response?.data;
+    if (data?.detail) return data.detail;
+    const fieldError = [data?.start_time, data?.end_time]
+        .flatMap(value => Array.isArray(value) ? value : value ? [value] : [])[0];
+    return fieldError || fallback;
 }
 
 export default function ElectionsPage() {
-    const electionsQuery = useElections();
+    const electionsQuery = useElections({refetchInterval: 45_000});
     const createElection = useCreateElection();
+    const updateSchedule = useUpdateElectionSchedule();
 
     const elections = electionsQuery.data ?? [];
 
@@ -48,11 +64,19 @@ export default function ElectionsPage() {
     const [year, setYear] = useState('');
     const [startTime, setStartTime] = useState('');
     const [endTime, setEndTime] = useState('');
-    const [isActive, setIsActive] = useState(false);
+    const [scheduleError, setScheduleError] = useState('');
+    const [scheduleElectionId, setScheduleElectionId] = useState<number | null>(null);
+    const [editedStartTime, setEditedStartTime] = useState('');
+    const [editedEndTime, setEditedEndTime] = useState('');
+    const [scheduleEditError, setScheduleEditError] = useState('');
+    const editingElection = elections.find(election => election.id === scheduleElectionId) ?? null;
 
-    const activeCount = elections.filter(
-        election => election.is_active
-    ).length;
+    const statusCounts = {
+        scheduled: elections.filter(election => election.status === 'scheduled').length,
+        open: elections.filter(election => election.status === 'open').length,
+        paused: elections.filter(election => election.status === 'paused').length,
+        ended: elections.filter(election => election.status === 'ended').length,
+    };
 
     // Form handlers
 
@@ -61,11 +85,34 @@ export default function ElectionsPage() {
         setYear('');
         setStartTime('');
         setEndTime('');
-        setIsActive(false);
+        setScheduleError('');
+    };
+
+    const openScheduleEditor = (election: Election) => {
+        updateSchedule.reset();
+        setScheduleElectionId(election.id);
+        setEditedStartTime(toDateTimeLocalValue(election.start_time));
+        setEditedEndTime(toDateTimeLocalValue(election.end_time));
+        setScheduleEditError('');
+    };
+
+    const closeScheduleEditor = () => {
+        setScheduleElectionId(null);
+        setScheduleEditError('');
+        updateSchedule.reset();
     };
 
     const handleCreateElection = (event: FormEvent) => {
         event.preventDefault();
+
+        const startMilliseconds = new Date(startTime).getTime();
+        const endMilliseconds = new Date(endTime).getTime();
+        if (!name.trim() || !Number.isInteger(Number(year)) || Number(year) <= 0) return;
+        if (!Number.isFinite(startMilliseconds) || !Number.isFinite(endMilliseconds) || endMilliseconds <= startMilliseconds) {
+            setScheduleError('The election must end after its starting time.');
+            return;
+        }
+        setScheduleError('');
 
         createElection.mutate(
             {
@@ -73,12 +120,40 @@ export default function ElectionsPage() {
                 year: Number(year),
                 start_time: new Date(startTime).toISOString(),
                 end_time: new Date(endTime).toISOString(),
-                is_active: isActive,
+                voting_enabled: false,
             },
             {
                 onSuccess: () => {
                     resetForm();
                     setShowCreateForm(false);
+                },
+            }
+        );
+    };
+
+    const handleUpdateSchedule = (event: FormEvent) => {
+        event.preventDefault();
+        if (!editingElection || editingElection.status !== 'scheduled') return;
+
+        const startMilliseconds = new Date(editedStartTime).getTime();
+        const endMilliseconds = new Date(editedEndTime).getTime();
+        if (!Number.isFinite(startMilliseconds) || !Number.isFinite(endMilliseconds) || endMilliseconds <= startMilliseconds) {
+            setScheduleEditError('The election must end after its starting time.');
+            return;
+        }
+
+        setScheduleEditError('');
+        updateSchedule.mutate(
+            {
+                electionId: editingElection.id,
+                start_time: new Date(editedStartTime).toISOString(),
+                end_time: new Date(editedEndTime).toISOString(),
+            },
+            {
+                onSuccess: () => {
+                    setScheduleElectionId(null);
+                    setEditedStartTime('');
+                    setEditedEndTime('');
                 },
             }
         );
@@ -109,20 +184,22 @@ export default function ElectionsPage() {
                 />
 
                 <StatisticCard
-                    label="Active elections"
-                    value={activeCount}
+                    label="Scheduled"
+                    value={statusCounts.scheduled}
                     icon={<FiCheckCircle aria-hidden="true"/>}
                     status="success"
                     layout="split"
                 />
 
                 <StatisticCard
-                    label="Inactive elections"
-                    value={elections.length - activeCount}
+                    label="Voting open"
+                    value={statusCounts.open}
                     icon={<FiClock aria-hidden="true"/>}
                     status="neutral"
                     layout="split"
                 />
+                <StatisticCard label="Paused" value={statusCounts.paused} icon={<FiClock aria-hidden="true"/>} status="warning" layout="split"/>
+                <StatisticCard label="Ended" value={statusCounts.ended} icon={<FiCheckCircle aria-hidden="true"/>} status="neutral" layout="split"/>
             </section>
 
             {/* Creation error */}
@@ -138,6 +215,7 @@ export default function ElectionsPage() {
                     )}
                 </Alert>
             )}
+            {scheduleError && <Alert variant="error" title="Invalid voting schedule">{scheduleError}</Alert>}
 
             {/* Election register */}
 
@@ -194,9 +272,10 @@ export default function ElectionsPage() {
                             <tr>
                                 <th scope="col">Name</th>
                                 <th scope="col">Year</th>
-                                <th scope="col">Voting opens</th>
+            <th scope="col">Voting opens</th>
                                 <th scope="col">Voting closes</th>
                                 <th scope="col">Status</th>
+                                <th scope="col">Actions</th>
                             </tr>
                             </thead>
 
@@ -224,9 +303,22 @@ export default function ElectionsPage() {
                                     </td>
 
                                     <td data-label="Status">
-                                        {election.is_active
-                                            ? 'Active'
-                                            : 'Inactive'}
+                                        {electionStatusPresentation(election.status).label}
+                                    </td>
+
+                                    <td data-label="Actions">
+                                        {election.status === 'scheduled' && !election.candidate_changes_locked ? (
+                                            <Button
+                                                type="button"
+                                                variant="secondary"
+                                                size="compact"
+                                                leadingIcon={<FiEdit2 aria-hidden="true"/>}
+                                                aria-label={`Edit schedule for ${election.name}`}
+                                                onClick={() => openScheduleEditor(election)}
+                                            >
+                                                Edit schedule
+                                            </Button>
+                                        ) : '—'}
                                     </td>
                                 </tr>
                             ))}
@@ -273,7 +365,9 @@ export default function ElectionsPage() {
                                 required
                             >
                                 <TextInput
-                                    type="text"
+                                    type="number"
+                                    min="1"
+                                    step="1"
                                     value={year}
                                     onChange={event =>
                                         setYear(event.target.value)
@@ -296,9 +390,10 @@ export default function ElectionsPage() {
                                 <TextInput
                                     type="datetime-local"
                                     value={startTime}
-                                    onChange={event =>
-                                        setStartTime(event.target.value)
-                                    }
+                                    onChange={event => {
+                                        setStartTime(event.target.value);
+                                        setScheduleError('');
+                                    }}
                                     required
                                 />
                             </FormField>
@@ -311,29 +406,19 @@ export default function ElectionsPage() {
                                 <TextInput
                                     type="datetime-local"
                                     value={endTime}
-                                    onChange={event =>
-                                        setEndTime(event.target.value)
-                                    }
+                                    onChange={event => {
+                                        setEndTime(event.target.value);
+                                        setScheduleError('');
+                                    }}
                                     required
                                 />
                             </FormField>
                         </div>
                     </section>
 
-                    <label className="election-checkbox">
-                        <input
-                            type="checkbox"
-                            checked={isActive}
-                            onChange={event =>
-                                setIsActive(event.target.checked)
-                            }
-                        />
-
-                        <span className="election-checkbox-copy">
-                            <strong>Activate after creation</strong>
-                            <span>Voters can access it once the scheduled opening time is reached.</span>
-                        </span>
-                    </label>
+                    <p className="text-xs text-gray-600">
+                        Configure at least one position and a candidate for every position before enabling voting.
+                    </p>
 
                     <div className="election-form-footer">
                         <div className="ui-modal-actions">
@@ -356,6 +441,61 @@ export default function ElectionsPage() {
                         </div>
                     </div>
                 </form>
+            </Modal>
+
+            <Modal
+                open={Boolean(scheduleElectionId)}
+                onClose={closeScheduleEditor}
+                title="Edit election schedule"
+                description={editingElection ? `${editingElection.name} (${editingElection.year})` : undefined}
+                className="election-create-modal"
+            >
+                {editingElection && (
+                    <form onSubmit={handleUpdateSchedule} className="election-form">
+                        <section className="election-form-section election-form-section--schedule">
+                            <h3 className="election-form-section-title">Voting schedule</h3>
+                            <div className="election-form-dates">
+                                <FormField id="edit_start_time" label="Voting opens" required>
+                                    <TextInput
+                                        type="datetime-local"
+                                        value={editedStartTime}
+                                        onChange={event => {
+                                            setEditedStartTime(event.target.value);
+                                            setScheduleEditError('');
+                                        }}
+                                        required
+                                    />
+                                </FormField>
+                                <FormField id="edit_end_time" label="Voting closes" required>
+                                    <TextInput
+                                        type="datetime-local"
+                                        value={editedEndTime}
+                                        onChange={event => {
+                                            setEditedEndTime(event.target.value);
+                                            setScheduleEditError('');
+                                        }}
+                                        required
+                                    />
+                                </FormField>
+                            </div>
+                        </section>
+                        {(scheduleEditError || updateSchedule.isError) && (
+                            <Alert variant="error" title="Schedule not updated">
+                                {scheduleEditError || mutationMessage(updateSchedule.error, 'Please try again.')}
+                            </Alert>
+                        )}
+                        <div className="election-form-footer">
+                            <div className="ui-modal-actions">
+                                <Button type="button" variant="quiet" onClick={closeScheduleEditor}>
+                                    Cancel
+                                </Button>
+                                <Button type="submit" loading={updateSchedule.isPending}>
+                                    Save schedule
+                                </Button>
+                            </div>
+                        </div>
+                    </form>
+                )}
             </Modal>
         </div>
     );

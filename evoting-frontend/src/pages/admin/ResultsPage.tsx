@@ -25,31 +25,15 @@ export default function ResultsPage() {
     const [selectedElectionId, setSelectedElectionId] = useState<number | null>(null);
 
     // Queries
-    const {data: elections = [], isLoading: electionsLoading} = useElections();
+    const {data: elections = [], isLoading: electionsLoading} = useElections({refetchInterval: 45_000});
+    const defaultElectionId = elections.find(election => election.voting_open)?.id ?? elections[0]?.id ?? null;
     const effectiveElectionId = isScopedRole
         ? user?.assignedElection?.id ?? null
-        : selectedElectionId;
+        : selectedElectionId ?? defaultElectionId;
     const {data: results, isLoading: resultsLoading, error: resultsError} = useResults(effectiveElectionId);
 
     // Combined loading state
     const loading = electionsLoading || resultsLoading;
-
-    // Auto-select first election when data loads
-    useEffect(() => {
-        if (!isScopedRole && elections.length > 0 && !selectedElectionId) {
-            const active = elections.find(e => e.is_active);
-            if (active) {
-                setSelectedElectionId(active.id);
-            } else {
-                setSelectedElectionId(elections[0].id);
-            }
-        }
-    }, [elections, isScopedRole, selectedElectionId]);
-
-    // Reset position index when results change
-    useEffect(() => {
-        setCurrentPositionIndex(0);
-    }, [results]);
 
     // Show error as toast
     useEffect(() => {
@@ -123,6 +107,7 @@ export default function ResultsPage() {
     }
 
     const currentPosition = results?.positions?.[currentPositionIndex];
+    // const selectedElection = elections.find(election => election.id === effectiveElectionId);
 
     return (
         <div className="results-page">
@@ -133,8 +118,11 @@ export default function ResultsPage() {
                         {elections.find(election => election.id === effectiveElectionId)?.name ?? 'Assigned election unavailable'}
                     </span>
                 ) : <select
-                    value={selectedElectionId || ''}
-                    onChange={(e) => setSelectedElectionId(e.target.value ? Number(e.target.value) : null)}
+                    value={effectiveElectionId ?? ''}
+                    onChange={(e) => {
+                        setCurrentPositionIndex(0);
+                        setSelectedElectionId(e.target.value ? Number(e.target.value) : null);
+                    }}
                     className="results-election-select"
                     disabled={loading}
                 >
@@ -273,7 +261,7 @@ export default function ResultsPage() {
                                                                 title="Winner"
                                                                 aria-label="Winner"
                                                             >
-                                                                <FiAward aria-hidden="true" />
+                                                                <FiAward aria-hidden="true"/>
                                                             </span>
                                                         )}
                                                         {isRunOff && (

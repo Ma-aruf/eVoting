@@ -5,7 +5,7 @@ import {useQueryClient} from '@tanstack/react-query';
 import {useElections} from '../../queries/useElections';
 import {useAuth} from '../../hooks/useAuth';
 import {type Position, usePositions} from '../../queries/usePositions';
-import {type Student, getStudentElectionId, useStudents} from '../../queries/useStudents';
+import {getStudentElectionId, type Student, useStudents} from '../../queries/useStudents';
 import {
     type Candidate,
     useCandidates,
@@ -129,7 +129,9 @@ function CandidateForm({
                 label="Election"
             >
                 {scopedRole ? (
-                    <TextInput value={elections.find(election => election.id === electionId)?.name ?? 'Assigned election unavailable'} readOnly aria-readonly="true" />
+                    <TextInput
+                        value={elections.find(election => election.id === electionId)?.name ?? 'Assigned election unavailable'}
+                        readOnly aria-readonly="true"/>
                 ) : (
                     <SelectField
                         value={electionId ?? ''}
@@ -253,7 +255,6 @@ export default function CandidatesPage() {
 
     const [showCreateForm, setShowCreateForm] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-    const [currentTime, setCurrentTime] = useState(() => Date.now());
 
     const [studentId, setStudentId] = useState<number | null>(null);
     const [studentQuery, setStudentQuery] = useState('');
@@ -282,7 +283,7 @@ export default function CandidatesPage() {
     const queryClient = useQueryClient();
     const confirmModal = useConfirmModal();
 
-    const electionsQuery = useElections();
+    const electionsQuery = useElections({refetchInterval: 45_000});
     const effectiveElectionId = isScopedRole
         ? user?.assignedElection?.id ?? null
         : selectedElectionId;
@@ -336,10 +337,9 @@ export default function CandidatesPage() {
             position => position.id === selectedPositionId
         ) ?? null;
 
-    const votingStarted = Boolean(
-        selectedElection?.start_time &&
-        new Date(selectedElection.start_time).getTime() <= currentTime
-    );
+    const candidateChangesLocked = selectedElection?.candidate_changes_locked ?? false;
+    const editElection = elections.find(election => election.id === effectiveEditElectionId);
+    const editChangesLocked = candidateChangesLocked || (editElection?.candidate_changes_locked ?? false);
 
     const noVotersAvailable = Boolean(
         effectiveElectionId &&
@@ -348,16 +348,7 @@ export default function CandidatesPage() {
         students.length === 0
     );
 
-    const candidateCreationBlocked = votingStarted || noVotersAvailable;
-
-    useEffect(() => {
-        const interval = window.setInterval(
-            () => setCurrentTime(Date.now()),
-            30_000
-        );
-
-        return () => window.clearInterval(interval);
-    }, []);
+    const candidateCreationBlocked = candidateChangesLocked || noVotersAvailable;
 
     // Synchronize election selection with loaded API data
 
@@ -366,8 +357,8 @@ export default function CandidatesPage() {
             // eslint-disable-next-line react-hooks/set-state-in-effect
             setSelectedElectionId(
                 (isScopedRole
-                    ? elections.find(election => election.id === user?.assignedElection?.id)
-                    : elections.find(election => election.is_active) ?? elections[0]
+                        ? elections.find(election => election.id === user?.assignedElection?.id)
+                        : elections.find(election => !election.candidate_changes_locked) ?? elections[0]
                 )?.id ?? null
             );
         }
@@ -474,8 +465,8 @@ export default function CandidatesPage() {
     const handleCreate = (event: FormEvent) => {
         event.preventDefault();
 
-        if (votingStarted) {
-            showError('Candidate changes are locked because voting has begun for this election.');
+        if (candidateChangesLocked) {
+            showError('Candidate and position changes are no longer allowed because the election has started.');
             return;
         }
 
@@ -556,8 +547,8 @@ export default function CandidatesPage() {
     const handleUpdate = (event: FormEvent) => {
         event.preventDefault();
 
-        if (votingStarted) {
-            showError('Candidate changes are locked because voting has begun for this election.');
+        if (editChangesLocked) {
+            showError('Candidate and position changes are no longer allowed because the election has started.');
             return;
         }
 
@@ -622,8 +613,8 @@ export default function CandidatesPage() {
     // Delete candidate
 
     const handleDelete = async (candidate: Candidate) => {
-        if (votingStarted) {
-            showError('Candidate changes are locked because voting has begun for this election.');
+        if (candidateChangesLocked) {
+            showError('Candidate and position changes are no longer allowed because the election has started.');
             return;
         }
 
@@ -663,15 +654,6 @@ export default function CandidatesPage() {
 
     return (
         <PageContainer className="candidates-page">
-            {/* Page header */}
-            <Button
-                leadingIcon={<FiPlus aria-hidden="true"/>}
-                onClick={() => setShowCreateForm(true)}
-                disabled={!selectedPositionId || candidateCreationBlocked}
-                title={votingStarted ? 'Candidate changes are unavailable after voting starts.' : noVotersAvailable ? 'Add voters before adding candidates.' : undefined}
-            >
-                Add candidate
-            </Button>
 
             {selectedPosition && (
                 <div className="grid gap-3 sm:grid-cols-2 py-4">
@@ -694,70 +676,83 @@ export default function CandidatesPage() {
             )}
 
             {/* Election and position selection */}
-            <div className="grid gap-4 md:grid-cols-2 pb-4">
-                <FormField
-                    id="candidate-election"
-                    label="Election"
-                >
-                    {isScopedRole ? (
-                        <TextInput
-                            value={selectedElection ? `${selectedElection.name} (${selectedElection.year})` : 'Assigned election unavailable'}
-                            readOnly
-                            aria-readonly="true"
-                        />
-                    ) : (
+            <div className="flex gap-4 items-end pb-4">
+                <div className="flex gap-4 flex-1">
+                    <FormField
+                        id="candidate-election"
+                        label="Election"
+                        className="flex-1"
+                    >
+                        {isScopedRole ? (
+                            <TextInput
+                                value={selectedElection ? `${selectedElection.name} (${selectedElection.year})` : 'Assigned election unavailable'}
+                                readOnly
+                                aria-readonly="true"
+                            />
+                        ) : (
+                            <SelectField
+                                value={effectiveElectionId ?? ''}
+                                onChange={event => setSelectedElectionId(event.target.value ? Number(event.target.value) : null)}
+                            >
+                                <option value="">
+                                    {elections.length ? 'Select an election' : 'No elections available'}
+                                </option>
+                                {elections.map(election => (
+                                    <option key={election.id} value={election.id}>
+                                        {election.name} ({election.year})
+                                    </option>
+                                ))}
+                            </SelectField>
+                        )}
+                    </FormField>
+
+                    <FormField
+                        id="candidate-position"
+                        label="Position"
+                        className="flex-1"
+                    >
                         <SelectField
-                            value={effectiveElectionId ?? ''}
-                            onChange={event => setSelectedElectionId(event.target.value ? Number(event.target.value) : null)}
+                            value={selectedPositionId ?? ''}
+                            onChange={event =>
+                                setSelectedPositionId(
+                                    event.target.value
+                                        ? Number(event.target.value)
+                                        : null
+                                )
+                            }
+                            disabled={
+                                !effectiveElectionId ||
+                                !positions.length
+                            }
                         >
                             <option value="">
-                                {elections.length ? 'Select an election' : 'No elections available'}
+                                {!effectiveElectionId
+                                    ? 'Select an election first'
+                                    : positions.length
+                                        ? 'Select a position'
+                                        : 'No positions for this election'}
                             </option>
-                            {elections.map(election => (
-                                <option key={election.id} value={election.id}>
-                                    {election.name} ({election.year})
+
+                            {positions.map(position => (
+                                <option
+                                    key={position.id}
+                                    value={position.id}
+                                >
+                                    {position.name}
                                 </option>
                             ))}
                         </SelectField>
-                    )}
-                </FormField>
+                    </FormField>
+                </div>
 
-                <FormField
-                    id="candidate-position"
-                    label="Position"
+                <Button
+                    leadingIcon={<FiPlus aria-hidden="true"/>}
+                    onClick={() => setShowCreateForm(true)}
+                    disabled={!selectedPositionId || candidateCreationBlocked}
+                    title={candidateChangesLocked ? 'Candidate and position changes are no longer allowed because the election has started.' : noVotersAvailable ? 'Add voters before adding candidates.' : undefined}
                 >
-                    <SelectField
-                        value={selectedPositionId ?? ''}
-                        onChange={event =>
-                            setSelectedPositionId(
-                                event.target.value
-                                    ? Number(event.target.value)
-                                    : null
-                            )
-                        }
-                        disabled={
-                            !effectiveElectionId ||
-                            !positions.length
-                        }
-                    >
-                        <option value="">
-                            {!effectiveElectionId
-                                ? 'Select an election first'
-                                : positions.length
-                                    ? 'Select a position'
-                                    : 'No positions for this election'}
-                        </option>
-
-                        {positions.map(position => (
-                            <option
-                                key={position.id}
-                                value={position.id}
-                            >
-                                {position.name}
-                            </option>
-                        ))}
-                    </SelectField>
-                </FormField>
+                    Add candidate
+                </Button>
             </div>
             {/* Query and mutation errors */}
 
@@ -777,12 +772,12 @@ export default function CandidatesPage() {
                 </Alert>
             )}
 
-            {votingStarted && selectedElection && (
+            {candidateChangesLocked && selectedElection && (
                 <Alert
                     variant="warning"
                     title="Candidate changes are locked"
                 >
-                    Voting has begun for {selectedElection.name}. Candidates, ballot numbers, and photos can no longer be changed.
+                    Candidate and position changes are no longer allowed because the election has started.
                 </Alert>
             )}
 
@@ -791,7 +786,8 @@ export default function CandidatesPage() {
                     variant="warning"
                     title="Add voters before adding candidates"
                 >
-                    {selectedElection.name} has no voter records yet. Add or import voters for this election before creating candidates.
+                    {selectedElection.name} has no voter records yet. Add or import voters for this election before
+                    creating candidates.
                 </Alert>
             )}
 
@@ -813,7 +809,7 @@ export default function CandidatesPage() {
             >
                 <CandidateForm
                     mode="create"
-                    locked={votingStarted}
+                    locked={candidateChangesLocked}
                     electionId={effectiveElectionId}
                     elections={elections}
                     positionId={selectedPositionId}
@@ -862,16 +858,12 @@ export default function CandidatesPage() {
                             <h2>
                                 Candidates for {selectedPosition?.name}
                             </h2>
-
-                            <p>
-                                {filteredCandidates.length} of{' '}
-                                {candidates.length} candidates shown.
-                            </p>
                         </div>
 
                         <FormField
                             id="candidate-search"
                             label="Search"
+                            className="mt-3"
                         >
                             <TextInput
                                 className="candidate-search-input"
@@ -962,19 +954,19 @@ export default function CandidatesPage() {
                                                 </td>
 
                                                 <td>
-                                                        {candidate.ballot_number}
+                                                    {candidate.ballot_number}
                                                 </td>
 
                                                 <td>
                                                     <div className="flex gap-1 justify-end">
                                                         <IconButton
-                                                            label={votingStarted ? 'Editing is unavailable after voting starts' : 'Edit candidate'}
+                                                            label={candidateChangesLocked ? 'Candidate and position changes are no longer allowed because the election has started.' : 'Edit candidate'}
                                                             icon={
                                                                 <FiEdit2
                                                                     aria-hidden="true"
                                                                 />
                                                             }
-                                                            disabled={votingStarted}
+                                                            disabled={candidateChangesLocked}
                                                             onClick={() =>
                                                                 openEdit(
                                                                     candidate
@@ -983,14 +975,14 @@ export default function CandidatesPage() {
                                                         />
 
                                                         <IconButton
-                                                            label={votingStarted ? 'Deleting is unavailable after voting starts' : 'Delete candidate'}
+                                                            label={candidateChangesLocked ? 'Candidate and position changes are no longer allowed because the election has started.' : 'Delete candidate'}
                                                             icon={
                                                                 <FiTrash2
                                                                     aria-hidden="true"
                                                                 />
                                                             }
                                                             variant="danger"
-                                                            disabled={votingStarted}
+                                                            disabled={candidateChangesLocked}
                                                             onClick={() =>
                                                                 void handleDelete(
                                                                     candidate
@@ -1022,7 +1014,7 @@ export default function CandidatesPage() {
                                         onDelete={candidateToDelete =>
                                             void handleDelete(candidateToDelete)
                                         }
-                                        locked={votingStarted}
+                                        locked={candidateChangesLocked}
                                     />
                                 ))}
                             </div>
@@ -1042,7 +1034,7 @@ export default function CandidatesPage() {
                 >
                     <CandidateForm
                         mode="edit"
-                        locked={votingStarted}
+                        locked={editChangesLocked}
                         electionId={effectiveEditElectionId}
                         positionId={editPositionId}
                         positions={editPositions}

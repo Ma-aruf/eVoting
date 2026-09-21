@@ -16,17 +16,17 @@ def test_voting_logic():
     print("=" * 50)
     
     # Get elections
-    elections = list(Election.objects.all().values('id', 'name', 'is_active'))
+    elections = list(Election.objects.all().values('id', 'name', 'voting_enabled'))
     if len(elections) == 0:
         print('❌ No elections found')
         return
     
-    active_elections = [e for e in elections if e['is_active']]
-    inactive_elections = [e for e in elections if not e['is_active']]
+    active_elections = [e for e in elections if e['voting_enabled']]
+    inactive_elections = [e for e in elections if not e['voting_enabled']]
     
     print(f'📊 Found {len(elections)} elections:')
     for e in elections:
-        status = "🟢 ACTIVE" if e['is_active'] else "🔴 INACTIVE"
+        status = "🟢 ENABLED" if e['voting_enabled'] else "🔴 DISABLED"
         print(f'  {e["name"]} (ID: {e["id"]}) - {status}')
     
     if len(active_elections) == 0:

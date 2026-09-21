@@ -44,9 +44,3 @@ def election_has_votes(election_id) -> bool:
     from .models import Vote
 
     return Vote.objects.filter(election_id=election_id).exists()
-
-
-ELECTION_CONFIGURATION_LOCKED_DETAIL = (
-    "Election configuration is locked because voting has already started."
-)
-

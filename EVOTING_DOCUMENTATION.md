@@ -100,10 +100,24 @@ Represents an election event.
 - `year`: Election year
 - `start_time`: Voting start datetime
 - `end_time`: Voting end datetime
-- `is_active`: Boolean flag for active status
+- `voting_enabled`: The administrator-controlled enable/pause switch. The old Election API field `is_active` is temporarily returned and accepted as a deprecated alias; it is not a second database field.
+
+**Calculated lifecycle fields:**
+- `status`: `scheduled` before `start_time`; `open` from `start_time` up to but not including `end_time` when voting is enabled; `paused` in that same window when voting is disabled; and `ended` at or after `end_time`.
+- `voting_open`: True only when `voting_enabled` is true and `start_time <= now < end_time`.
+- `candidate_changes_locked`: True at or after the scheduled start, or whenever votes already exist.
+- `ballot_ready`: True when the election has at least one position and every position has at least one candidate. General election objects include this field for administration workflows.
+
+The lifecycle is calculated by the backend using timezone-aware datetimes. It is not stored and does not require a scheduled job. `Student.is_active` remains a separate student eligibility switch. A student can vote only when the election is open, the student belongs to that election, is active, and has not voted.
+
+Election creation and schedule validation require `end_time` to be later than `start_time`. Voting cannot be enabled or voters activated until the ballot is ready. Voter activation is allowed only while the election is open; scheduled, paused, and ended elections reject activation. Candidate and ballot configuration changes lock at the scheduled opening time, including while voting is paused. Existing votes also lock configuration. Once the stored start time has passed, it cannot be moved forward to reopen configuration.
+
+Staff and superusers may extend `end_time` while an election is `open` or `paused`. Extensions must move the close time later and include a reason. The operation does not change `start_time`, `voting_enabled`, or ballot configuration; a paused election remains paused. Scheduled and ended elections cannot be extended. The actor, timestamp, previous and new close times, and reason are recorded in Django Admin history.
+
+Both schedule times can be edited while an election remains `scheduled`, before its start time and before votes exist. Once an election is `ended`, its schedule and manual voting switch are read-only: the frontend hides management actions, API changes are rejected, and Django Admin does not allow changes.
 
 **Constraints:**
-- Multiple elections can be active simultaneously
+- Multiple elections can have voting enabled simultaneously. If a student ID is eligible in more than one open election, voter login returns HTTP 409 rather than choosing one.
 - Students are scoped by election_id to prevent vote mixing
 
 ### Student Model
@@ -188,15 +202,24 @@ Represents cast votes.
 
 #### List Elections
 - **GET** `/api/elections/`
-- **Description**: List all elections (public)
-- **Query Params**: `is_active` (optional)
-- **Authentication**: None required
+- **Description**: List elections visible to the authenticated management account; lifecycle data includes `voting_enabled`, `status`, `voting_open`, `candidate_changes_locked`, and `ballot_ready`.
+- **Query Params**: `voting_enabled` (optional); deprecated `is_active` alias is temporarily accepted.
+- **Authentication**: Staff, activator, or superuser according to election scope
 
 #### Create Election
 - **POST** `/api/elections/create/`
 - **Description**: Create new election
-- **Authentication**: Staff or Superuser required
+- **Authentication**: Superuser required
 - **Request**: Election data
+- **Enablement**: New elections are created with `voting_enabled: false`; configure positions and candidates before enabling voting.
+- **Schedule rule**: `end_time` must be later than `start_time`.
+
+- **PATCH** `/api/elections/{election_id}/schedule/`
+- **Description**: Change both scheduled times while the election is still scheduled and has no recorded votes.
+- **Authentication**: Staff or superuser required; staff are limited to their assigned election.
+- **Request**: `{ "start_time": "2026-10-01T09:00:00Z", "end_time": "2026-10-01T17:00:00Z" }`
+- **Validation**: The start must remain in the future and the end must be later than the start. Open, paused, and ended elections cannot use this endpoint.
+- **Audit**: Django Admin history records the acting user, action time, and previous/new schedule.
 
 #### Manage Elections
 - **GET** `/api/elections/manage/`
@@ -204,10 +227,19 @@ Represents cast votes.
 - **Authentication**: Staff or Superuser required
 
 - **PATCH** `/api/elections/manage/`
-- **Description**: Toggle election active status
+- **Description**: Enable or pause voting; this changes only the manual switch, not the calculated lifecycle status.
 - **Authentication**: Staff or Superuser required
-- **Request**: `{ election_id, is_active }`
+- **Request**: `{ election_id, voting_enabled }` (`is_active` is temporarily accepted as a deprecated alias)
+- **Response**: Election data with `voting_enabled`, `status`, and `voting_open`, plus an enable/pause detail message
 - **Rate Limiting**: 11 requests per minute (production)
+
+- **POST** `/api/elections/{election_id}/extend/`
+- **Description**: Extend an election's closing time without changing its manual voting switch or scheduled opening time.
+- **Authentication**: Staff or superuser required; staff are limited to their assigned election.
+- **Availability**: Only while the backend lifecycle status is `open` or `paused`. The new `end_time` must be later than the current close time. Scheduled and ended elections are rejected with HTTP 409.
+- **Request**: `{ "end_time": "2026-10-01T18:00:00Z", "reason": "Late election opening" }`; both fields are required and the reason is limited to 500 characters.
+- **Response**: Updated election lifecycle fields (`voting_enabled`, `status`, `voting_open`, `candidate_changes_locked`, plus the deprecated `is_active` alias) and `detail`.
+- **Audit**: Django Admin history records the acting user, action time, previous and new closing times, and reason.
 
 #### Election Stats
 - **GET** `/api/elections/{election_id}/stats/`
@@ -369,12 +401,12 @@ Students authenticate using HMAC-based tokens for voting.
 **Flow:**
 1. Student provides student_id to `/api/voter/login/`
 2. Server validates:
-   - Student exists in active election
-   - Student is activated (is_active=True)
-   - Student hasn't voted (has_voted=False)
-   - Election is within voting window
+   - Exactly one eligible student/election match exists among open elections
+   - Election `voting_open` is true
+   - Student belongs to that election and `Student.is_active=True`
+   - Student hasn't voted (`has_voted=False`)
 3. Server generates HMAC token: `HMAC(VOTER_HMAC_KEY, "{student_id}_{election_id}")`
-4. Token is returned to client
+4. Token, election lifecycle fields, and `can_vote_now` are returned to the client
 5. Client includes headers in voting requests:
    - `X-Student-Id`: student_id
    - `X-Election-Id`: election_id
@@ -387,6 +419,10 @@ Students authenticate using HMAC-based tokens for voting.
 - Voting window enforced at authentication and vote submission
 - Transactional locking prevents double-voting
 - Rate limiting prevents abuse
+
+Multiple simultaneous elections remain supported as a product policy. If a student ID is eligible in multiple open elections, login returns HTTP 409. Automatically choosing an election is a separate future product decision.
+
+Voter login reports the matching student's election lifecycle directly: scheduled elections return “Voting has not started yet,” paused elections return “Voting is currently paused,” and ended elections return “Voting has ended.” A ballot without at least one candidate for every position cannot be enabled, activated for, authenticated into, or voted in.
 
 ## Permission System
 

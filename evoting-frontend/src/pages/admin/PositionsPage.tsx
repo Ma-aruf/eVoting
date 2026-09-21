@@ -5,7 +5,6 @@ import ConfirmModal from '../../components/ConfirmModal';
 import StatisticCard from '../../components/StatisticCard';
 
 import Alert from '../../components/ui/Alert';
-import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import EmptyState from '../../components/ui/EmptyState';
 import ErrorState from '../../components/ui/ErrorState';
@@ -59,7 +58,7 @@ export default function PositionsPage() {
     const [editDisplayOrder, setEditDisplayOrder] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
 
-    const electionsQuery = useElections();
+    const electionsQuery = useElections({refetchInterval: 45_000});
     const positionsQuery = usePositions(selectedElectionId);
 
     const createPosition = useCreatePosition();
@@ -71,11 +70,28 @@ export default function PositionsPage() {
     const elections = electionsQuery.data;
     const positions = positionsQuery.data ?? [];
     const electionList = elections ?? EMPTY_ELECTIONS;
+    const ballotLockMessage = (id: number | null | undefined) => {
+        const election = electionList.find(item => item.id === id);
+
+        if (election?.status === 'ended') {
+            return 'Candidate and position changes are no longer allowed because the election has closed.';
+        }
+
+        if (election?.status === 'open' || election?.status === 'paused') {
+            return 'Candidate and position changes are no longer allowed because the election has started.';
+        }
+
+        return 'Candidate and position changes are locked for this election.';
+    };
+    const isElectionLocked = (id: number | null | undefined) =>
+        electionList.find(election => election.id === id)?.candidate_changes_locked ?? false;
 
     const selectedElection =
         electionList.find(
             election => election.id === selectedElectionId
         ) ?? null;
+    const candidateChangesLocked = isElectionLocked(selectedElectionId);
+    const editingElectionLocked = isElectionLocked(editingPosition?.election);
 
     // Select an election automatically
 
@@ -85,7 +101,7 @@ export default function PositionsPage() {
         }
 
         const target =
-            electionList.find(election => election.is_active) ??
+            electionList.find(election => !election.candidate_changes_locked) ??
             electionList[0];
 
         const frame = requestAnimationFrame(() =>
@@ -106,7 +122,7 @@ export default function PositionsPage() {
     const handleCreatePosition = (event: FormEvent) => {
         event.preventDefault();
 
-        if (!selectedElectionId) return;
+        if (!selectedElectionId || candidateChangesLocked) return;
 
         createPosition.mutate(
             {
@@ -131,7 +147,7 @@ export default function PositionsPage() {
     const handleUpdatePosition = (event: FormEvent) => {
         event.preventDefault();
 
-        if (!editingPosition) return;
+        if (!editingPosition || editingElectionLocked) return;
 
         updatePosition.mutate(
             {
@@ -153,6 +169,7 @@ export default function PositionsPage() {
     // Delete position
 
     const handleDeletePosition = async (position: Position) => {
+        if (isElectionLocked(position.election)) return;
         const confirmed = await confirmModal.confirm({
             title: 'Delete position',
             message: `Are you sure you want to delete "${position.name}"?`,
@@ -201,7 +218,8 @@ export default function PositionsPage() {
                 onClick={() =>
                     setShowCreateForm(value => !value)
                 }
-                disabled={!selectedElectionId}
+                disabled={!selectedElectionId || candidateChangesLocked}
+                title={candidateChangesLocked ? ballotLockMessage(selectedElectionId) : undefined}
             >
                 {showCreateForm ? 'Close form' : 'Add position'}
             </Button>
@@ -219,6 +237,7 @@ export default function PositionsPage() {
                     )}
                 </Alert>
             )}
+
 
             {/* Position statistics */}
 
@@ -266,7 +285,9 @@ export default function PositionsPage() {
                     label="Election"
                 >
                     {isScopedRole ? (
-                        <TextInput value={user?.assignedElection ? `${user.assignedElection.name} (${user.assignedElection.year})` : 'Assigned election unavailable'} readOnly />
+                        <TextInput
+                            value={user?.assignedElection ? `${user.assignedElection.name} (${user.assignedElection.year})` : 'Assigned election unavailable'}
+                            readOnly/>
                     ) : <SelectField
                         value={selectedElectionId ?? ''}
                         onChange={event =>
@@ -305,6 +326,11 @@ export default function PositionsPage() {
                     />
                 </FormField>
             </section>
+            {candidateChangesLocked && selectedElection && (
+                <Alert className="mt-4" variant="warning" title="Ballot changes are locked">
+                    {ballotLockMessage(selectedElectionId)}
+                </Alert>
+            )}
 
             {/* Create position modal */}
 
@@ -335,6 +361,7 @@ export default function PositionsPage() {
                             }
                             placeholder="e.g. President"
                             required
+                            disabled={candidateChangesLocked}
                         />
                     </FormField>
 
@@ -352,6 +379,7 @@ export default function PositionsPage() {
                             }
                             placeholder="1"
                             required
+                            disabled={candidateChangesLocked}
                         />
                     </FormField>
 
@@ -367,6 +395,7 @@ export default function PositionsPage() {
                         <Button
                             type="submit"
                             loading={createPosition.isPending}
+                            disabled={candidateChangesLocked}
                         >
                             Add position
                         </Button>
@@ -398,6 +427,7 @@ export default function PositionsPage() {
                                 setEditPositionName(event.target.value)
                             }
                             required
+                            disabled={editingElectionLocked}
                         />
                     </FormField>
 
@@ -414,6 +444,7 @@ export default function PositionsPage() {
                                 setEditDisplayOrder(event.target.value)
                             }
                             required
+                            disabled={editingElectionLocked}
                         />
                     </FormField>
 
@@ -429,6 +460,7 @@ export default function PositionsPage() {
                         <Button
                             type="submit"
                             loading={updatePosition.isPending}
+                            disabled={editingElectionLocked}
                         >
                             Update position
                         </Button>
@@ -454,12 +486,6 @@ export default function PositionsPage() {
                                 : 'Positions'}
                         </h2>
                     </div>
-
-                    {selectedElection && (
-                        <Badge variant="primary">
-                            {selectedElection.year}
-                        </Badge>
-                    )}
                 </div>
 
                 {/* Loading, error and empty states */}
@@ -532,7 +558,7 @@ export default function PositionsPage() {
                             <tbody>
                             {filteredPositions.map(position => (
                                 <tr key={position.id}>
-                                    <td className="management-table-cell--primary" data-label="Position">
+                                    <td data-label="Position">
                                         {position.name}
                                     </td>
 
@@ -546,6 +572,8 @@ export default function PositionsPage() {
                                                 label={`Edit ${position.name}`}
                                                 size="compact"
                                                 variant="quiet"
+                                                disabled={isElectionLocked(position.election)}
+                                                title={isElectionLocked(position.election) ? ballotLockMessage(position.election) : undefined}
                                                 icon={
                                                     <FiEdit2
                                                         aria-hidden="true"
@@ -562,6 +590,8 @@ export default function PositionsPage() {
                                                 label={`Delete ${position.name}`}
                                                 size="compact"
                                                 variant="danger"
+                                                disabled={isElectionLocked(position.election)}
+                                                title={isElectionLocked(position.election) ? ballotLockMessage(position.election) : undefined}
                                                 icon={
                                                     <FiTrash2
                                                         aria-hidden="true"

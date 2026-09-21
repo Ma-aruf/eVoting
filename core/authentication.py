@@ -6,6 +6,7 @@ from django.utils.translation import gettext as _
 from django.utils import timezone
 from .models import Student, Election
 from .utils import verify_voter_hmac
+from .election_lifecycle import election_lifecycle
 
 
 class StudentUser:
@@ -44,27 +45,35 @@ class VoterAuthentication(BaseAuthentication):
         if not student_id or not token or not election_id:
             return None  # allow other authenticators to run or cause IsAuthenticated to fail
 
-        # Validate and get the specific election
+        # Validate and get the specific election. Availability comes from the
+        # single lifecycle service, not from the manual enable flag alone.
         try:
-            election = Election.objects.get(pk=election_id, is_active=True)
+            election = Election.objects.get(pk=election_id)
         except Election.DoesNotExist:
             self.security_logger.warning(
                 f"AUTH_FAILED_ELECTION: student_id={student_id}, election_id={election_id}, ip={client_ip}"
             )
-            raise AuthenticationFailed(_("Election not found or not active."))
+            raise AuthenticationFailed(_("Election not found."))
 
-        # Validate voting window
         now = timezone.now()
-        if now < election.start_time:
+        lifecycle = election_lifecycle(
+            election, now, include_candidate_lock=False
+        )
+        if lifecycle["status"] == "scheduled":
             self.security_logger.warning(
                 f"AUTH_FAILED_EARLY: student_id={student_id}, election_id={election_id}, ip={client_ip}"
             )
             raise AuthenticationFailed(_("Voting has not started yet."))
-        if now > election.end_time:
+        if lifecycle["status"] == "ended":
             self.security_logger.warning(
                 f"AUTH_FAILED_LATE: student_id={student_id}, election_id={election_id}, ip={client_ip}"
             )
             raise AuthenticationFailed(_("Voting has ended."))
+        if not lifecycle["voting_open"]:
+            self.security_logger.warning(
+                f"AUTH_FAILED_PAUSED: student_id={student_id}, election_id={election_id}, ip={client_ip}"
+            )
+            raise AuthenticationFailed(_("Voting is paused for this election."))
 
         # Use composite lookup: student_id + election_id
         try:

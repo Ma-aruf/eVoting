@@ -887,10 +887,10 @@
 .users-table th {
     padding: 6px 8px;
     border-bottom: 1px solid var(--color-border-strong);
-    color: #475569;
-    background: #dbeafe;
+    color: var(--color-surface);
+    background: var(--color-primary);
     font-size: var(--font-size-xs);
-    font-weight: 600;
+    font-weight: 500;
     text-align: left;
 }
 
@@ -938,10 +938,11 @@
     height: 2.25rem;
     place-items: center;
     border: 1px solid transparent;
-    border-radius: 0;
+    border-radius: var(--radius-pill);
     background: transparent;
     cursor: pointer;
     font-size: 1rem;
+    transition: transform 0.3s ease, background 0.3s ease;
 }
 
 .users-icon-button--edit {
@@ -954,14 +955,13 @@
 
 .users-icon-button:hover,
 .users-icon-button:focus-visible {
-    outline: 2px solid var(--color-focus-outline);
     outline-offset: 1px;
-    background: #eff6ff;
+    background: rgba(107, 131, 155, 0.16);
 }
 
 .users-icon-button--delete:hover,
 .users-icon-button--delete:focus-visible {
-    background: #fef2f2;
+    background: rgba(107, 131, 155, 0.16);
 }
 
 .users-icon-button:disabled {
@@ -1346,22 +1346,17 @@
 }
 
 .activations-page .statistic-card {
-    position: relative;
-    display: grid;
-    grid-template-columns: 30% 70%;
-    grid-template-rows: auto 1fr;
     height: 6rem;
-    padding: 0;
-    overflow: hidden;
     border-radius: 0;
     border-top: 1px solid var(--color-border);
 }
 
-.activations-page .statistic-card-heading {
+.activations-page .statistic-card--split .statistic-card-content {
+    padding: .75rem 1rem;
+}
+
+.activations-page .statistic-card--split .statistic-card-heading {
     display: block;
-    grid-column: 2;
-    grid-row: 1;
-    padding: .75rem 1rem 0;
 }
 
 .activations-page .statistic-card-label {
@@ -1369,19 +1364,15 @@
 }
 
 .activations-page .statistic-card-value {
-    grid-column: 2;
-    grid-row: 2;
-    align-self: start;
-    margin: .25rem 1rem 0;
+    margin: .25rem 0 0;
     font-size: 1.625rem;
 }
 
 .activations-page .statistic-card-icon {
-    position: absolute;
-    inset: 0 auto 0 0;
     display: grid;
-    width: 30%;
+    width: auto;
     height: auto;
+    min-height: 100%;
     place-items: center;
     border-radius: 0;
     color: var(--color-text-inverse);
@@ -1758,6 +1749,7 @@
     font-size: var(--font-size-xs);
     font-weight: 400;
     text-align: left;
+    text-transform: unset;
 }
 
 .management-table.elections-table td {
@@ -2052,6 +2044,12 @@
     border-bottom: 1px solid var(--color-border);
 }
 
+.active-election-header > div {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+
 .active-election-icon {
     display: block;
     width: 1.25rem;
@@ -2059,6 +2057,7 @@
     color: var(--color-primary);
     background: transparent;
     font-size: 1.25rem;
+    flex-shrink: 0;
 }
 
 .active-election-header h3 {
@@ -2332,6 +2331,7 @@
     border-bottom: 1px solid var(--color-border);
     color: var(--color-text);
     vertical-align: middle;
+    font-size: var(--font-size-xs);
 }
 
 .management-table tbody tr:last-child td {
@@ -2434,10 +2434,6 @@
         font-weight: 500;
         text-align: left;
         text-transform: uppercase;
-    }
-
-    .management-table td.management-table-cell--primary {
-        font-weight: 500;
     }
 
     .management-row-actions {

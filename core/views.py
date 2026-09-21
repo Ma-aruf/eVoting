@@ -1,8 +1,12 @@
 from io import BytesIO
 import logging
 import sys
+from contextlib import contextmanager
 
+from django.contrib.admin.models import CHANGE, LogEntry
+from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import ProtectedError
 from django.shortcuts import get_object_or_404
@@ -35,15 +39,42 @@ from .serializers import (
     PositionSerializer,
     CandidateSerializer,
     MultiVoteSerializer,
+    ElectionToggleSerializer,
+    ElectionEndTimeExtensionSerializer,
+    ElectionScheduleUpdateSerializer,
     UserSerializer,
 )
 from .utils import (
     generate_voter_hmac,
     election_has_votes,
-    ELECTION_CONFIGURATION_LOCKED_DETAIL,
+)
+from .election_lifecycle import (
+    election_ballot_ready,
+    election_lifecycle,
+    election_status,
+    student_can_vote_now,
+    ballot_change_lock_detail,
 )
 
 User = get_user_model()
+
+
+@contextmanager
+def ballot_change_transaction(*election_ids):
+    """Lock affected elections and enforce the shared ballot freeze rule."""
+    ids = sorted({int(election_id) for election_id in election_ids if election_id})
+    with transaction.atomic():
+        elections = list(
+            Election.objects.select_for_update()
+            .filter(pk__in=ids)
+            .order_by("pk")
+        )
+        now = timezone.now()
+        for election in elections:
+            detail = ballot_change_lock_detail(election, now)
+            if detail:
+                raise serializers.ValidationError({"detail": detail})
+        yield {election.pk: election for election in elections}
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -67,11 +98,18 @@ class ElectionViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAdminUser]
 
     def get_queryset(self):
-        # Optional: allow filtering by is_active
         queryset = scope_queryset(Election.objects.all(), self.request.user, "id")
-        is_active = self.request.query_params.get('is_active')
-        if is_active is not None:
-            queryset = queryset.filter(is_active=is_active.lower() == 'true')
+        voting_enabled = self.request.query_params.get("voting_enabled")
+        legacy_is_active = self.request.query_params.get("is_active")
+        boolean = serializers.BooleanField()
+        if voting_enabled is not None and legacy_is_active is not None:
+            if boolean.run_validation(voting_enabled) != boolean.run_validation(legacy_is_active):
+                raise serializers.ValidationError({
+                    "voting_enabled": "Conflicts with the deprecated is_active query parameter."
+                })
+        value = voting_enabled if voting_enabled is not None else legacy_is_active
+        if value is not None:
+            queryset = queryset.filter(voting_enabled=boolean.run_validation(value))
         return queryset
 
 
@@ -261,10 +299,19 @@ class PositionViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         election = serializer.validated_data["election"]
         get_scoped_election_or_404(self.request.user, election.pk)
-        if election_has_votes(election.pk):
-            from rest_framework.exceptions import ValidationError
-            raise ValidationError({"detail": ELECTION_CONFIGURATION_LOCKED_DETAIL})
-        serializer.save()
+        with ballot_change_transaction(election.pk):
+            serializer.save()
+
+    def perform_update(self, serializer):
+        position = serializer.instance
+        target = serializer.validated_data.get("election", position.election)
+        get_scoped_election_or_404(self.request.user, target.pk)
+        with ballot_change_transaction(position.election_id, target.pk):
+            serializer.save()
+
+    def perform_destroy(self, instance):
+        with ballot_change_transaction(instance.election_id):
+            instance.delete()
 
 
 class PositionCreateView(APIView):
@@ -292,23 +339,14 @@ class PositionCreateView(APIView):
             get_scoped_election_or_404(request.user, serializer.validated_data["election"].pk)
         except Election.DoesNotExist:
             raise ParseError("Election not found.")
-        if election_has_votes(serializer.validated_data["election"].pk):
-            return Response(
-                {"detail": ELECTION_CONFIGURATION_LOCKED_DETAIL},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        position = serializer.save()
+        with ballot_change_transaction(serializer.validated_data["election"].pk):
+            position = serializer.save()
         return Response(PositionSerializer(position).data, status=status.HTTP_201_CREATED)
 
     def put(self, request, pk):
         position = get_object_or_404(
             scope_queryset(Position.objects.all(), request.user), pk=pk
         )
-        if election_has_votes(position.election_id):
-            return Response(
-                {"detail": ELECTION_CONFIGURATION_LOCKED_DETAIL},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
         serializer = PositionSerializer(
             position,
             data=request.data,
@@ -320,7 +358,9 @@ class PositionCreateView(APIView):
                 get_scoped_election_or_404(request.user, serializer.validated_data["election"].pk)
             except Election.DoesNotExist:
                 raise ParseError("Election not found.")
-        position = serializer.save()
+        target = serializer.validated_data.get("election", position.election)
+        with ballot_change_transaction(position.election_id, target.pk):
+            position = serializer.save()
         return Response(
             PositionSerializer(position).data,
             status=status.HTTP_200_OK
@@ -333,13 +373,9 @@ class PositionCreateView(APIView):
         position = get_object_or_404(
             scope_queryset(Position.objects.all(), request.user), pk=pk
         )
-        if election_has_votes(position.election_id):
-            return Response(
-                {"detail": ELECTION_CONFIGURATION_LOCKED_DETAIL},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
         try:
-            position.delete()
+            with ballot_change_transaction(position.election_id):
+                position.delete()
         except ProtectedError:
             return Response(
                 {"detail": "Position cannot be deleted because votes exist for it."},
@@ -402,12 +438,9 @@ class CandidateCreateView(APIView):
             )
         except Election.DoesNotExist:
             raise ParseError("Election not found.")
-        if election_has_votes(serializer.validated_data["position"].election_id):
-            return Response(
-                {"detail": ELECTION_CONFIGURATION_LOCKED_DETAIL},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        candidate = serializer.save()
+        election_id = serializer.validated_data["position"].election_id
+        with ballot_change_transaction(election_id):
+            candidate = serializer.save()
         return Response(CandidateSerializer(candidate).data, status=status.HTTP_201_CREATED)
 
     # EDIT
@@ -416,34 +449,6 @@ class CandidateCreateView(APIView):
             scope_queryset(Candidate.objects.all(), request.user, "position__election_id"),
             pk=pk,
         )
-        election_locked = election_has_votes(candidate.position.election_id)
-        if election_locked and any(
-            field in request.data
-            and str(request.data[field]) != str(getattr(candidate, f"{field}_id"))
-            for field in ("student", "position")
-        ):
-            return Response(
-                {"detail": ELECTION_CONFIGURATION_LOCKED_DETAIL},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if election_locked and "ballot_number" in request.data and (
-            str(request.data["ballot_number"]) != str(candidate.ballot_number)
-        ):
-            return Response(
-                {"detail": ELECTION_CONFIGURATION_LOCKED_DETAIL},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if Vote.objects.filter(candidate=candidate).exists():
-            changing_assignment = any(
-                field in request.data
-                and str(request.data[field]) != str(getattr(candidate, f"{field}_id"))
-                for field in ("student", "position")
-            )
-            if changing_assignment:
-                return Response(
-                    {"detail": "Candidate assignment cannot be changed after votes exist."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
         serializer = CandidateSerializer(
             candidate,
             data=request.data,
@@ -455,7 +460,10 @@ class CandidateCreateView(APIView):
             get_scoped_election_or_404(request.user, effective_position.election_id)
         except Election.DoesNotExist:
             raise ParseError("Election not found.")
-        candidate = serializer.save()
+        with ballot_change_transaction(
+            candidate.position.election_id, effective_position.election_id
+        ):
+            candidate = serializer.save()
         return Response(
             CandidateSerializer(candidate).data,
             status=status.HTTP_200_OK
@@ -470,13 +478,9 @@ class CandidateCreateView(APIView):
             scope_queryset(Candidate.objects.all(), request.user, "position__election_id"),
             pk=pk,
         )
-        if election_has_votes(candidate.position.election_id):
-            return Response(
-                {"detail": ELECTION_CONFIGURATION_LOCKED_DETAIL},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
         try:
-            candidate.delete()
+            with ballot_change_transaction(candidate.position.election_id):
+                candidate.delete()
         except ProtectedError:
             return Response(
                 {"detail": "Candidate cannot be deleted because votes exist for it."},
@@ -490,7 +494,7 @@ class CandidateCreateView(APIView):
 
 class ElectionManageView(APIView):
     """
-    Staff or superuser can start/stop elections by toggling `is_active`.
+    Staff or superuser can enable or pause voting for an election.
     """
 
     permission_classes = [IsStaffOrSuperUser]
@@ -506,28 +510,18 @@ class ElectionManageView(APIView):
 
     def patch(self, request):
         """
-        Accepts JSON: { "election_id": 1, "is_active": true }
-        Multiple elections can be active simultaneously.
+        Accepts JSON: { "election_id": 1, "voting_enabled": true }.
+        The deprecated `is_active` input alias remains during frontend rollout.
+        Multiple elections can have voting enabled simultaneously.
         """
-        election_id = request.data.get("election_id")
-        is_active = request.data.get("is_active")
+        toggle_serializer = ElectionToggleSerializer(data=request.data)
+        toggle_serializer.is_valid(raise_exception=True)
+        election_id = toggle_serializer.validated_data["election_id"]
+        voting_enabled = toggle_serializer.validated_data["voting_enabled"]
         
         # Get client IP and user for logging
         client_ip = request.META.get('REMOTE_ADDR')
         user = request.user
-
-        if election_id is None:
-            return Response(
-                {"detail": "election_id required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if is_active is None:
-            return Response(
-                {"detail": "is_active required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        is_active = serializers.BooleanField().run_validation(is_active)
 
         try:
             election = get_scoped_election_or_404(request.user, election_id)
@@ -538,22 +532,159 @@ class ElectionManageView(APIView):
             )
 
         with transaction.atomic():
-            # Allow multiple elections to be active simultaneously
-            # Students are scoped by election_id, so no vote mixing occurs
-            election.is_active = is_active
-            election.save(update_fields=["is_active"])
+            # Multiple elections remain independently enableable.
+            election = Election.objects.select_for_update().get(pk=election.pk)
+            if election_status(election) == "ended":
+                return Response(
+                    {"detail": "Ended elections cannot be changed."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            if voting_enabled and not election_ballot_ready(election):
+                return Response(
+                    {
+                        "detail": (
+                            "Configure at least one position and add at least one candidate "
+                            "to every position before enabling voting."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            election.voting_enabled = voting_enabled
+            election.save(update_fields=["voting_enabled"])
             
-            # Log election status change
-            action = "STARTED" if is_active else "STOPPED"
+            action = "ENABLED" if voting_enabled else "PAUSED"
             self.security_logger.info(
-                f"ELECTION_{action}: election_id={election_id}, election_name={election.name}, "
+                f"ELECTION_VOTING_{action}: election_id={election_id}, election_name={election.name}, "
                 f"user={user.username if user else 'unknown'}, ip={client_ip}"
             )
 
-        return Response(
-            {"detail": "Election status updated.", "id": election.pk, "is_active": election.is_active},
-            status=status.HTTP_200_OK,
-        )
+        payload = ElectionSerializer(election).data
+        payload["detail"] = "Voting enabled." if voting_enabled else "Voting paused."
+        return Response(payload, status=status.HTTP_200_OK)
+
+
+class ElectionScheduleUpdateView(APIView):
+    """Update both schedule times while an election is still scheduled."""
+
+    permission_classes = [IsStaffOrSuperUser]
+
+    def patch(self, request, election_id):
+        serializer = ElectionScheduleUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        start_time = serializer.validated_data["start_time"]
+        end_time = serializer.validated_data["end_time"]
+
+        try:
+            with transaction.atomic():
+                election = get_scoped_election_or_404(request.user, election_id)
+                election = Election.objects.select_for_update().get(pk=election.pk)
+
+                if election_status(election) != "scheduled":
+                    return Response(
+                        {"detail": "Only scheduled elections can have their schedule changed."},
+                        status=status.HTTP_409_CONFLICT,
+                    )
+                if election_has_votes(election.pk):
+                    return Response(
+                        {"detail": "The schedule cannot be changed after votes have been recorded."},
+                        status=status.HTTP_409_CONFLICT,
+                    )
+                if start_time <= timezone.now():
+                    return Response(
+                        {"start_time": ["The new start time must be in the future."]},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                old_start_time = election.start_time
+                old_end_time = election.end_time
+                election.start_time = start_time
+                election.end_time = end_time
+                election.full_clean()
+                election.save(update_fields=["start_time", "end_time"])
+
+                LogEntry.objects.create(
+                    user=request.user,
+                    content_type=ContentType.objects.get_for_model(Election),
+                    object_id=str(election.pk),
+                    object_repr=str(election),
+                    action_flag=CHANGE,
+                    change_message=(
+                        "Election schedule changed from "
+                        f"{old_start_time.isoformat()} – {old_end_time.isoformat()} to "
+                        f"{start_time.isoformat()} – {end_time.isoformat()}."
+                    ),
+                )
+        except Election.DoesNotExist:
+            return Response(
+                {"detail": "Election not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except DjangoValidationError as exc:
+            return Response(
+                getattr(exc, "message_dict", {"detail": exc.messages}),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        payload = ElectionSerializer(election).data
+        payload["detail"] = "Election schedule updated."
+        return Response(payload, status=status.HTTP_200_OK)
+
+
+class ElectionEndTimeExtensionView(APIView):
+    """Extend an open or paused election's closing time with an audit reason."""
+
+    permission_classes = [IsStaffOrSuperUser]
+
+    def post(self, request, election_id):
+        serializer = ElectionEndTimeExtensionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        new_end_time = serializer.validated_data["end_time"]
+        reason = serializer.validated_data["reason"]
+
+        try:
+            with transaction.atomic():
+                election = get_scoped_election_or_404(request.user, election_id)
+                election = Election.objects.select_for_update().get(pk=election.pk)
+
+                if election_status(election) not in {"open", "paused"}:
+                    return Response(
+                        {"detail": "The closing time can only be extended while the election is open or paused."},
+                        status=status.HTTP_409_CONFLICT,
+                    )
+
+                if new_end_time <= election.end_time:
+                    return Response(
+                        {"end_time": ["The new closing time must be later than the current closing time."]},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                old_end_time = election.end_time
+                election.end_time = new_end_time
+                # Extending the voting window is allowed after votes exist; it
+                # does not change any ballot configuration or the start time.
+                election.save(update_fields=["end_time"])
+
+                LogEntry.objects.create(
+                    user=request.user,
+                    content_type=ContentType.objects.get_for_model(Election),
+                    object_id=str(election.pk),
+                    object_repr=str(election),
+                    action_flag=CHANGE,
+                    change_message=(
+                        "Election closing time extended from "
+                        f"{old_end_time.isoformat()} to {new_end_time.isoformat()}. "
+                        f"Reason: {reason}"
+                    ),
+                )
+        except Election.DoesNotExist:
+            return Response(
+                {"detail": "Election not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        payload = ElectionSerializer(election).data
+        payload["detail"] = "Election closing time extended."
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 class MultiVoteView(APIView):
@@ -655,7 +786,45 @@ class MultiVoteView(APIView):
                     )
 
                 votes_to_create = []
-                election_cache = {}
+                authenticated_election = (
+                    Election.objects.select_for_update()
+                    .filter(pk=student.election_id)
+                    .first()
+                )
+                if authenticated_election is None:
+                    return Response(
+                        {"detail": "Election not found."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                lifecycle = election_lifecycle(
+                    authenticated_election, now, include_candidate_lock=False
+                )
+                if not lifecycle["voting_open"]:
+                    detail = {
+                        "scheduled": "Voting has not started yet.",
+                        "paused": "Voting is paused for this election.",
+                        "ended": "Voting has ended.",
+                    }.get(lifecycle["status"], "Voting is not open.")
+                    return Response(
+                        {"detail": detail}, status=status.HTTP_403_FORBIDDEN
+                    )
+                if not election_ballot_ready(authenticated_election):
+                    return Response(
+                        {
+                            "detail": (
+                                "Voting is unavailable because the ballot is not ready. "
+                                "Please contact an administrator."
+                            )
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                if not student_can_vote_now(student, authenticated_election, now):
+                    return Response(
+                        {"detail": "Student is not eligible to vote now."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+
+                election_cache = {student.election_id: authenticated_election}
                 position_cache = {}
                 candidate_cache = {}
                 for vote_data in data["votes"]:
@@ -672,23 +841,17 @@ class MultiVoteView(APIView):
                             status=status.HTTP_400_BAD_REQUEST,
                         )
 
-                    # Load and validate election (must be active and within window)
                     election = election_cache.get(election_id)
                     if election is None:
                         election = (
-                            Election.objects.filter(pk=election_id, is_active=True)
+                            Election.objects.filter(pk=election_id)
                             .select_for_update()
                             .first()
                         )
                         election_cache[election_id] = election
                     if election is None:
                         return Response(
-                            {"detail": "Election is not active or does not exist."},
-                            status=status.HTTP_403_FORBIDDEN,
-                        )
-                    if election.start_time > now or election.end_time < now:
-                        return Response(
-                            {"detail": "Election is not within the voting window."},
+                            {"detail": "Election does not exist."},
                             status=status.HTTP_403_FORBIDDEN,
                         )
 
@@ -775,7 +938,7 @@ class MultiVoteView(APIView):
             )
 
         return Response(
-            {"detail": "All votes submitted successfully."},
+            {"detail": "All votes submitted successfully.", "can_vote_now": False},
             status=status.HTTP_201_CREATED,
         )
 
@@ -793,6 +956,8 @@ class MeView(APIView):
                     "id": user.assigned_election.id,
                     "name": user.assigned_election.name,
                     "year": user.assigned_election.year,
+                    "voting_enabled": user.assigned_election.voting_enabled,
+                    **election_lifecycle(user.assigned_election),
                 }
                 if user.assigned_election_id
                 else None
@@ -871,16 +1036,6 @@ class StudentActivationView(APIView):
 
         is_active = serializers.BooleanField().run_validation(is_active)
 
-        if is_active and not election.is_active:
-            self.security_logger.warning(
-                f"ACTIVATION_DENIED_INACTIVE_ELECTION: student_id={student_id}, election_id={election_id}, "
-                f"user={user.username if user else 'unknown'}, ip={client_ip}"
-            )
-            return Response(
-                {"detail": "Voters cannot be activated for an inactive election."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
         try:
             # Find student by both student_id and election_id
             student = Student.objects.get(student_id=student_id, election_id=election_id)
@@ -889,6 +1044,34 @@ class StudentActivationView(APIView):
                 {"detail": "Student not found in this election."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+        if is_active:
+            lifecycle_status = election_status(election)
+            if lifecycle_status == "scheduled":
+                return Response(
+                    {"detail": "Voters can only be activated while voting is open."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if lifecycle_status == "paused":
+                return Response(
+                    {"detail": "Voters cannot be activated while voting is currently paused."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if lifecycle_status == "ended":
+                return Response(
+                    {"detail": "Voters cannot be activated after voting has ended."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if not election_ballot_ready(election):
+                return Response(
+                    {
+                        "detail": (
+                            "Add at least one position and at least one candidate to every "
+                            "position before activating voters."
+                        )
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
         # Check if student has already voted (cannot be activated if voted)
         if student.has_voted:
@@ -985,68 +1168,80 @@ class StudentVoterLoginView(APIView):
             )
 
         now = timezone.now()
-
-        # Find all active elections within voting window
-        active_elections = Election.objects.filter(
-            is_active=True,
-            start_time__lte=now,
-            end_time__gte=now
+        matching_students = list(
+            Student.objects.filter(student_id=student_id).select_related("election")
         )
-
-        if not active_elections.exists():
-            return Response(
-                {"detail": "No active election at this time."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        # Find the student who is ACTIVATED (is_active=True) in any of the active elections
-        # Student identity = student_id + election_id (composite)
-        # A student can only be activated in one election at a time
-        try:
-            student = Student.objects.get(
-                student_id=student_id,
-                election__in=active_elections,
-                is_active=True,  # Must be activated to vote
-                has_voted=False  # Must not have voted yet
-            )
-            active_election = student.election
-        except Student.DoesNotExist:
-            # Check if student exists but is not activated or has voted
-            existing_student = Student.objects.filter(
-                student_id=student_id,
-                election__in=active_elections
-            ).first()
-            
-            if existing_student:
-                if existing_student.has_voted:
-                    self.security_logger.warning(
-                        f"LOGIN_DENIED_VOTED: student_id={student_id}, ip={client_ip}"
-                    )
-                    return Response(
-                        {"detail": "Student has already voted."},
-                        status=status.HTTP_409_CONFLICT,
-                    )
-                else:
-                    self.security_logger.warning(
-                        f"LOGIN_DENIED_INACTIVE: student_id={student_id}, ip={client_ip}"
-                    )
-                    return Response(
-                        {"detail": "Student is not activated to vote."},
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
+        if not matching_students:
             self.security_logger.warning(
                 f"LOGIN_NOT_FOUND: student_id={student_id}, ip={client_ip}"
             )
             return Response(
-                {"detail": "Student not found in any active election."},
+                {"detail": "Student not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        except Student.MultipleObjectsReturned:
-            # Edge case: same student_id activated in multiple elections simultaneously
+
+        status_by_election = {
+            student.election_id: election_status(student.election, now)
+            for student in matching_students
+        }
+        open_students = [
+            student for student in matching_students
+            if status_by_election[student.election_id] == "open"
+        ]
+        eligible_students = [
+            student for student in open_students
+            if election_ballot_ready(student.election)
+            and student_can_vote_now(student, student.election, now)
+        ]
+        if len(eligible_students) == 1:
+            student = eligible_students[0]
+            active_election = student.election
+        elif len(eligible_students) > 1:
             return Response(
-                {"detail": "Student is activated in multiple elections. Please contact administrator."},
+                {"detail": "Student is eligible to vote in multiple elections. Please contact an administrator."},
                 status=status.HTTP_409_CONFLICT,
             )
+        elif open_students:
+            if len(open_students) > 1:
+                return Response(
+                    {"detail": "Student ID is associated with more than one open election."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            open_student = open_students[0]
+            if not election_ballot_ready(open_student.election):
+                return Response(
+                    {
+                        "detail": (
+                            "Voting is unavailable because the ballot is not ready. "
+                            "Please contact an administrator."
+                        )
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if open_student.has_voted:
+                self.security_logger.warning(
+                    f"LOGIN_DENIED_VOTED: student_id={student_id}, ip={client_ip}"
+                )
+                return Response(
+                    {"detail": "Student has already voted."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            self.security_logger.warning(
+                f"LOGIN_DENIED_INACTIVE: student_id={student_id}, ip={client_ip}"
+            )
+            return Response(
+                {"detail": "Student is not activated to vote."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        else:
+            states = set(status_by_election.values())
+            if "paused" in states:
+                detail = "Voting is currently paused. Please try again later."
+            elif "scheduled" in states:
+                detail = "Voting has not started yet."
+            else:
+                detail = "Voting has ended."
+            return Response({"detail": detail}, status=status.HTTP_403_FORBIDDEN)
 
         # Generate HMAC token (include election_id to scope the token)
         token = generate_voter_hmac(f"{student.student_id}_{active_election.id}")
@@ -1056,8 +1251,12 @@ class StudentVoterLoginView(APIView):
             f"LOGIN_SUCCESS: student_id={student.student_id}, election_id={active_election.id}, ip={client_ip}"
         )
 
+        election_lifecycle_data = election_lifecycle(
+            active_election, now, include_candidate_lock=False
+        )
         return Response({
             "token": token,
+            "can_vote_now": student_can_vote_now(student, active_election, now),
             "student": {
                 "id": student.id,
                 "student_id": student.student_id,
@@ -1068,6 +1267,8 @@ class StudentVoterLoginView(APIView):
                 "id": active_election.id,
                 "name": active_election.name,
                 "year": active_election.year,
+                "voting_enabled": active_election.voting_enabled,
+                **election_lifecycle_data,
             }
         }, status=status.HTTP_200_OK)
 
@@ -1091,6 +1292,8 @@ class ElectionStatsView(APIView):
         return Response({
             "election_id": election.id,
             "election_name": election.name,
+            "voting_enabled": election.voting_enabled,
+            **election_lifecycle(election),
             "total_voters": total_voters,
             "voters_voted": voters_voted,
             "turnout_percentage": round((voters_voted / total_voters * 100), 2) if total_voters > 0 else 0.0
@@ -1136,6 +1339,8 @@ class PositionStatsView(APIView):
             "position_id": position.id,
             "position_name": position.name,
             "election": election.name,
+            "voting_enabled": election.voting_enabled,
+            **election_lifecycle(election),
             "unique_voters_in_election": unique_voters,
             "votes_for_this_position": position_votes,
             "skipped_votes": skipped,
@@ -1218,6 +1423,8 @@ class ElectionResultsView(APIView):
             "election_id": election.id,
             "election_name": election.name,
             "year": election.year,
+            "voting_enabled": election.voting_enabled,
+            **election_lifecycle(election),
             "total_students": total_students,
             "students_who_voted": students_who_voted,
             "voter_turnout_percentage": round((students_who_voted / total_students * 100),

@@ -6,7 +6,7 @@ import LoadingSkeleton from '../../components/ui/LoadingSkeleton';
 import StatisticCard from '../../components/StatisticCard';
 import {useDashboardStatsForElections} from '../../queries/useDashboard.ts';
 import {useElections} from '../../queries/useElections';
-import {useAuth} from '../../hooks/useAuth';
+import ElectionStatusBadge from '../../components/ElectionStatusBadge';
 
 function formatDateTime(value: string | undefined) {
     if (!value) return 'Not set';
@@ -22,11 +22,12 @@ function formatDateTime(value: string | undefined) {
 
 
 export default function Dashboard() {
-    const {user} = useAuth();
-    const electionsQuery = useElections();
+    const electionsQuery = useElections({refetchInterval: 45_000});
     const elections = electionsQuery.data ?? [];
 
-    const visibleElections = user?.role === 'staff' ? elections : elections.filter(election => election.is_active);
+    const visibleElections = elections.filter(
+        election => election.status === 'open' || election.status === 'paused'
+    );
     const visibleElectionIds = visibleElections.map(election => election.id);
 
     const statsQueries = useDashboardStatsForElections(visibleElectionIds);
@@ -151,11 +152,12 @@ export default function Dashboard() {
 
                     <section
                         className="dashboard-section"
-                        aria-labelledby="active-elections-heading"
+                        aria-labelledby="elections-overview-heading"
                     >
                         <div className="dashboard-section-heading">
                             <div>
-                                <p className="dashboard-kicker">{user?.role === 'staff' ? 'Assigned election' : 'Active elections'}</p>
+                                <p className="dashboard-kicker">Open and paused elections</p>
+                                <h2 id="elections-overview-heading" className="sr-only">Current election overview</h2>
                             </div>
                         </div>
 
@@ -170,7 +172,7 @@ export default function Dashboard() {
                                                 <div>
                                                     <h3>{election.name}</h3>
                                                     <p>Election year {election.year}</p>
-                                                    <p>{election.is_active ? 'Active' : 'Inactive'}</p>
+                                                    <ElectionStatusBadge status={election.status}/>
                                                 </div>
                                             </div>
                                             {electionStatsQuery?.isError ?
@@ -210,8 +212,8 @@ export default function Dashboard() {
                             </div>
                         ) : (
                             <EmptyState
-                                title={user?.role === 'staff' ? 'Assigned election unavailable' : 'No active elections'}
-                                message={user?.role === 'staff' ? 'Your assigned election could not be found.' : 'Activate an election to see voter activity and election statistics here.'}
+                                title="No open or paused elections"
+                                message="Only elections that are currently open or paused appear on the dashboard."
                                 icon={<FiCalendar/>}
                             />
                         )}

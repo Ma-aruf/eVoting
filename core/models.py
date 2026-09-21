@@ -1,7 +1,8 @@
 from django.db import models
-from django.db.models import Q
+from django.db.models import F, Q
 from django.contrib.auth.models import AbstractUser, UserManager as DjangoUserManager
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 
 class UserManager(DjangoUserManager):
@@ -84,7 +85,68 @@ class Election(models.Model):
     year = models.PositiveIntegerField()
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
-    is_active = models.BooleanField(default=False)
+    voting_enabled = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(end_time__gt=F("start_time")),
+                name="election_end_after_start",
+            ),
+        ]
+
+    @property
+    def status(self):
+        from .election_lifecycle import election_status
+
+        return election_status(self)
+
+    @property
+    def voting_open(self):
+        from .election_lifecycle import election_lifecycle
+
+        return election_lifecycle(self, include_candidate_lock=False)["voting_open"]
+
+    @property
+    def candidate_changes_locked(self):
+        from .election_lifecycle import candidate_changes_locked
+
+        return candidate_changes_locked(self)
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if (
+            self.start_time is not None
+            and self.end_time is not None
+            and self.end_time <= self.start_time
+        ):
+            errors["end_time"] = "The election must end after its starting time."
+
+        if self.pk:
+            from .election_lifecycle import START_TIME_LOCKED_DETAIL
+            from .utils import election_has_votes
+
+            original = type(self).objects.filter(pk=self.pk).values(
+                "name", "year", "start_time", "end_time"
+            ).first()
+            if original:
+                if (
+                    self.start_time is not None
+                    and timezone.now() >= original["start_time"]
+                    and self.start_time > original["start_time"]
+                ):
+                    errors["start_time"] = START_TIME_LOCKED_DETAIL
+                if election_has_votes(self.pk) and any(
+                    getattr(self, field) != original[field]
+                    for field in ("name", "year", "start_time", "end_time")
+                ):
+                    errors["__all__"] = (
+                        "Election settings cannot be changed after voting activity."
+                    )
+
+        if errors:
+            raise ValidationError(errors)
 
     def __str__(self):
         return f"{self.name}, ({self.year})"

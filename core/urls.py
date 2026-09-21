@@ -14,6 +14,8 @@ from .views import (
     ElectionCreateView,
     CandidateCreateView,
     ElectionManageView,
+    ElectionScheduleUpdateView,
+    ElectionEndTimeExtensionView,
     StudentVoterLoginView,
     ElectionStatsView,
     PositionStatsView,
@@ -70,6 +72,8 @@ urlpatterns = [
 
     # Election management
     path("elections/manage/", ElectionManageView.as_view(), name="election-manage"),
+    path("elections/<int:election_id>/schedule/", ElectionScheduleUpdateView.as_view(), name="election-schedule-update"),
+    path("elections/<int:election_id>/extend/", ElectionEndTimeExtensionView.as_view(), name="election-extend-end-time"),
 
     # Stats & results endpoints
     path("elections/<int:election_id>/stats/", ElectionStatsView.as_view(), name="election-stats"),

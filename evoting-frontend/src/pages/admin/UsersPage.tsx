@@ -11,13 +11,23 @@ import SelectField from '../../components/ui/SelectField';
 import TextInput from '../../components/ui/TextInput';
 import {showError, showSuccess} from '../../utils/toast';
 import {type Election, useElections} from '../../queries/useElections';
+import type {ElectionStatus} from '../../types/election';
+
+interface UserAssignedElection {
+    id: number;
+    name: string;
+    year: number;
+    voting_enabled: boolean;
+    status: ElectionStatus;
+    voting_open: boolean;
+}
 
 interface User {
     id: number;
     username: string;
     role: 'superuser' | 'staff' | 'activator';
     is_active: boolean;
-    assigned_election: Election | null;
+    assigned_election: UserAssignedElection | null;
 }
 
 interface ListResponse<T> {
@@ -50,7 +60,7 @@ export default function UsersPage() {
     const [role, setRole] = useState<User['role']>('staff');
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [electionId, setElectionId] = useState<number | null>(null);
-    const electionsQuery = useElections();
+    const electionsQuery = useElections({refetchInterval: 45_000});
     const elections = electionsQuery.data ?? [];
 
     const filteredUsers = users.filter(user => user.username.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -152,22 +162,19 @@ export default function UsersPage() {
 
     return (
         <PageContainer className="users-page">
-            <div className="users-page-header">
-                <div>
-                    <h1 className="text-lg font-semibold text-gray-900">Manage users</h1>
-                    <p className="text-xs text-gray-500">Manage administrator accounts and access roles.</p>
+
+            <div className="flex items-center justify-between">
+                <div className="users-search-field">
+                    <FiSearch aria-hidden="true"/>
+                    <TextInput type="search" placeholder="Search by username" value={searchTerm}
+                               onChange={event => setSearchTerm(event.target.value)}
+                               aria-label="Search users by username"/>
                 </div>
                 <Button type="button" size="compact" leadingIcon={<FiPlus aria-hidden="true"/>}
                         onClick={openCreateForm}>
                     Add user
                 </Button>
-            </div>
 
-            <div className="users-search-field">
-                <FiSearch aria-hidden="true"/>
-                <TextInput type="search" placeholder="Search by username" value={searchTerm}
-                           onChange={event => setSearchTerm(event.target.value)}
-                           aria-label="Search users by username"/>
             </div>
             {searchTerm &&
                 <Button type="button" variant="quiet" size="compact" onClick={() => setSearchTerm('')}>Clear
@@ -201,9 +208,12 @@ export default function UsersPage() {
                                     className={`users-status-text users-status-text--${user.is_active ? 'success' : 'neutral'}`}>{user.is_active ? 'Active' : 'Inactive'}</span>
                                 </td>
                                 <td data-label="Election">
-                                    {user.assigned_election
-                                        ? `${user.assigned_election.name} (${user.assigned_election.year})`
-                                        : 'All elections'}
+                                    {user.assigned_election ? (() => {
+                                        const assigned = elections.find(item => item.id === user.assigned_election?.id) ?? user.assigned_election;
+                                        return <div className="flex flex-col items-start gap-1">
+                                            <span>{assigned.name} ({assigned.year})</span>
+                                        </div>;
+                                    })() : 'All elections'}
                                 </td>
                                 <td data-label="Actions">
                                     <div className="users-actions">

@@ -6,6 +6,7 @@ import {useElections} from '../../queries/useElections';
 import {useResults, type CandidateResult} from '../../queries/useResults';
 import LoadingState from '../../components/ui/LoadingState';
 import ErrorState from '../../components/ui/ErrorState';
+import ElectionStatusBadge from '../../components/ElectionStatusBadge';
 
 function formatUpdateTime(value: number) {
     if (!value) return 'Waiting for first update';
@@ -58,7 +59,7 @@ export default function LiveResultsPage() {
     const {user} = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
-    const {data: elections = [], isLoading: electionsLoading, isError: electionsError} = useElections();
+    const {data: elections = [], isLoading: electionsLoading, isError: electionsError} = useElections({refetchInterval: 45_000});
     const isStaff = user?.role === 'staff';
     const requestedElectionId = new URLSearchParams(location.search).get('election');
     const requestedId = requestedElectionId ? Number(requestedElectionId) : null;
@@ -67,7 +68,8 @@ export default function LiveResultsPage() {
     const resultsQuery = useResults(effectiveElectionId, {live: true, userId: user?.username ?? null});
     const results = resultsQuery.data;
     const initialLoading = electionsLoading || (resultsQuery.isLoading && !results);
-    const electionClosed = Boolean(election && !election.is_active);
+    const lifecycleStatus = results?.status ?? election?.status;
+    const electionClosed = lifecycleStatus === 'ended';
     const positions = useMemo(
         () => [...(results?.positions ?? [])].sort((a, b) => a.display_order - b.display_order),
         [results?.positions]
@@ -114,6 +116,7 @@ export default function LiveResultsPage() {
                 <div className="live-results-heading">
                     <div>
                         <h1>{results?.election_name ?? election.name}</h1>
+                        <ElectionStatusBadge status={lifecycleStatus}/>
                     </div>
                 </div>
                 <div className="live-results-header-actions">

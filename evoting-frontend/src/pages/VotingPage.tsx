@@ -1,9 +1,11 @@
-import {useCallback, useEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useQueryClient} from '@tanstack/react-query';
 import {useNavigate} from 'react-router-dom';
 import {FiAlertCircle, FiCheck, FiCheckCircle, FiLoader, FiThumbsUp, FiUserPlus} from 'react-icons/fi';
-import {clearVoterSession, getVoterSession, voterApi} from '../api/voterApi';
+import {clearVoterSession, getVoterSession, markVoterSessionUnableToVote, voterApi} from '../api/voterApi';
 import {type Candidate, useVotingData} from '../hooks/useVotingData';
+import {voterLifecycleMessage, voterLifecycleMessageFromDetail} from '../utils/electionLifecycle';
+import ElectionStatusBadge from '../components/ElectionStatusBadge';
 
 interface SelectedVote {
     position_id: number;
@@ -23,19 +25,28 @@ export default function VotingPage() {
     const [currentPositionIndex, setCurrentPositionIndex] = useState(0);
     const [timeLeft, setTimeLeft] = useState(15);
     const [isChangingVote, setIsChangingVote] = useState(false);
+    const submissionInFlight = useRef(false);
+    const redirectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => () => {
+        if (redirectTimeout.current) clearTimeout(redirectTimeout.current);
+    }, []);
 
     // Get student info and election context from session
     const studentId = sessionStorage.getItem('student_id');
     const studentName = sessionStorage.getItem('student_name');
     const voterToken = sessionStorage.getItem('voter_token');
     const electionId = sessionStorage.getItem('election_id');
+    const voterSession = getVoterSession();
+    const hasVoterSession = Boolean(voterSession);
+    const sessionCanVote = Boolean(voterSession?.canVoteNow && voterSession.election.voting_open && voterSession.election.status === 'open');
 
     // Redirect if not authenticated or missing election context
     useEffect(() => {
-        if (!studentId || !voterToken || !electionId) {
+        if (!studentId || !voterToken || !electionId || !hasVoterSession) {
             navigate('/');
         }
-    }, [studentId, voterToken, electionId, navigate]);
+    }, [studentId, voterToken, electionId, hasVoterSession, navigate]);
 
     // Fetch voting data using React Query (cached for entire session)
     const {data: votingData, isLoading: loading, error: queryError} = useVotingData(
@@ -43,7 +54,8 @@ export default function VotingPage() {
     );
 
     // Extract data from React Query result
-    const activeElection = votingData?.election ?? null;
+    const election = votingData?.election ?? voterSession?.election ?? null;
+    const canPresentBallot = Boolean(sessionCanVote && votingData?.can_vote_now && election?.voting_open && election.status === 'open');
     const positions = useMemo(() => votingData?.positions ?? [], [votingData?.positions]);
     const candidatesByPosition = useMemo(
         () => votingData?.candidatesByPosition ?? {},
@@ -67,8 +79,14 @@ export default function VotingPage() {
     // Handle query error
     useEffect(() => {
         if (queryError) {
-            const status = (queryError as {response?: {status?: number}}).response?.status;
+            const apiError = queryError as {response?: {status?: number; data?: {detail?: string}}};
+            const status = apiError.response?.status;
             if (status === 401 || status === 403 || status === 404 || queryError.message.includes('session')) {
+                const lifecycleMessage = voterLifecycleMessageFromDetail(apiError.response?.data?.detail);
+                if (lifecycleMessage) {
+                    setError(lifecycleMessage);
+                    return;
+                }
                 clearVoterSession();
                 queryClient.removeQueries({queryKey: ['votingData']});
                 navigate('/voter-login', {
@@ -114,7 +132,7 @@ export default function VotingPage() {
     };
 
     const handleSubmitVotes = useCallback(async () => {
-        if (!studentId || !voterToken || !electionId) {
+        if (!studentId || !voterToken || !electionId || !canPresentBallot || submissionInFlight.current) {
             navigate('/');
             return;
         }
@@ -123,7 +141,7 @@ export default function VotingPage() {
         const votesToSubmit = selectedVotes
             .filter(vote => vote.candidate_id !== null)
             .map(vote => ({
-                election: activeElection?.id,
+            election: election?.id,
                 position: vote.position_id,
                 candidate: vote.candidate_id
             }));
@@ -134,6 +152,7 @@ export default function VotingPage() {
         }
 
 
+        submissionInFlight.current = true;
         setSubmitting(true);
         setError(null);
 
@@ -142,11 +161,17 @@ export default function VotingPage() {
             if (!session) {
                 throw new Error('Your voter session is no longer valid. Please sign in again.');
             }
-            await voterApi.submitVotes(session, votesToSubmit);
+            const response = await voterApi.submitVotes(session, votesToSubmit);
+            if (response.data.can_vote_now !== false) {
+                setError('Your ballot could not be submitted. Please try again.');
+                return;
+            }
 
             // Success - clear session and show success message
+            markVoterSessionUnableToVote();
+            setSelectedVotes([]);
             setSuccess(true);
-            setTimeout(() => {
+            redirectTimeout.current = setTimeout(() => {
                 clearVoterSession();
                 queryClient.removeQueries({queryKey: ['votingData']});
                 navigate('/');
@@ -154,7 +179,10 @@ export default function VotingPage() {
 
         } catch (err: unknown) {
             const apiError = err as {response?: {status?: number; data?: {detail?: string}}};
-            if (apiError.response?.status === 401 || apiError.response?.status === 404) {
+            const lifecycleMessage = voterLifecycleMessageFromDetail(apiError.response?.data?.detail);
+            if (lifecycleMessage) {
+                setError(lifecycleMessage);
+            } else if (apiError.response?.status === 401 || apiError.response?.status === 404) {
                 clearVoterSession();
                 queryClient.removeQueries({queryKey: ['votingData']});
                 navigate('/voter-login', {
@@ -162,35 +190,41 @@ export default function VotingPage() {
                     state: {message: 'Your voter session is no longer valid. Please sign in again.'},
                 });
             } else if (apiError.response?.status === 403) {
-                if (apiError.response?.data?.detail === 'Student has already voted.') {
-                    setError('You have already voted. You cannot vote again.');
+                if (apiError.response?.data?.detail?.includes('ballot is not ready')) {
+                    setError('Voting is not available yet. Please contact an election administrator.');
+                } else if (apiError.response?.data?.detail === 'Student has already voted.') {
+                    setError('You have already voted in this election.');
                     setTimeout(() => {
                         clearVoterSession();
                         queryClient.removeQueries({queryKey: ['votingData']});
                         navigate('/');
                     }, 3000);
                 } else if (apiError.response?.data?.detail === 'Student is not activated to vote.') {
-                    setError('Your voting access has been deactivated.');
+                    setError('You have not been activated for this election.');
                     setTimeout(() => {
                         clearVoterSession();
                         queryClient.removeQueries({queryKey: ['votingData']});
                         navigate('/');
                     }, 3000);
                 } else {
-                    setError(apiError.response?.data?.detail || 'Voting is not allowed at this time.');
+                    setError('Voting is not currently available. Please try again later.');
                 }
             } else if (apiError.response?.status === 400) {
-                setError(apiError.response?.data?.detail || 'Invalid vote submission. Please check your selections.');
+                setError('Your ballot could not be submitted. Please review your selections and try again.');
+            } else if (apiError.response?.status === 409) {
+                setError('Your voter session cannot submit a ballot right now. Please sign in again.');
             } else {
                 setError('Failed to submit votes. Please try again.');
             }
         } finally {
             setSubmitting(false);
+            submissionInFlight.current = false;
         }
-    }, [activeElection?.id, electionId, navigate, positions.length, queryClient, selectedVotes, studentId, voterToken]);
+    }, [canPresentBallot, election?.id, electionId, navigate, positions.length, queryClient, selectedVotes, studentId, voterToken]);
 
     // Keep the existing timed auto-submit behavior for the final review card.
     useEffect(() => {
+        if (!canPresentBallot || positions.length === 0 || success) return;
         if (currentPositionIndex === positions.length && timeLeft > 0 && !submitting) {
             const timer = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
             return () => clearInterval(timer);
@@ -199,7 +233,7 @@ export default function VotingPage() {
         if (currentPositionIndex === positions.length && timeLeft === 0 && !submitting) {
             void handleSubmitVotes();
         }
-    }, [currentPositionIndex, handleSubmitVotes, positions.length, submitting, timeLeft]);
+    }, [canPresentBallot, currentPositionIndex, handleSubmitVotes, positions.length, submitting, success, timeLeft]);
 
     useEffect(() => {
         if (currentPositionIndex === positions.length) {
@@ -207,6 +241,18 @@ export default function VotingPage() {
         }
     }, [currentPositionIndex, positions.length]);
 
+
+    if (!sessionCanVote && !success) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+                <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-6 text-center">
+                    <h2 className="text-lg font-semibold text-gray-800 mb-3">Voting unavailable</h2>
+                    <p className="text-sm text-gray-600 mb-4">{voterSession ? voterLifecycleMessage(voterSession.election.status) : 'Your voter session is no longer valid. Please sign in again.'}</p>
+                    <button type="button" onClick={() => navigate('/voter-login')} className="w-full py-2 bg-blue-600 text-white rounded-sm hover:bg-blue-700">Return to Login</button>
+                </div>
+            </div>
+        );
+    }
 
     if (loading) {
         return (
@@ -271,10 +317,10 @@ export default function VotingPage() {
                                 <span className="text-white">ID: {studentId}</span>
                             </div>
                         </div>
-                        {activeElection && (
+                        {election && (
                                     <>
-                                        <span
-                                            className="text-white font-medium">{activeElection.name} ({activeElection.year})</span>
+                                        <span className="text-white font-medium">{election.name} ({election.year})</span>
+                                        <ElectionStatusBadge status={election.status}/>
                                     </>
                                 )}
                     </div>
@@ -387,6 +433,11 @@ export default function VotingPage() {
 
                                                         return (
                                                             <div
+                                                                role="radio"
+                                                                tabIndex={submitting ? -1 : 0}
+                                                                aria-disabled={submitting}
+                                                                aria-checked={isSelected}
+                                                                aria-label={`${candidate.ballot_number}: ${candidate.student_name}`}
                                                                 key={candidate.id}
                                                                 className={`flex relative flex-col items-center p-4 sm:p-3 rounded-sm shadow-lg transition-all w-[165px] sm:w-[190px] h-[260px] sm:h-[290px] cursor-pointer ${
                                                                     isSelected
@@ -394,6 +445,12 @@ export default function VotingPage() {
                                                                         : 'border border-cyan-600 hover:border-blue-300 hover:bg-cyan-100 hover:shadow-md'
                                                                 }`}
                                                                 onClick={() => position && handleSelectCandidate(position.id, candidate)}
+                                                                onKeyDown={event => {
+                                                                    if (!submitting && (event.key === 'Enter' || event.key === ' ')) {
+                                                                        event.preventDefault();
+                                                                        if (position) handleSelectCandidate(position.id, candidate);
+                                                                    }
+                                                                }}
                                                             >
 
                                                                 {/* Candidate Photo */}

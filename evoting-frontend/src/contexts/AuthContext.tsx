@@ -3,14 +3,11 @@ import {useQueryClient} from '@tanstack/react-query';
 import {useLocation, useNavigate} from 'react-router-dom';
 import api from "../apiConfig.ts";
 import { jwtDecode } from 'jwt-decode';
+import type { AssignedElectionLifecycle } from '../types/election';
 
 
 export type UserRole = 'superuser' | 'staff' | 'activator' | null;
-export interface AssignedElection {
-    id: number;
-    name: string;
-    year: number;
-}
+export type AssignedElection = AssignedElectionLifecycle;
 
 export interface AuthUser {
     username: string;

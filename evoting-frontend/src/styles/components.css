@@ -1024,13 +1024,13 @@
     justify-content: center;
     gap: var(--space-3);
     min-height: 8rem;
-    padding: var(--space-5);
-    border: 2px dashed var(--color-border);
+    padding: var(--space-1);
+    border: 2px dashed var(--color-success);
     border-radius: var(--radius-lg);
     background: var(--color-primary-soft);
     cursor: pointer;
     transition: border-color var(--motion-fast) var(--ease-standard),
-                background var(--motion-fast) var(--ease-standard);
+    background var(--motion-fast) var(--ease-standard);
 }
 
 .file-picker-label:hover {

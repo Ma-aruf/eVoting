@@ -37,16 +37,16 @@ class StaffPermissionTestCase(TestCase):
         self.election1 = Election.objects.create(
             name="Election 1",
             year=2024,
-            start_time=now,
+            start_time=now + timedelta(hours=1),
             end_time=next_week,
-            is_active=False
+            voting_enabled=False
         )
         self.election2 = Election.objects.create(
             name="Election 2",
             year=2024,
-            start_time=now,
+            start_time=now + timedelta(hours=1),
             end_time=next_week,
-            is_active=False
+            voting_enabled=False
         )
 
         # Create superuser
@@ -278,8 +278,10 @@ class StaffPermissionTestCase(TestCase):
                     }, format=request_format)
                     self.assertEqual(response.status_code, 200)
                     self.election1.refresh_from_db()
-                    self.assertEqual(self.election1.is_active, new_state)
+                    self.assertEqual(self.election1.voting_enabled, new_state)
+                    self.assertEqual(response.data['voting_enabled'], new_state)
                     self.assertEqual(response.data['is_active'], new_state)
+                    self.assertEqual(response.data['status'], 'scheduled')
 
         # Staff1 cannot start/stop election2
         response = self.staff1_client.patch('/api/elections/manage/', {
@@ -289,8 +291,8 @@ class StaffPermissionTestCase(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_staff_can_activate_and_deactivate_only_assigned_voters(self):
-        self.election1.is_active = True
-        self.election1.save(update_fields=['is_active'])
+        self.election1.voting_enabled = True
+        self.election1.save(update_fields=['voting_enabled'])
         for request_format in ('json', 'multipart'):
             for active in (True, False):
                 with self.subTest(format=request_format, active=active):
@@ -326,15 +328,15 @@ class StaffPermissionTestCase(TestCase):
                 self.assertEqual(response.status_code, 400)
         self.election1.refresh_from_db()
         self.student1_election1.refresh_from_db()
-        self.assertFalse(self.election1.is_active)
+        self.assertFalse(self.election1.voting_enabled)
         self.assertFalse(self.student1_election1.is_active)
 
     def test_staff_cannot_activate_inactive_election_or_voted_student(self):
         payload = {'student_id': self.student1_election1.student_id,
                    'election_id': self.election1.id, 'is_active': True}
         self.assertEqual(self.staff1_client.post('/api/students/activate/', payload, format='json').status_code, 403)
-        self.election1.is_active = True
-        self.election1.save(update_fields=['is_active'])
+        self.election1.voting_enabled = True
+        self.election1.save(update_fields=['voting_enabled'])
         self.student1_election1.has_voted = True
         self.student1_election1.save(update_fields=['has_voted'])
         self.assertEqual(self.staff1_client.post('/api/students/activate/', payload, format='json').status_code, 403)

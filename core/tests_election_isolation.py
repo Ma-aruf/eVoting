@@ -18,14 +18,14 @@ class ElectionIsolationApiTests(TestCase):
             year=2026,
             start_time=now - timedelta(hours=1),
             end_time=now + timedelta(hours=1),
-            is_active=True,
+            voting_enabled=True,
         )
         self.election_two = Election.objects.create(
             name="Election Two",
             year=2027,
             start_time=now - timedelta(hours=1),
             end_time=now + timedelta(hours=1),
-            is_active=True,
+            voting_enabled=True,
         )
         self.superuser = User.objects.create_superuser(
             username="isolation-superuser", password="password123"

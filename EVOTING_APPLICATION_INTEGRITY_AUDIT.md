@@ -2,7 +2,9 @@
 
 ## Scope
 
-This was a read-only inspection of the current eVoting application before any UI refresh work.
+This document began as a read-only application audit. Its election-lifecycle sections were updated during the backend lifecycle refactor on 2026-09-21; other historical findings below retain the status of the audit that first recorded them unless explicitly updated.
+
+The original sections 14-16 are a dated snapshot of findings and recommendations, not a current assessment. The current election lifecycle contract is documented in sections 2 and 4 and in `EVOTING_DOCUMENTATION.md`.
 
 Inspected:
 
@@ -12,7 +14,7 @@ Inspected:
 - Backend system checks and migration checks
 - Frontend lint and TypeScript checks
 
-No backend, frontend, migration, or production/development data files were modified.
+The lifecycle refactor changed backend code, tests, documentation, and added a migration. It did not change frontend code or apply the migration to a development or production database.
 
 ## 1. System architecture summary
 
@@ -54,16 +56,14 @@ Important files:
 
 ### Creation
 
-POST /api/elections/create/ is handled by ElectionCreateView.post() with ElectionSerializer and IsStaffOrSuperUser.
+POST /api/elections/create/ is handled by ElectionCreateView.post() with ElectionSerializer and IsSuperUser. There is currently no separate schedule-update API endpoint.
 
-The serializer exposes all Election fields and performs normal DRF field validation.
+The serializer exposes election configuration and derived lifecycle fields. It requires `end_time` to be later than `start_time`. Schedule updates use the same validation wherever `ElectionSerializer` is used for updates.
 
-Missing validation:
+Remaining schedule policy:
 
-- End time is not required to follow start time.
-- Active elections are not required to have a valid window.
 - Overlapping elections are not prevented.
-- Multiple active elections are explicitly supported.
+- Multiple elections with voting enabled are explicitly supported; voter login returns 409 when a student ID is eligible in more than one open election.
 
 ### Configuration
 
@@ -71,24 +71,30 @@ Students are attached to elections through Student.election.
 
 Positions are attached through Position.election and ordered by display_order.
 
-Candidates are attached to a student and position. The backend does not currently verify that the candidate student belongs to the same election as the position.
+Candidates are attached to a student and position. Candidate assignment validation requires the student and position to belong to the same election.
+
+Candidate and position changes are rejected at or after the scheduled opening time, even while voting is paused. Existing votes keep the ballot locked. Moving the stored start time forward after the original start has passed is rejected.
 
 ### Activation and deactivation
 
 GET/PATCH /api/elections/manage/ is handled by ElectionManageView.
 
-The PATCH changes Election.is_active inside transaction.atomic().
+The PATCH changes only Election.voting_enabled inside a transaction. Election status is derived centrally and is not stored.
+
+The temporary deprecated API alias `is_active` maps to the same `voting_enabled` field because the frontend and backend deploy separately. There is no second stored switch.
+
+Lifecycle values are `scheduled`, `open`, `paused`, and `ended`. Voting is open exactly when `voting_enabled` is true and `start_time <= now < end_time`. `Student.is_active` remains the independent student-activation flag. The backend returns election-level `voting_open` and, in the voter login response, student-level `can_vote_now`.
 
 Confirmed:
 
-- Multiple elections may be active simultaneously.
+- Multiple elections may have voting enabled simultaneously; this policy is unchanged.
 - Deactivation does not directly delete or revoke voter tokens.
-- Existing tokens become unusable for voting because voter authentication requires an active election.
+- Existing tokens become unusable for voting when the election is scheduled, paused, or ended.
 - Deactivation does not deactivate students.
 
 ### Completion
 
-There is no separate completed state. Completion is represented by is_active=False, the end time passing, and individual students having has_voted=True.
+There is no stored completed flag. Status becomes `ended` at or after `end_time`, even if `voting_enabled` remains true. The stored switch may remain true, but management actions cannot change an ended election; it cannot reopen voting.
 
 Results remain accessible to permitted administrators regardless of active status or end time.
 
@@ -155,9 +161,7 @@ Student deletion is blocked when has_voted is true.
 
 ### Candidate management
 
-CandidateViewSet provides public reads. CandidateCreateView provides mutations. CandidateSerializer.validate() checks ballot-number uniqueness within a position and global student candidate uniqueness.
-
-It does not validate candidate student election against position election, freeze candidate changes after voting begins, or protect candidate deletion after votes exist.
+CandidateViewSet provides scoped reads. CandidateCreateView and PositionViewSet provide mutations. CandidateSerializer.validate() checks ballot-number uniqueness, candidate uniqueness, and that candidate student and position belong to the same election. Candidate and position mutations are locked at scheduled opening and after votes exist.
 
 ### Image upload
 
@@ -177,7 +181,7 @@ The returned URL is stored through the frontend candidate mutation flow.
 
 StudentLoginPage.tsx calls POST /api/voter/login/.
 
-StudentVoterLoginView._actual_post() selects elections that are active and within their time windows, then requires a student with matching student ID, matching election, is_active=True, and has_voted=False.
+StudentVoterLoginView._actual_post() selects elections for which the central lifecycle service reports `voting_open`, then requires matching student ID and election, `Student.is_active=True`, and `has_voted=False`.
 
 If the same student ID is active in multiple elections, the endpoint returns a 409 conflict.
 
@@ -219,7 +223,7 @@ MultiVoteView._actual_post():
 3. Locks the fresh student row with select_for_update().
 4. Rejects inactive students.
 5. Rejects students with has_voted=True.
-6. Validates submitted elections are active and within their windows.
+6. Checks the central lifecycle service reports the authenticated election as open and checks student-level eligibility.
 7. Validates positions belong to submitted elections.
 8. Validates candidates belong to submitted positions.
 9. Checks for existing votes by token and position.
@@ -243,7 +247,7 @@ MultiVoteView._actual_post():
 ### Voter
 
 1. Student submits an ID.
-2. Backend checks active election, time window, registration, activation, and prior voting.
+2. Backend checks calculated election availability, registration, student activation, and prior voting.
 3. Backend returns an election-scoped HMAC.
 4. Frontend stores it in sessionStorage.
 5. Frontend sends it with the ballot.
@@ -262,8 +266,8 @@ Frontend:
 Backend authentication:
 
 5. VoterAuthentication.authenticate() reads the three voter headers.
-6. It loads the requested active election.
-7. It checks the time window.
+6. It loads the requested election.
+7. It checks calculated lifecycle status and requires `voting_open`.
 8. It loads the student by student ID and election.
 9. It verifies the election-scoped HMAC.
 10. It returns StudentUser and the token.
@@ -287,12 +291,15 @@ User extends AbstractUser and adds role. There is no database constraint synchro
 
 ### Election
 
-Fields: name, year, start_time, end_time, is_active.
+Fields: name, year, start_time, end_time, voting_enabled. Status is calculated, not stored.
 
-Missing constraints:
+Enforced lifecycle rules:
 
-- End time after start time
-- Active-election overlap policy
+- End time must be later than start time.
+- Voting availability is enabled and within the half-open schedule window.
+- Candidate and ballot configuration freezes at scheduled opening and after any vote.
+
+Overlap policy remains unchanged: multiple elections may be enabled; ambiguous eligible voter login returns HTTP 409.
 
 ### Student
 
@@ -348,8 +355,8 @@ Student deletion is blocked by the endpoint after voting, but equivalent protect
 | Admin login | POST /api/auth/login/ | TokenObtainPairView | Credentials |
 | Refresh | POST /api/auth/refresh/ | TokenRefreshView | Refresh token |
 | Admin profile | GET /api/auth/me/ | MeView | JWT |
-| List elections | GET /api/elections/ | ElectionViewSet | Public |
-| Create election | POST /api/elections/create/ | ElectionCreateView | Staff/superuser |
+| List elections | GET /api/elections/ | ElectionViewSet | Scoped management account |
+| Create election | POST /api/elections/create/ | ElectionCreateView | Superuser |
 | Manage election | GET/PATCH /api/elections/manage/ | ElectionManageView | Staff/superuser |
 | Election stats | GET /api/elections/{id}/stats/ | ElectionStatsView | Staff/superuser |
 | Election results | GET /api/elections/{id}/results/ | ElectionResultsView | Staff/superuser |
@@ -370,15 +377,15 @@ Student deletion is blocked by the endpoint after voting, but equivalent protect
 
 Confirmed from code:
 
-- Voter login considers active elections within their windows.
+- Voter login considers elections where calculated `voting_open` is true.
 - Student lookup during login is scoped to election.
 - Login requires activation and no prior vote.
-- Submission re-checks activation and has_voted.
+- Submission re-checks election availability, activation, and `has_voted` through the shared eligibility rule.
 - Same-student submissions are serialized by a locked student row.
 - Database uniqueness prevents the same voter token voting twice for one position.
 - Duplicate positions in one request are rejected.
 - Candidate IDs must belong to submitted positions.
-- Submitted elections must be active and within their windows.
+- Submitted election must be the authenticated election and must remain open.
 - Vote insertion and student status updates are in one transaction.
 - has_voted is updated after vote creation in the transaction.
 - Backend permissions are independent of frontend routes.
@@ -388,9 +395,7 @@ Confirmed from code:
 
 ### Complete ballot
 
-The frontend requires one selected candidate for every loaded position. The backend only requires a non-empty list and accepts a valid subset of positions.
-
-A direct API client can submit a partial ballot and the backend will mark the student as voted. This is a confirmed frontend/backend policy mismatch.
+The frontend and backend require one selection for every election position. MultiVoteView compares submitted positions with the complete position set before creating votes.
 
 ### Displayed ballot context
 
@@ -400,7 +405,9 @@ The frontend trusts sessionStorage election values and constructs a synthetic el
 
 Frontend role guards restrict navigation. They do not provide authorization.
 
-## 11. Missing or weak backend protections
+## 11. Historical audit findings and current lifecycle status
+
+The original findings below are retained for context. Election lifecycle rows are updated to the current backend behavior; unrelated findings should be rechecked against current code before being treated as open issues.
 
 ### Critical: cross-election vote payloads
 
@@ -431,21 +438,21 @@ The HMAC has no timestamp or expiry claim. It becomes unusable only when electio
 
 PositionStatsView, ElectionResultsView, and CandidatesForPositionView do not consistently filter Vote queries by election. This becomes dangerous when inconsistent relationships or cross-election payloads exist.
 
-### High: no configuration freeze
+### Resolved in the lifecycle refactor: configuration freeze
 
-Positions and candidates can be edited or deleted after voting starts. There is no configuration-frozen state.
+Position and candidate API mutations are locked at the scheduled opening time. Existing votes also lock ballot configuration. The same policy is checked by Django Admin forms/actions.
 
 ### High: partial ballots accepted by backend
 
 The backend accepts any non-empty valid subset of positions.
 
-### Medium: invalid election times
+### Resolved in the lifecycle refactor: invalid election times
 
-ElectionSerializer lacks cross-field validation for start/end ordering.
+ElectionSerializer rejects equal or reversed start/end values with a field-level `end_time` error.
 
-### Medium: multiple active elections
+### Product decision retained: multiple enabled elections
 
-This is supported without an administrative invariant. Duplicate active student IDs are handled reactively with a 409 during login.
+Multiple elections may remain enabled. If the same student ID is eligible in multiple open elections, voter login explicitly returns HTTP 409. Automatically selecting an election remains a separate product decision.
 
 ### Medium: exception details
 
@@ -482,7 +489,7 @@ The vote path locks election rows with select_for_update(). Deactivation should 
 
 ### Candidate/position mutation
 
-The vote path locks candidate/position rows, but mutation endpoints do not consistently take matching locks or reject changes after voting begins. Cascade deletion remains a major risk.
+The vote path and ballot mutation endpoints lock election rows. Mutation endpoints reject changes at scheduled opening and after votes exist. Cascade deletion of historical votes remains a separate data-model risk.
 
 ### Timeout and retry
 

@@ -16,17 +16,17 @@ def test_authentication_fix():
     print("=" * 40)
     
     # Get elections
-    elections = list(Election.objects.all().values('id', 'name', 'is_active'))
+    elections = list(Election.objects.all().values('id', 'name', 'voting_enabled'))
     if len(elections) == 0:
         print('❌ No elections found')
         return
     
-    active_elections = [e for e in elections if e['is_active']]
-    inactive_elections = [e for e in elections if not e['is_active']]
+    active_elections = [e for e in elections if e['voting_enabled']]
+    inactive_elections = [e for e in elections if not e['voting_enabled']]
     
     print(f'📊 Found {len(elections)} elections:')
     for e in elections:
-        status = "🟢 ACTIVE" if e['is_active'] else "🔴 INACTIVE"
+        status = "🟢 ENABLED" if e['voting_enabled'] else "🔴 DISABLED"
         print(f'  {e["name"]} (ID: {e["id"]}) - {status}')
     
     if len(active_elections) == 0:
@@ -107,7 +107,7 @@ def test_authentication_fix():
     print(f'\n❌ Test 2: Authentication with no active election...')
     
     # Temporarily deactivate all elections
-    Election.objects.all().update(is_active=False)
+    Election.objects.all().update(voting_enabled=False)
     
     try:
         factory = RequestFactory()
@@ -129,7 +129,7 @@ def test_authentication_fix():
         print(f'⚠️  Unexpected error: {e}')
     
     # Restore active election
-    Election.objects.filter(id=active_election['id']).update(is_active=True)
+    Election.objects.filter(id=active_election['id']).update(voting_enabled=True)
     
     # Test 3: Authentication with invalid student ID
     print(f'\n❌ Test 3: Authentication with invalid student ID...')

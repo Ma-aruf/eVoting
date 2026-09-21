@@ -1,23 +1,11 @@
+import {type FormEvent, type KeyboardEvent, useEffect, useMemo, useState,} from 'react';
 
-import {
-    type FormEvent,
-    type KeyboardEvent,
-    useEffect,
-    useMemo,
-    useState,
-} from 'react';
-
-import {
-    FiCheckCircle,
-    FiUserPlus,
-    FiUsers,
-    FiUserX,
-} from 'react-icons/fi';
+import {FiCheckCircle, FiUserPlus, FiUsers, FiUserX,} from 'react-icons/fi';
 
 import {useElections} from '../../queries/useElections';
+import {electionStatusPresentation} from '../../utils/electionLifecycle';
 import {useAuth} from '../../hooks/useAuth';
 import {type Student, useStudents} from '../../queries/useStudents';
-import {useDashboardStats} from '../../queries/useDashboard';
 import {useActivateStudent} from '../../queries/useActivations';
 
 import {showError} from '../../utils/toast';
@@ -67,12 +55,11 @@ export default function ActivationsPage() {
 
     // Queries and mutation
 
-    const electionsQuery = useElections();
+    const electionsQuery = useElections({refetchInterval: 45_000});
     const effectiveElectionId = isScopedRole
         ? user?.assignedElection?.id ?? null
         : selectedElectionId;
     const studentsQuery = useStudents(effectiveElectionId);
-    const statsQuery = useDashboardStats(effectiveElectionId);
     const activateStudent = useActivateStudent();
 
     // Query data
@@ -87,20 +74,35 @@ export default function ActivationsPage() {
         [studentsQuery.data]
     );
 
-    const activeElections = useMemo(
-        () => elections.filter(election => election.is_active),
-        [elections]
-    );
+    const electionChoices = elections;
 
-    const activeElection = elections.find(
-        election => election.id === effectiveElectionId && election.is_active
+    const selectedElection = elections.find(election => election.id === effectiveElectionId);
+    const canActivateVoters = Boolean(
+        selectedElection?.status === 'open' &&
+        selectedElection.voting_open &&
+        selectedElection.ballot_ready
     );
+    const activationBlockMessage = !selectedElection
+        ? ''
+        : selectedElection.status === 'scheduled'
+            ? 'Voter activation is available when voting opens.'
+            : selectedElection.status === 'paused'
+                ? 'Voter activation is unavailable while voting is currently paused.'
+                : selectedElection.status === 'ended'
+                    ? 'Voter activation is unavailable because voting has ended.'
+                    : !selectedElection.ballot_ready
+                        ? 'Add at least one position and at least one candidate to every position before activating voters.'
+                        : '';
 
     const availableStudents = useMemo(
         () =>
             students.filter(
                 student => !student.is_active && !student.has_voted
             ),
+        [students]
+    );
+    const activatedStudentCount = useMemo(
+        () => students.filter(student => student.is_active).length,
         [students]
     );
 
@@ -124,27 +126,28 @@ export default function ActivationsPage() {
 
     const isLoading =
         electionsQuery.isLoading ||
-        studentsQuery.isLoading ||
-        statsQuery.isLoading;
+        studentsQuery.isLoading;
 
-    // Select the active election automatically
+    // Select the election automatically
 
     useEffect(() => {
         if (!isScopedRole &&
-            activeElections.length &&
+            electionChoices.length &&
             (!selectedElectionId ||
-                !activeElections.some(
+                !electionChoices.some(
                     election => election.id === selectedElectionId
                 ))
         ) {
             // eslint-disable-next-line react-hooks/set-state-in-effect
-            setSelectedElectionId(activeElections[0].id);
+            setSelectedElectionId(electionChoices[0].id);
         }
-    }, [activeElections, isScopedRole, selectedElectionId]);
+    }, [electionChoices, isScopedRole, selectedElectionId]);
 
     // Student selection
 
     const chooseStudent = (student: Student) => {
+        if (!canActivateVoters) return;
+
         setSelectedStudentId(student.student_id);
 
         setStudentQuery(
@@ -160,6 +163,8 @@ export default function ActivationsPage() {
     const handleSearchKeyDown = (
         event: KeyboardEvent<HTMLInputElement>
     ) => {
+        if (!canActivateVoters) return;
+
         if (event.key === 'ArrowDown') {
             event.preventDefault();
             setIsOpen(true);
@@ -200,7 +205,7 @@ export default function ActivationsPage() {
     const handleActivate = (event: FormEvent) => {
         event.preventDefault();
 
-        if (!effectiveElectionId || !activeElection || !selectedStudent || selectedStudent.is_active || selectedStudent.has_voted) {
+        if (!canActivateVoters || !effectiveElectionId || !selectedElection || !selectedStudent || selectedStudent.is_active || selectedStudent.has_voted) {
             return;
         }
 
@@ -224,8 +229,7 @@ export default function ActivationsPage() {
 
     const queryError =
         electionsQuery.error ||
-        studentsQuery.error ||
-        statsQuery.error;
+        studentsQuery.error;
 
     const mutationError = activateStudent.error
         ? errorMessage(activateStudent.error)
@@ -242,21 +246,20 @@ export default function ActivationsPage() {
                 />
             )}
 
-            {/* No active election */}
+            {/* No election */}
 
-            {!activeElection && !electionsQuery.isLoading && (
+            {!selectedElection && !electionsQuery.isLoading && (
                 <Alert
                     variant="warning"
-                    title="No active election"
+                    title="No election available"
                 >
-                    Voter activation is only available when an election is
-                    active.
+                    Assign or create an election before activating voters.
                 </Alert>
             )}
 
             {/* Activation dashboard */}
 
-            {activeElection && (
+            {selectedElection && (
                 <div className="space-y-5">
                     {/* Election selection */}
 
@@ -265,45 +268,40 @@ export default function ActivationsPage() {
                     <div className="grid gap-3 sm:grid-cols-3">
                         <StatisticCard
                             label="Total voters"
-                            value={
-                                statsQuery.data?.total_students ??
-                                students.length
-                            }
-                            icon={<FiUsers aria-hidden="true" />}
+                            value={studentsQuery.isError ? '—' : students.length}
+                            icon={<FiUsers aria-hidden="true"/>}
                             status="primary"
                             layout="split"
+                            loading={studentsQuery.isLoading}
                         />
 
                         <StatisticCard
-                            label="Active voters"
-                            value={
-                                statsQuery.data?.active_students ??
-                                students.filter(
-                                    student => student.is_active
-                                ).length
-                            }
-                            icon={<FiCheckCircle aria-hidden="true" />}
+                            label="Activated voters"
+                            value={studentsQuery.isError ? '—' : activatedStudentCount}
+                            icon={<FiCheckCircle aria-hidden="true"/>}
                             status="success"
                             layout="split"
+                            loading={studentsQuery.isLoading}
                         />
 
                         <StatisticCard
                             label="Available to activate"
-                            value={availableStudents.length}
-                            icon={<FiUserPlus aria-hidden="true" />}
+                            value={studentsQuery.isError ? '—' : availableStudents.length}
+                            icon={<FiUserPlus aria-hidden="true"/>}
                             status="info"
                             layout="split"
+                            loading={studentsQuery.isLoading}
                         />
                     </div>
 
                     <div className="grid gap-4 md:grid-cols-2 md:items-end">
                         <FormField
                             id="activation-election"
-                            label="Active election"
+                            label="Election"
                         >
                             {isScopedRole ? (
                                 <TextInput
-                                    value={activeElection ? `${activeElection.name} (${activeElection.year})` : 'Assigned election unavailable'}
+                                    value={selectedElection ? `${selectedElection.name} (${selectedElection.year})` : 'Assigned election unavailable'}
                                     readOnly
                                     aria-readonly="true"
                                 />
@@ -317,9 +315,10 @@ export default function ActivationsPage() {
                                         setIsOpen(false);
                                     }}
                                 >
-                                    {activeElections.map(election => (
+                                    {electionChoices.map(election => (
                                         <option key={election.id} value={election.id}>
                                             {election.name} ({election.year})
+                                            · {electionStatusPresentation(election.status).label}
                                         </option>
                                     ))}
                                 </SelectField>
@@ -328,6 +327,12 @@ export default function ActivationsPage() {
 
                     </div>
                     {/* Voter activation form */}
+
+                    {!canActivateVoters && activationBlockMessage && (
+                        <Alert variant="warning" title="Activation unavailable">
+                            {activationBlockMessage}
+                        </Alert>
+                    )}
 
                     <section className="ui-section">
                         <div className="ui-section-heading">
@@ -374,18 +379,18 @@ export default function ActivationsPage() {
                                             aria-activedescendant={
                                                 isOpen && options[activeOption]
                                                     ? 'activation-option-' +
-                                                      options[activeOption].id
+                                                    options[activeOption].id
                                                     : undefined
                                             }
                                             disabled={
-                                                !availableStudents.length
+                                                !availableStudents.length || !canActivateVoters
                                             }
                                         />
                                     </div>
 
                                     {/* Search results */}
 
-                                    {isOpen && (
+                                    {isOpen && canActivateVoters && (
                                         <div
                                             id={listboxId}
                                             role="listbox"
@@ -461,10 +466,11 @@ export default function ActivationsPage() {
                                 loading={activateStudent.isPending}
                                 disabled={
                                     !selectedStudentId ||
-                                    !effectiveElectionId
+                                    !effectiveElectionId ||
+                                    !canActivateVoters
                                 }
                                 leadingIcon={
-                                    <FiUserPlus aria-hidden="true" />
+                                    <FiUserPlus aria-hidden="true"/>
                                 }
                             >
                                 Activate voter
@@ -474,7 +480,8 @@ export default function ActivationsPage() {
                         {/* Selected voter details */}
 
                         {selectedStudent && (
-                            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md bg-gray-50 p-3">
+                            <div
+                                className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md bg-gray-50 p-3">
                                 <div>
                                     <p className="text-sm font-medium">
                                         {selectedStudent.full_name}
@@ -534,7 +541,7 @@ export default function ActivationsPage() {
                         <EmptyState
                             title="No voters available"
                             message="All voters are active, have voted, or are not present in this election."
-                            icon={<FiUserX aria-hidden="true" />}
+                            icon={<FiUserX aria-hidden="true"/>}
                         />
                     )}
 
