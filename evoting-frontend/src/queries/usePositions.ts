@@ -3,11 +3,14 @@ import api from '../apiConfig';
 import { queryKeys } from './queryKeys';
 import { showError, showSuccess } from '../utils/toast';
 
+type ApiError = {response?: {data?: {detail?: string}}};
+
 export interface Position {
   id: number;
   name: string;
   display_order: number;
   election: number;
+  voting_mode: 'candidate' | 'yes_no';
 }
 
 export const usePositions = (electionId: number | null) => {
@@ -47,8 +50,8 @@ export const useCreatePosition = () => {
       showSuccess('Position created successfully.');
       queryClient.invalidateQueries({ queryKey: queryKeys.positions(variables.election) });
     },
-    onError: (err: any) => {
-      const detail = err.response?.data?.detail;
+    onError: (err: unknown) => {
+      const detail = (err as ApiError).response?.data?.detail;
       showError(detail || 'Failed to create position.');
     },
   });
@@ -73,8 +76,8 @@ export const useUpdatePosition = () => {
       showSuccess('Position updated successfully.');
       queryClient.invalidateQueries({ queryKey: queryKeys.positions(variables.election) });
     },
-    onError: (err: any) => {
-      const detail = err.response?.data?.detail;
+    onError: (err: unknown) => {
+      const detail = (err as ApiError).response?.data?.detail;
       showError(detail || 'Failed to update position.');
     },
   });
@@ -92,8 +95,8 @@ export const useDeletePosition = () => {
       showSuccess('Position deleted successfully.');
       queryClient.invalidateQueries({ queryKey: queryKeys.positions(position.election) });
     },
-    onError: (err: any) => {
-      const detail = err.response?.data?.detail;
+    onError: (err: unknown) => {
+      const detail = (err as ApiError).response?.data?.detail;
       showError(detail || 'Failed to delete position.');
     },
   });

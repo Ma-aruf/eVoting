@@ -21,6 +21,10 @@ export interface PositionResult {
     total_valid_votes?: number;
     skipped_votes: number;
     skipped_percentage: number;
+    voting_mode: 'candidate' | 'yes_no';
+    yes_votes: number;
+    no_votes: number;
+    approved: boolean | null;
     candidates: CandidateResult[];
 }
 
@@ -48,6 +52,10 @@ export interface ElectionResultsResponse extends ElectionResultsLifecycle {
         total_valid_votes: number;
         skipped_votes: number;
         skip_percentage: number;
+        voting_mode: 'candidate' | 'yes_no';
+        yes_votes: number;
+        no_votes: number;
+        approved: boolean | null;
         candidates: Array<{
             id: number;
             student_id: string;
@@ -80,6 +88,10 @@ export function mapElectionResults(data: ElectionResultsResponse): ElectionResul
             total_valid_votes: position.total_valid_votes,
             skipped_votes: position.skipped_votes,
             skipped_percentage: position.skip_percentage,
+            voting_mode: position.voting_mode,
+            yes_votes: position.yes_votes,
+            no_votes: position.no_votes,
+            approved: position.approved,
             candidates: position.candidates.map(candidate => ({
                 id: candidate.id,
                 student_id: candidate.student_id,

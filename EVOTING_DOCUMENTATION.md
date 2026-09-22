@@ -143,6 +143,13 @@ Represents positions available in an election.
 - `election`: Foreign key to Election
 - `display_order`: Display order for UI
 
+The position API also returns a calculated `voting_mode`:
+
+- `candidate`: two or more candidates are available and the voter selects one candidate.
+- `yes_no`: exactly one candidate is available and the voter approves or rejects that candidate.
+
+The mode is derived from the current candidate count. It is not stored separately. Ballot configuration locks at the scheduled opening time, so the mode cannot be changed during voting by adding or removing candidates.
+
 ### Candidate Model
 Represents students running for positions.
 
@@ -163,6 +170,7 @@ Represents cast votes.
 - `election`: Foreign key to Election
 - `position`: Foreign key to Position
 - `candidate`: Foreign key to Candidate
+- `choice`: `candidate`, `yes`, or `no`. Candidate mode stores `candidate`; single-candidate approval mode stores `yes` or `no`.
 - `voter_hash`: HMAC hash of voter identity
 - `created_at`: Timestamp of vote
 
@@ -251,7 +259,7 @@ Represents cast votes.
 - **GET** `/api/elections/{election_id}/results/`
 - **Description**: Get comprehensive election results
 - **Authentication**: Staff or Superuser required
-- **Response**: Detailed results with candidate vote counts and percentages
+- **Response**: Detailed results with lifecycle fields and per-position `voting_mode`; candidate mode returns candidate counts and percentages, while approval mode returns `yes_votes`, `no_votes`, and `approved`.
 
 ### Student Management
 
@@ -341,15 +349,17 @@ Represents cast votes.
 - **Description**: Submit multiple votes
 - **Authentication**: Custom VoterAuthentication (HMAC headers)
 - **Headers**: `X-Student-Id`, `X-Election-Id`, `X-Voter-Token`
-- **Request**: `{ votes: [{ election, position, candidate }] }`
+- **Request**: `{ votes: [{ election, position, candidate, choice }] }`. Use `choice: "candidate"` for multi-candidate positions and `choice: "yes"` or `choice: "no"` for single-candidate positions.
 - **Rate Limiting**: 10 requests per minute (production)
 - **Validation**:
   - Student must be active
   - Student must not have voted
-  - Election must be active
+  - Election must be open (`voting_open` is true)
   - Must be within voting window
   - No duplicate positions in submission
   - Transactional locking prevents race conditions
+
+For a single-candidate position, `yes` votes approve the candidate and `no` votes reject the candidate. The candidate is approved only when yes votes exceed no votes; a tie or a position with no approval votes has no decision. Historical candidate-only vote rows are treated as approval votes for these positions so the migration preserves existing results.
 
 ### Statistics
 
@@ -358,7 +368,7 @@ Represents cast votes.
 - **Description**: Get statistics for a specific position
 - **Query Params**: `position_id` (required)
 - **Authentication**: Staff or Superuser required
-- **Response**: `{ position_id, unique_voters, votes_for_this_position, skipped_votes, skip_percentage }`
+- **Response**: Includes the position `voting_mode`, `yes_votes`, `no_votes`, and `approved` fields alongside the position statistics.
 
 ### Image Upload
 
@@ -530,7 +540,7 @@ Allowed origins configured for:
 
 **Pages:**
 - **StudentLoginPage**: Student voter login with HMAC authentication
-- **VotingPage**: Multi-position voting interface with candidate selection
+- **VotingPage**: Multi-position voting interface with candidate selection or Yes/No approval for single-candidate positions
 - **SuccessPage**: Vote confirmation page
 - **LoginPage**: Admin login with JWT authentication
 - **Dashboard**: Overview statistics and quick actions
@@ -563,7 +573,7 @@ Allowed origins configured for:
 - Fetch and format election results
 
 **useVotingData:**
-- Fetch voting data (elections, positions, candidates)
+- Fetch voting data (elections, positions, candidate lists, and each position's voting mode)
 
 ### Query Hooks (React Query)
 

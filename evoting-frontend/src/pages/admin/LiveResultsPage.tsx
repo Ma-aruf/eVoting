@@ -21,15 +21,30 @@ function candidateOrder(candidate: CandidateResult) {
     return candidate.ballot_number ?? Number.MAX_SAFE_INTEGER;
 }
 
-function CandidateResultBox({candidate, positionName, tied, winner}: {
+type CandidateDisplay = {
     candidate: CandidateResult;
     positionName: string;
     tied: boolean;
     winner: boolean;
+    approval?: {yesVotes: number; noVotes: number; approved: boolean | null};
+};
+
+function CandidateResultBox({candidate, positionName, tied, winner, approval}: {
+    candidate: CandidateResult;
+    positionName: string;
+    tied: boolean;
+    winner: boolean;
+    approval?: {yesVotes: number; noVotes: number; approved: boolean | null};
 }) {
     const percent = percentage(candidate.percentage);
     const ringStyle = {'--live-result-angle': `${percent * 3.6}deg`} as CSSProperties;
-    const statusLabel = winner ? 'Winner' : tied ? 'Tied for lead' : undefined;
+    const statusLabel = approval
+        ? approval.approved === true
+            ? 'Approved'
+            : approval.approved === false
+                ? 'Rejected'
+                : 'No decision yet'
+        : winner ? 'Winner' : tied ? 'Tied for lead' : undefined;
 
     return (
         <article className={'live-result-candidate' + (statusLabel ? ' live-result-candidate--emphasis' : '')}>
@@ -48,8 +63,17 @@ function CandidateResultBox({candidate, positionName, tied, winner}: {
             </div>
             <h3 className="live-result-candidate-name">{candidate.candidate_name}</h3>
             <div className="live-result-candidate-footer">
-                <span className="live-result-vote-value">{candidate.vote_count.toLocaleString()}</span>
-                <span className="live-result-percent-value">{percent.toFixed(1)}%</span>
+                {approval ? (
+                    <>
+                        <span className="live-result-vote-value">Yes {approval.yesVotes.toLocaleString()}</span>
+                        <span className="live-result-percent-value">No {approval.noVotes.toLocaleString()}</span>
+                    </>
+                ) : (
+                    <>
+                        <span className="live-result-vote-value">{candidate.vote_count.toLocaleString()}</span>
+                        <span className="live-result-percent-value">{percent.toFixed(1)}%</span>
+                    </>
+                )}
             </div>
         </article>
     );
@@ -74,8 +98,22 @@ export default function LiveResultsPage() {
         () => [...(results?.positions ?? [])].sort((a, b) => a.display_order - b.display_order),
         [results?.positions]
     );
-    const candidates = useMemo(() => positions.flatMap(position => {
+    const candidates = useMemo<CandidateDisplay[]>(() => positions.flatMap(position => {
         const ordered = [...position.candidates].sort((a, b) => candidateOrder(a) - candidateOrder(b));
+        if (position.voting_mode === 'yes_no') {
+            const candidate = ordered[0];
+            return candidate ? [{
+                candidate,
+                positionName: position.position_name,
+                tied: false,
+                winner: false,
+                approval: {
+                    yesVotes: position.yes_votes,
+                    noVotes: position.no_votes,
+                    approved: position.approved,
+                },
+            }] : [];
+        }
         const highestVotes = Math.max(0, ...ordered.map(candidate => candidate.vote_count));
         const leaders = ordered.filter(candidate => candidate.vote_count === highestVotes && highestVotes > 0);
         const tied = leaders.length > 1;
@@ -146,13 +184,14 @@ export default function LiveResultsPage() {
                 <section className="live-results-empty"><FiUsers aria-hidden="true" /><h2>No candidates found</h2><p>The positions in this election do not have candidates yet.</p></section>
             ) : (
                 <section className="live-results-candidate-grid" aria-label="Election candidates">
-                    {candidates.map(({candidate, positionName, tied, winner}) => (
+                    {candidates.map(({candidate, positionName, tied, winner, approval}) => (
                         <CandidateResultBox
                             key={candidate.id}
                             candidate={candidate}
                             positionName={positionName}
                             tied={tied}
                             winner={winner}
+                            approval={approval}
                         />
                     ))}
                 </section>

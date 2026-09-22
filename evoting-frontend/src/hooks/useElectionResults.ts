@@ -95,7 +95,7 @@ export function useElectionResults() {
         const csvRows = [];
 
         // Header row
-        csvRows.push(['Election', 'Position', 'Candidate', 'Student ID', 'Votes', 'Percentage'].join(','));
+        csvRows.push(['Election', 'Position', 'Voting mode', 'Candidate', 'Student ID', 'Votes', 'Percentage', 'Yes', 'No', 'Outcome'].join(','));
 
         // Data rows
         results.positions.forEach(position => {
@@ -103,10 +103,16 @@ export function useElectionResults() {
                 csvRows.push([
                     `"${results.election_name}"`,
                     `"${position.position_name}"`,
+                    position.voting_mode,
                     `"${candidate.candidate_name}"`,
                     `"${candidate.student_id}"`,
                     candidate.vote_count,
                     candidate.percentage.toFixed(2),
+                    position.voting_mode === 'yes_no' ? position.yes_votes : '',
+                    position.voting_mode === 'yes_no' ? position.no_votes : '',
+                    position.voting_mode === 'yes_no'
+                        ? position.approved === true ? 'Approved' : position.approved === false ? 'Rejected' : 'No decision yet'
+                        : '',
                 ].join(','));
             });
 
@@ -114,10 +120,14 @@ export function useElectionResults() {
             csvRows.push([
                 `"${results.election_name}"`,
                 `"${position.position_name}"`,
+                position.voting_mode,
                 '"SKIPPED"',
                 '""',
                 0,
                 0,
+                '',
+                '',
+                '',
             ].join(','));
         });
 

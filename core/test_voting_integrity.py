@@ -9,7 +9,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 
 from .models import Candidate, Election, Position, Student, User, Vote
-from .serializers import ElectionSerializer
+from .serializers import ElectionSerializer, PositionSerializer
 from .utils import generate_voter_hmac
 from .views import (
     CandidatesForPositionView,
@@ -93,14 +93,14 @@ class VotingIntegrityTests(TestCase):
         if election == self.election:
             return {
                 "votes": [
-                    {"election": election.id, "position": self.position.id, "candidate": self.candidate.id},
-                    {"election": election.id, "position": self.position_two.id, "candidate": self.candidate_two.id},
+                    {"election": election.id, "position": self.position.id, "candidate": self.candidate.id, "choice": "yes"},
+                    {"election": election.id, "position": self.position_two.id, "candidate": self.candidate_two.id, "choice": "yes"},
                 ]
             }
         return {
             "votes": [
-                {"election": election.id, "position": self.other_position.id, "candidate": self.other_candidate.id},
-                {"election": election.id, "position": self.other_position_two.id, "candidate": self.other_candidate_two.id},
+                {"election": election.id, "position": self.other_position.id, "candidate": self.other_candidate.id, "choice": "yes"},
+                {"election": election.id, "position": self.other_position_two.id, "candidate": self.other_candidate_two.id, "choice": "yes"},
             ]
         }
 
@@ -114,6 +114,100 @@ class VotingIntegrityTests(TestCase):
         self.student.refresh_from_db()
         self.assertTrue(self.student.has_voted)
         self.assertFalse(self.student.is_active)
+
+    def test_single_candidate_position_uses_yes_no_approval_voting(self):
+        self.assertEqual(PositionSerializer(self.position).data["voting_mode"], "yes_no")
+        response = self.post(**self.headers())
+        self.assertEqual(response.status_code, 201, response.content)
+        vote = Vote.objects.get(
+            position=self.position,
+            voter_hash=self.headers()["HTTP_X_VOTER_TOKEN"],
+        )
+        self.assertEqual(vote.choice, "yes")
+
+        staff = User.objects.create_user(
+            "approval-results", password="x", role="staff", assigned_election=self.election
+        )
+        request = APIRequestFactory().get("/api/results/")
+        force_authenticate(request, user=staff)
+        response = ElectionResultsView.as_view()(request, election_id=self.election.id)
+        approval_result = response.data["positions"][0]
+        self.assertEqual(approval_result["voting_mode"], "yes_no")
+        self.assertEqual(approval_result["yes_votes"], 1)
+        self.assertEqual(approval_result["no_votes"], 0)
+        self.assertTrue(approval_result["approved"])
+
+    def test_single_candidate_position_rejects_candidate_selection(self):
+        payload = self.ballot()
+        payload["votes"][0]["choice"] = "candidate"
+        response = self.post(payload, **self.headers())
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("yes or no", str(response.data).lower())
+
+    def test_multiple_candidate_position_requires_candidate_selection(self):
+        second_candidate_student = self.make_student("C005")
+        Candidate.objects.create(
+            student=second_candidate_student, position=self.position, ballot_number=2
+        )
+        payload = self.ballot()
+        payload["votes"][0]["choice"] = "yes"
+        response = self.post(payload, **self.headers())
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("candidate selection", str(response.data).lower())
+
+        payload["votes"][0]["choice"] = "candidate"
+        response = self.post(payload, **self.headers())
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(
+            Vote.objects.get(
+                position=self.position,
+                voter_hash=self.headers()["HTTP_X_VOTER_TOKEN"],
+            ).choice,
+            "candidate",
+        )
+
+    def test_no_approval_wins_only_when_yes_votes_do_not_exceed_no_votes(self):
+        Vote.objects.create(
+            election=self.election,
+            position=self.position,
+            candidate=self.candidate,
+            choice="yes",
+            voter_hash="approval-yes",
+        )
+        Vote.objects.create(
+            election=self.election,
+            position=self.position,
+            candidate=self.candidate,
+            choice="no",
+            voter_hash="approval-no",
+        )
+        staff = User.objects.create_user(
+            "approval-tie-results", password="x", role="staff", assigned_election=self.election
+        )
+        request = APIRequestFactory().get("/api/results/")
+        force_authenticate(request, user=staff)
+        response = ElectionResultsView.as_view()(request, election_id=self.election.id)
+        approval_result = response.data["positions"][0]
+        self.assertEqual(approval_result["yes_votes"], 1)
+        self.assertEqual(approval_result["no_votes"], 1)
+        self.assertFalse(approval_result["approved"])
+
+    def test_legacy_candidate_vote_counts_as_approval_for_single_candidate_results(self):
+        Vote.objects.create(
+            election=self.election,
+            position=self.position,
+            candidate=self.candidate,
+            voter_hash="legacy-voter",
+        )
+        staff = User.objects.create_user(
+            "legacy-results", password="x", role="staff", assigned_election=self.election
+        )
+        request = APIRequestFactory().get("/api/results/")
+        force_authenticate(request, user=staff)
+        response = ElectionResultsView.as_view()(request, election_id=self.election.id)
+        approval_result = response.data["positions"][0]
+        self.assertEqual(approval_result["yes_votes"], 1)
+        self.assertEqual(approval_result["candidates"][0]["vote_count"], 1)
 
     def test_missing_election_header_and_invalid_hmac_are_rejected(self):
         headers = self.headers()
@@ -178,6 +272,7 @@ class VotingIntegrityTests(TestCase):
             "election": self.election.id,
             "position": self.position.id,
             "candidate": self.candidate.id,
+            "choice": "yes",
         }]}
         response = self.post(payload, **self.headers())
         self.assertEqual(response.status_code, 400)
@@ -471,7 +566,7 @@ class ConcurrentVoteTests(TransactionTestCase):
         candidate = Candidate.objects.create(
             student=candidate_student, position=position, ballot_number=1
         )
-        payload = {"votes": [{"election": election.id, "position": position.id, "candidate": candidate.id}]}
+        payload = {"votes": [{"election": election.id, "position": position.id, "candidate": candidate.id, "choice": "yes"}]}
         headers = {
             "HTTP_X_STUDENT_ID": student.student_id,
             "HTTP_X_ELECTION_ID": str(election.id),

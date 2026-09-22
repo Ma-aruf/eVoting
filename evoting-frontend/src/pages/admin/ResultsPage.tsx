@@ -49,7 +49,7 @@ export default function ResultsPage() {
         const csvRows = [];
 
         // Header row
-        csvRows.push(['Election', 'Position', 'Candidate', 'Voter ID', 'Votes', 'Percentage'].join(','));
+        csvRows.push(['Election', 'Position', 'Voting mode', 'Candidate', 'Voter ID', 'Votes', 'Percentage', 'Yes', 'No', 'Outcome'].join(','));
 
         // Data rows
         results.positions.forEach(position => {
@@ -57,10 +57,16 @@ export default function ResultsPage() {
                 csvRows.push([
                     `"${results.election_name}"`,
                     `"${position.position_name}"`,
+                    position.voting_mode,
                     `"${candidate.candidate_name}"`,
                     `"${candidate.student_id}"`,
                     candidate.vote_count,
                     candidate.percentage.toFixed(2),
+                    position.voting_mode === 'yes_no' ? position.yes_votes : '',
+                    position.voting_mode === 'yes_no' ? position.no_votes : '',
+                    position.voting_mode === 'yes_no'
+                        ? position.approved === true ? 'Approved' : position.approved === false ? 'Rejected' : 'No decision yet'
+                        : '',
                 ].join(','));
             });
 
@@ -68,10 +74,14 @@ export default function ResultsPage() {
             csvRows.push([
                 `"${results.election_name}"`,
                 `"${position.position_name}"`,
+                position.voting_mode,
                 '"SKIPPED"',
                 '""',
                 0,
                 0,
+                '',
+                '',
+                '',
             ].join(','));
         });
 
@@ -231,6 +241,31 @@ export default function ResultsPage() {
 
                                 {/* Candidate Cards */}
                                 <div className="results-candidate-area">
+                                    {currentPosition.voting_mode === 'yes_no' ? (
+                                        <div className="mx-auto max-w-md border border-gray-200 bg-white p-6 text-center shadow-sm">
+                                            <h4 className="text-base font-semibold text-gray-800">
+                                                {currentPosition.candidates[0]?.candidate_name ?? 'Candidate'}
+                                            </h4>
+                                            <p className="mt-2 text-sm text-gray-600">Approval result</p>
+                                            <div className="mt-5 grid grid-cols-2 gap-4">
+                                                <div className="border border-emerald-200 bg-emerald-50 p-4">
+                                                    <p className="text-xs font-medium text-emerald-800">Yes</p>
+                                                    <strong className="mt-1 block text-2xl text-emerald-700">{currentPosition.yes_votes.toLocaleString()}</strong>
+                                                </div>
+                                                <div className="border border-red-200 bg-red-50 p-4">
+                                                    <p className="text-xs font-medium text-red-800">No</p>
+                                                    <strong className="mt-1 block text-2xl text-red-700">{currentPosition.no_votes.toLocaleString()}</strong>
+                                                </div>
+                                            </div>
+                                            <p className="mt-5 text-sm font-semibold text-gray-800">
+                                                {currentPosition.approved === true
+                                                    ? 'Approved'
+                                                    : currentPosition.approved === false
+                                                        ? 'Rejected'
+                                                        : 'No decision yet'}
+                                            </p>
+                                        </div>
+                                    ) : (
                                     <div className="flex justify-center">
                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
                                             {currentPosition.candidates.map((candidate) => {
@@ -340,6 +375,7 @@ export default function ResultsPage() {
                                             })}
                                         </div>
                                     </div>
+                                    )}
                                 </div>
                             </section>
                         )}

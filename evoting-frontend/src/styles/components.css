@@ -603,8 +603,8 @@
 
 .statistic-card-icon {
     display: grid;
-    width: 2.375rem;
-    height: 2.375rem;
+    width: 2.675rem;
+    height: 2.675rem;
     place-items: center;
     border-radius: var(--radius-md);
     color: var(--color-primary-dark);

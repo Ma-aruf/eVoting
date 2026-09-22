@@ -162,13 +162,6 @@ export default function ElectionsPage() {
     return (
         <div className="elections-page">
 
-            <Button
-                leadingIcon={<FiPlus aria-hidden="true"/>}
-                onClick={() => setShowCreateForm(true)}
-            >
-                Create election
-            </Button>
-
             {/* Election statistics */}
 
             <section
@@ -198,9 +191,17 @@ export default function ElectionsPage() {
                     status="neutral"
                     layout="split"
                 />
-                <StatisticCard label="Paused" value={statusCounts.paused} icon={<FiClock aria-hidden="true"/>} status="warning" layout="split"/>
-                <StatisticCard label="Ended" value={statusCounts.ended} icon={<FiCheckCircle aria-hidden="true"/>} status="neutral" layout="split"/>
+                <StatisticCard label="Paused" value={statusCounts.paused} icon={<FiClock aria-hidden="true"/>}
+                               status="warning" layout="split"/>
+                <StatisticCard label="Ended" value={statusCounts.ended} icon={<FiCheckCircle aria-hidden="true"/>}
+                               status="neutral" layout="split"/>
             </section>
+            <Button
+                leadingIcon={<FiPlus aria-hidden="true"/>}
+                onClick={() => setShowCreateForm(true)}
+            >
+                Create election
+            </Button>
 
             {/* Creation error */}
 
@@ -272,7 +273,7 @@ export default function ElectionsPage() {
                             <tr>
                                 <th scope="col">Name</th>
                                 <th scope="col">Year</th>
-            <th scope="col">Voting opens</th>
+                                <th scope="col">Voting opens</th>
                                 <th scope="col">Voting closes</th>
                                 <th scope="col">Status</th>
                                 <th scope="col">Actions</th>

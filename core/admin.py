@@ -167,8 +167,8 @@ class UserAdmin(admin.ModelAdmin):
 
 @admin.register(Vote)
 class VoteAdmin(admin.ModelAdmin):
-    list_display = ("election", "position", "candidate", "created_at")
-    list_filter = ("election", "position")
+    list_display = ("election", "position", "candidate", "choice", "created_at")
+    list_filter = ("election", "position", "choice")
     readonly_fields = ("voter_hash", "created_at")
 
 

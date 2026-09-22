@@ -17,6 +17,9 @@ START_TIME_LOCKED_DETAIL = (
     "The scheduled start time cannot be moved after the election has started."
 )
 
+VOTING_MODE_CANDIDATE = "candidate"
+VOTING_MODE_YES_NO = "yes_no"
+
 
 def election_status(election, now=None):
     """Return scheduled, open, paused, or ended for one aware point in time."""
@@ -54,6 +57,13 @@ def election_ballot_ready(election):
         )
     )
     return positions.exists() and not positions.filter(has_candidate=False).exists()
+
+
+def position_voting_mode(position):
+    """A locked single-candidate position uses an approval choice."""
+    if Candidate.objects.filter(position_id=position.pk).count() == 1:
+        return VOTING_MODE_YES_NO
+    return VOTING_MODE_CANDIDATE
 
 
 def candidate_changes_locked(election, now=None):

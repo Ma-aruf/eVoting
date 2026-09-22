@@ -54,6 +54,8 @@ from .election_lifecycle import (
     election_status,
     student_can_vote_now,
     ballot_change_lock_detail,
+    position_voting_mode,
+    VOTING_MODE_YES_NO,
 )
 
 User = get_user_model()
@@ -831,6 +833,7 @@ class MultiVoteView(APIView):
                     election_id = vote_data["election"]
                     position_id = vote_data["position"]
                     candidate_id = vote_data["candidate"]
+                    choice = vote_data.get("choice", "candidate")
 
                     if (
                         str(election_id) != str(authenticated_election_id)
@@ -895,6 +898,26 @@ class MultiVoteView(APIView):
                             status=status.HTTP_400_BAD_REQUEST,
                         )
 
+                    voting_mode = position_voting_mode(position)
+                    if voting_mode == "yes_no" and choice not in {"yes", "no"}:
+                        return Response(
+                            {
+                                "detail": (
+                                    "This position requires a Yes or No approval choice."
+                                )
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    if voting_mode == "candidate" and choice != "candidate":
+                        return Response(
+                            {
+                                "detail": (
+                                    "This position requires a candidate selection."
+                                )
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
                     # Ensure no existing vote for that position by this voter token
                     if Vote.objects.filter(
                             voter_hash=token, position_id=position_id
@@ -910,6 +933,7 @@ class MultiVoteView(APIView):
                             election_id=election_id,
                             position_id=position_id,
                             candidate_id=candidate_id,
+                            choice=choice,
                         )
                     )
 
@@ -932,6 +956,11 @@ class MultiVoteView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         except Exception:
+            self.security_logger.exception(
+                "VOTE_SUBMISSION_FAILED: student_id=%s, ip=%s",
+                getattr(student_user, "student_id", "unknown"),
+                client_ip,
+            )
             return Response(
                 {"detail": "Vote submission could not be completed."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -1334,17 +1363,35 @@ class PositionStatsView(APIView):
         ).count()
 
         skipped = max(0, unique_voters - position_votes)
+        voting_mode = position_voting_mode(position)
+        # Legacy candidate-only votes on a single-candidate position represent approval.
+        yes_votes = Vote.objects.filter(
+            election=election,
+            position=position,
+            choice__in=["yes", "candidate"] if voting_mode == VOTING_MODE_YES_NO else ["yes"],
+        ).count()
+        no_votes = Vote.objects.filter(
+            election=election, position=position, choice="no"
+        ).count()
 
         return Response({
             "position_id": position.id,
             "position_name": position.name,
             "election": election.name,
+            "voting_mode": voting_mode,
             "voting_enabled": election.voting_enabled,
             **election_lifecycle(election),
             "unique_voters_in_election": unique_voters,
             "votes_for_this_position": position_votes,
             "skipped_votes": skipped,
-            "skip_percentage": round((skipped / unique_voters * 100), 2) if unique_voters > 0 else 0.0
+            "skip_percentage": round((skipped / unique_voters * 100), 2) if unique_voters > 0 else 0.0,
+            "yes_votes": yes_votes,
+            "no_votes": no_votes,
+            "approved": (
+                yes_votes > no_votes
+                if voting_mode == "yes_no" and yes_votes + no_votes > 0
+                else None
+            ),
         })
 
 
@@ -1373,25 +1420,57 @@ class ElectionResultsView(APIView):
             candidates = Candidate.objects.filter(position=position).order_by('ballot_number')
 
             candidate_results = []
-            total_valid_votes_this_position = 0
+            voting_mode = position_voting_mode(position)
+            yes_votes = 0
+            no_votes = 0
 
-            for candidate in candidates:
-                vote_count = Vote.objects.filter(
+            if voting_mode == "yes_no":
+                candidate = candidates.first()
+                # Historical rows predate Vote.choice and default to candidate.
+                yes_votes = Vote.objects.filter(
                     election=election,
-                    candidate=candidate,
-                    position=position
+                    position=position,
+                    choice__in=["yes", "candidate"],
                 ).count()
+                no_votes = Vote.objects.filter(
+                    election=election,
+                    position=position,
+                    choice="no",
+                ).count()
+                if candidate:
+                    candidate_results.append({
+                        "id": candidate.id,
+                        "student_id": candidate.student.student_id,
+                        "candidate_name": candidate.student.full_name,
+                        "photo_url": candidate.photo_url or "",
+                        "ballot_number": candidate.ballot_number,
+                        "vote_count": yes_votes,
+                        "yes_votes": yes_votes,
+                        "no_votes": no_votes,
+                    })
+            else:
+                for candidate in candidates:
+                    vote_count = Vote.objects.filter(
+                        election=election,
+                        candidate=candidate,
+                        position=position,
+                        choice="candidate",
+                    ).count()
 
-                candidate_results.append({
-                    "id": candidate.id,
-                    "student_id": candidate.student.student_id,
-                    "candidate_name": candidate.student.full_name,
-                    "photo_url": candidate.photo_url or "",
-                    "ballot_number": candidate.ballot_number,
-                    "vote_count": vote_count,
-                })
+                    candidate_results.append({
+                        "id": candidate.id,
+                        "student_id": candidate.student.student_id,
+                        "candidate_name": candidate.student.full_name,
+                        "photo_url": candidate.photo_url or "",
+                        "ballot_number": candidate.ballot_number,
+                        "vote_count": vote_count,
+                    })
 
-                total_valid_votes_this_position += vote_count
+            total_valid_votes_this_position = yes_votes + no_votes
+            if voting_mode == "candidate":
+                total_valid_votes_this_position = sum(
+                    candidate["vote_count"] for candidate in candidate_results
+                )
 
             skipped = max(0, unique_voters - total_valid_votes_this_position)
 
@@ -1409,9 +1488,17 @@ class ElectionResultsView(APIView):
                 "position_id": position.id,
                 "position_name": position.name,
                 "display_order": position.display_order,
+                "voting_mode": voting_mode,
                 "total_valid_votes": total_valid_votes_this_position,
                 "skipped_votes": skipped,
                 "skip_percentage": round((skipped / unique_voters * 100), 2) if unique_voters > 0 else 0.0,
+                "yes_votes": yes_votes,
+                "no_votes": no_votes,
+                "approved": (
+                    yes_votes > no_votes
+                    if voting_mode == "yes_no" and total_valid_votes_this_position > 0
+                    else None
+                ),
                 "candidates": candidate_results,
             })
 
@@ -1459,12 +1546,18 @@ class CandidatesForPositionView(APIView):
             )
 
         result = []
+        voting_mode = position_voting_mode(position)
 
         for candidate in candidates:
             vote_count = Vote.objects.filter(
                 election=position.election,
                 candidate_id=candidate.id,
-                position_id=position_id
+                position_id=position_id,
+                choice__in=(
+                    ["yes", "candidate"]
+                    if voting_mode == VOTING_MODE_YES_NO
+                    else ["candidate"]
+                ),
             ).count()
 
             candidate_data = {
@@ -1472,7 +1565,8 @@ class CandidatesForPositionView(APIView):
                 "candidate_name": candidate.student.full_name,
                 "student_id": candidate.student.student_id,
                 "positionid": int(position_id),  # Add position_id to response
-                "vote_count": vote_count
+                "vote_count": vote_count,
+                "voting_mode": voting_mode,
             }
 
             result.append(candidate_data)

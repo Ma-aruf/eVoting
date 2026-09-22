@@ -195,9 +195,16 @@ class Candidate(models.Model):
 
 
 class Vote(models.Model):
+    CHOICE_CHOICES = (
+        ("candidate", "Candidate"),
+        ("yes", "Yes"),
+        ("no", "No"),
+    )
+
     election = models.ForeignKey(Election, on_delete=models.PROTECT)
     position = models.ForeignKey(Position, on_delete=models.PROTECT)
     candidate = models.ForeignKey(Candidate, on_delete=models.PROTECT)
+    choice = models.CharField(max_length=10, choices=CHOICE_CHOICES, default="candidate")
     voter_hash = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
 

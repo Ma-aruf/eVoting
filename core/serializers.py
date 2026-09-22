@@ -5,6 +5,7 @@ from .utils import election_has_votes
 from .election_lifecycle import (
     election_ballot_ready,
     election_lifecycle,
+    position_voting_mode,
     START_TIME_LOCKED_DETAIL,
 )
 
@@ -299,9 +300,14 @@ class ElectionScheduleUpdateSerializer(serializers.Serializer):
 
 
 class PositionSerializer(serializers.ModelSerializer):
+    voting_mode = serializers.SerializerMethodField()
+
     class Meta:
         model = Position
-        fields = "__all__"
+        fields = ["id", "name", "election", "display_order", "voting_mode"]
+
+    def get_voting_mode(self, obj):
+        return position_voting_mode(obj)
 
 
 class CandidateSerializer(serializers.ModelSerializer):
@@ -371,10 +377,15 @@ class MultiVoteSerializer(serializers.Serializer):
     Only validate the votes payload. Student identity and token are
     authenticated at the view layer (headers).
     """
-    votes = serializers.ListField(
-        child=serializers.DictField(child=serializers.IntegerField()),
-        allow_empty=True
-    )
+    class VoteItemSerializer(serializers.Serializer):
+        election = serializers.IntegerField()
+        position = serializers.IntegerField()
+        candidate = serializers.IntegerField()
+        choice = serializers.ChoiceField(
+            choices=("candidate", "yes", "no"), default="candidate"
+        )
+
+    votes = serializers.ListField(child=VoteItemSerializer(), allow_empty=True)
 
     def validate(self, data):
         votes_list = data["votes"]
@@ -392,10 +403,5 @@ class MultiVoteSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 "A complete ballot must contain exactly one selection for every position."
             )
-
-        # Basic shape checks for election/candidate presence
-        for v in votes_list:
-            if v.get("election") is None or v.get("candidate") is None:
-                raise serializers.ValidationError("Each vote must include 'election' and 'candidate' ids.")
 
         return data

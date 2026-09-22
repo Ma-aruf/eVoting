@@ -10,6 +10,7 @@ interface Position {
     name: string;
     display_order: number;
     election: number;
+    voting_mode: 'candidate' | 'yes_no';
 }
 
 interface Candidate {

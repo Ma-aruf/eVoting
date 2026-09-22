@@ -58,11 +58,13 @@ class MultiVoteViewTests(TestCase):
                     "election": self.election.id,
                     "position": self.position1.id,
                     "candidate": self.candidate1.id,
+                    "choice": "yes",
                 },
                 {
                     "election": self.election.id,
                     "position": self.position2.id,
                     "candidate": self.candidate2.id,
+                    "choice": "yes",
                 },
             ]
         }
@@ -80,6 +82,7 @@ class MultiVoteViewTests(TestCase):
                     "election": self.election.id,
                     "position": self.position1.id,
                     "candidate": self.candidate2.id,  # wrong position
+                    "choice": "yes",
                 }
             ]
         }
@@ -95,6 +98,7 @@ class MultiVoteViewTests(TestCase):
                     "election": self.election.id,
                     "position": self.position1.id,
                     "candidate": self.candidate1.id,
+                    "choice": "yes",
                 }
             ]
         }

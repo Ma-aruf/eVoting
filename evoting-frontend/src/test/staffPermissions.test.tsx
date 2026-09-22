@@ -35,8 +35,8 @@ const voters = [
 ];
 let voterRecords: typeof voters = voters;
 const positions = [
-    {id: 101, name: 'Assigned President', election: 1, display_order: 1},
-    {id: 202, name: 'Other President', election: 2, display_order: 1},
+    {id: 101, name: 'Assigned President', election: 1, display_order: 1, voting_mode: 'candidate' as const},
+    {id: 202, name: 'Other President', election: 2, display_order: 1, voting_mode: 'candidate' as const},
 ];
 let electionData = elections;
 
@@ -659,7 +659,7 @@ describe('voter lifecycle contract', () => {
         expect(await screen.findByText('Votes Submitted Successfully!')).toBeInTheDocument();
         expect(getVoterSession()?.canVoteNow).toBe(false);
         expect(api.post).toHaveBeenCalledWith('/api/vote/', {
-            votes: [{election: 1, position: 101, candidate: 44}],
+            votes: [{election: 1, position: 101, candidate: 44, choice: 'candidate'}],
         }, expect.objectContaining({headers: expect.objectContaining({
             'X-Student-Id': 'V1', 'X-Election-Id': '1', 'X-Voter-Token': 'test-only-token',
         })}));
