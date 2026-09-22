@@ -491,6 +491,7 @@
 }
 
 .live-results-header {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -608,6 +609,18 @@
     background: #dc2626;
 }
 
+.live-results-clock {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    color: #fdba74;
+    font-size: 1.75rem;
+    font-weight: 600;
+}
+
 .live-results-candidate-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
@@ -620,7 +633,10 @@
     min-width: 0;
     padding: .25rem;
     border: 1px solid var(--color-border);
+    border-top: 5px solid var(--live-result-accent, var(--color-primary));
     border-radius: var(--radius-sm);
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
     background: var(--color-surface);
     text-align: center;
     box-shadow: var(--shadow-sm);
@@ -629,11 +645,13 @@
 
 .live-result-candidate:hover {
     border-color: var(--color-primary);
+    border-top-color: var(--live-result-accent, var(--color-primary));
     box-shadow: var(--shadow-md);
 }
 
 .live-result-candidate--emphasis {
     border-color: var(--color-border);
+    border-top-color: var(--live-result-accent, var(--color-primary));
 }
 
 .live-result-candidate-position {
@@ -787,6 +805,10 @@
 
     .live-results-header-stats {
         border-left: 0;
+    }
+
+    .live-results-clock {
+        display: none;
     }
 
 }

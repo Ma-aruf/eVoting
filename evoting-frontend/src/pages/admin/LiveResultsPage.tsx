@@ -1,4 +1,4 @@
-import {useMemo, type CSSProperties} from 'react';
+import {useEffect, useMemo, useState, type CSSProperties} from 'react';
 import {FiAlertCircle, FiClock, FiUsers, FiX} from 'react-icons/fi';
 import {useLocation, useNavigate} from 'react-router-dom';
 import {useAuth} from '../../hooks/useAuth';
@@ -7,10 +7,6 @@ import {useResults, type CandidateResult} from '../../queries/useResults';
 import LoadingState from '../../components/ui/LoadingState';
 import ErrorState from '../../components/ui/ErrorState';
 
-function formatUpdateTime(value: number) {
-    if (!value) return 'Waiting for first update';
-    return new Date(value).toLocaleTimeString(undefined, {hour: 'numeric', minute: '2-digit', second: '2-digit'});
-}
 
 function percentage(value: number) {
     return Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
@@ -20,25 +16,38 @@ function candidateOrder(candidate: CandidateResult) {
     return candidate.ballot_number ?? Number.MAX_SAFE_INTEGER;
 }
 
+const GOLDEN_ANGLE = 137.508;
+const POSITION_HUE_OFFSET = 205;
+
+function positionAccentColor(positionIndex: number) {
+    const hue = (POSITION_HUE_OFFSET + positionIndex * GOLDEN_ANGLE) % 360;
+    return `hsl(${hue} 68% 48%)`;
+}
+
 type CandidateDisplay = {
     candidate: CandidateResult;
     positionName: string;
+    accentColor: string;
 
     approval?: { yesVotes: number; noVotes: number; approved: boolean | null };
 };
 
-function CandidateResultBox({candidate, positionName, approval}: {
+function CandidateResultBox({candidate, positionName, accentColor, approval}: {
     candidate: CandidateResult;
     positionName: string;
+    accentColor: string;
     approval?: { yesVotes: number; noVotes: number; approved: boolean | null };
 }) {
     const percent = percentage(candidate.percentage);
-    const ringStyle = {'--live-result-angle': `${percent * 3.6}deg`} as CSSProperties;
+    const cardStyle = {
+        '--live-result-accent': accentColor,
+        '--live-result-angle': `${percent * 3.6}deg`,
+    } as CSSProperties;
 
     return (
-        <article className={'live-result-candidate live-result-candidate--emphasis'}>
+        <article className={'live-result-candidate live-result-candidate--emphasis'} style={cardStyle}>
             <p className="live-result-candidate-position">{positionName}</p>
-            <div className="live-result-photo-ring" style={ringStyle}
+            <div className="live-result-photo-ring"
                  aria-label={`${percent.toFixed(1)} percent of valid votes`}>
                 <div className="live-result-photo">
                     {candidate.photo_url ? (
@@ -89,13 +98,15 @@ export default function LiveResultsPage() {
         () => [...(results?.positions ?? [])].sort((a, b) => a.display_order - b.display_order),
         [results?.positions]
     );
-    const candidates = useMemo<CandidateDisplay[]>(() => positions.flatMap(position => {
+    const candidates = useMemo<CandidateDisplay[]>(() => positions.flatMap((position, positionIndex) => {
+        const accentColor = positionAccentColor(positionIndex);
         const ordered = [...position.candidates].sort((a, b) => candidateOrder(a) - candidateOrder(b));
         if (position.voting_mode === 'yes_no') {
             const candidate = ordered[0];
             return candidate ? [{
                 candidate,
                 positionName: position.position_name,
+                accentColor,
                 tied: false,
                 winner: false,
                 approval: {
@@ -112,12 +123,25 @@ export default function LiveResultsPage() {
         return ordered.map(candidate => ({
             candidate,
             positionName: position.position_name,
+            accentColor,
             tied: tied && leaders.some(leader => leader.id === candidate.id),
             winner: electionClosed && !tied && leaders[0]?.id === candidate.id,
         }));
     }), [electionClosed, positions]);
 
     const closePage = () => navigate('/admin/dashboard');
+    const [currentTime, setCurrentTime] = useState(new Date());
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setCurrentTime(new Date());
+        }, 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    const formatCurrentTime = () => {
+        return currentTime.toLocaleTimeString(undefined, {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+    };
 
     if (initialLoading) {
         return <main className="live-results-page"><LoadingState title="Loading live results"
@@ -181,6 +205,9 @@ export default function LiveResultsPage() {
                         <span className="live-results-dot" aria-hidden="true"/>
                         <span>Live</span>
                     </div>
+                    <div className="live-results-clock" aria-hidden="true">
+                        <FiClock/>{formatCurrentTime()}
+                    </div>
                     <button type="button" className="live-results-close" onClick={closePage}
                             aria-label="Return to dashboard" title="Return to dashboard">
                         <FiX aria-hidden="true"/>
@@ -203,11 +230,12 @@ export default function LiveResultsPage() {
                     positions in this election do not have candidates yet.</p></section>
             ) : (
                 <section className="live-results-candidate-grid" aria-label="Election candidates">
-                    {candidates.map(({candidate, positionName, approval}) => (
+                    {candidates.map(({candidate, positionName, accentColor, approval}) => (
                         <CandidateResultBox
                             key={candidate.id}
                             candidate={candidate}
                             positionName={positionName}
+                            accentColor={accentColor}
                             approval={approval}
                         />
                     ))}
