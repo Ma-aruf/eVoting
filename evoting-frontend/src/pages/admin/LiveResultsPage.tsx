@@ -241,6 +241,20 @@ export default function LiveResultsPage() {
                     ))}
                 </section>
             )}
+
+            {positions.length > 0 && (
+                <aside className="live-results-skip-bar" aria-label="Skipped ballots by position">
+                    <strong className="live-results-skip-label">Skipped ballots:</strong>
+                    <div className="live-results-skip-list">
+                        {positions.map(position => (
+                            <span className="live-results-skip-item" key={position.position_id}>
+                                <span>{position.position_name}</span>
+                                <strong>{position.skipped_votes.toLocaleString()}</strong>
+                            </span>
+                        ))}
+                    </div>
+                </aside>
+            )}
         </main>
     );
 }

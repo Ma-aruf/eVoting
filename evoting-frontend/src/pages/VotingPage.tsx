@@ -37,19 +37,19 @@ function getCandidateCardSizing(candidateCount: number): CandidateCardSizing {
         case 1:
             return {
                 card: 'w-[280px] h-[380px] sm:w-[320px] sm:h-[420px] lg:w-[360px] lg:h-[460px]',
-                photo: 'w-70 h-70 mt-3 mb-7',
+                photo: 'w-50 h-50 mt-2 mb-6 sm:w-60 sm:h-60 sm:mt-3 sm:mb-7 lg:w-70 lg:h-70',
                 name: 'mb-3 min-h-12 text-xl',
             };
         case 2:
             return {
                 card: 'w-[240px] h-[340px] sm:w-[280px] sm:h-[380px] lg:w-[320px] lg:h-[420px]',
-                photo: 'w-64 h-64 mt-2 mb-6',
+                photo: 'w-50 h-50 mt-2 mb-6 sm:w-56 sm:h-56 lg:w-64 lg:h-64',
                 name: 'mb-2 min-h-12',
             };
         case 3:
             return {
                 card: 'w-[220px] h-[320px] sm:w-[260px] sm:h-[360px] lg:w-[300px] lg:h-[400px]',
-                photo: 'w-60 h-60 mt-2 mb-6',
+                photo: 'w-50 h-50 mt-2 mb-6 sm:w-52 sm:h-52 lg:w-60 lg:h-60',
                 name: 'mb-2 min-h-12',
             };
         case 4:
@@ -60,8 +60,8 @@ function getCandidateCardSizing(candidateCount: number): CandidateCardSizing {
             };
         default:
             return {
-                card: 'w-[160px] h-[225px] sm:w-[190px] sm:h-[255px] lg:w-[220px] lg:h-[275px]',
-                photo: 'w-33 h-33 mt-2 mb-5',
+                card: 'w-[220px] h-[300px] sm:w-[190px] sm:h-[255px] lg:w-[220px] lg:h-[275px]',
+                photo: 'w-50 h-50 mt-2 mb-6 sm:w-44 sm:h-44 lg:w-48 lg:h-48',
                 name: 'mb-2 min-h-10 text-sm',
             };
     }
@@ -72,13 +72,13 @@ function getCandidateLayoutClass(candidateCount: number): string {
         case 1:
             return 'flex justify-center';
         case 2:
-            return 'inline-flex max-w-6xl flex-wrap items-start justify-center gap-6 sm:gap-8 mx-auto';
+            return 'grid grid-cols-1 sm:flex sm:flex-wrap max-w-6xl items-start justify-center gap-6 sm:gap-8 mx-auto';
         case 3:
-            return 'inline-flex max-w-6xl flex-wrap items-start justify-center gap-4 sm:gap-5 mx-auto';
+            return 'grid grid-cols-1 sm:flex sm:flex-wrap max-w-6xl items-start justify-center gap-4 sm:gap-5 mx-auto';
         case 4:
-            return 'inline-flex max-w-6xl flex-wrap items-start justify-center gap-3 sm:gap-4 mx-auto';
+            return 'grid grid-cols-1 sm:flex sm:flex-wrap max-w-6xl items-start justify-center gap-3 sm:gap-4 mx-auto';
         default:
-            return 'inline-flex max-w-6xl flex-wrap items-start justify-center gap-2 sm:gap-3 mx-auto';
+            return 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 max-w-6xl items-start justify-center gap-2 sm:gap-3 mx-auto';
     }
 }
 
