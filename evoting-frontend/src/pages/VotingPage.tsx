@@ -1,11 +1,21 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useQueryClient} from '@tanstack/react-query';
 import {useNavigate} from 'react-router-dom';
-import {FiAlertCircle, FiCheck, FiCheckCircle, FiLoader, FiThumbsDown, FiThumbsUp, FiUserPlus} from 'react-icons/fi';
+import {
+    FiAlertCircle,
+    FiCheck,
+    FiCheckCircle,
+    FiLoader,
+    FiSkipForward,
+    FiThumbsDown,
+    FiThumbsUp,
+    FiUserPlus
+} from 'react-icons/fi';
 import {clearVoterSession, getVoterSession, markVoterSessionUnableToVote, voterApi} from '../api/voterApi';
 import {type Candidate, useVotingData} from '../hooks/useVotingData';
 import {voterLifecycleMessage, voterLifecycleMessageFromDetail} from '../utils/electionLifecycle';
-import ElectionStatusBadge from '../components/ElectionStatusBadge';
+
+type BallotChoice = 'candidate' | 'yes' | 'no' | 'skip';
 
 interface SelectedVote {
     position_id: number;
@@ -13,7 +23,63 @@ interface SelectedVote {
     candidate_id: number | null;
     candidate_name: string;
     candidate_photo?: string;
-    choice: 'candidate' | 'yes' | 'no';
+    choice: BallotChoice;
+}
+
+type CandidateCardSizing = {
+    card: string;
+    photo: string;
+    name: string;
+};
+
+function getCandidateCardSizing(candidateCount: number): CandidateCardSizing {
+    switch (Math.min(Math.max(candidateCount, 1), 5)) {
+        case 1:
+            return {
+                card: 'w-[280px] h-[380px] sm:w-[320px] sm:h-[420px] lg:w-[360px] lg:h-[460px]',
+                photo: 'w-70 h-70 mt-3 mb-7',
+                name: 'mb-3 min-h-12 text-xl',
+            };
+        case 2:
+            return {
+                card: 'w-[240px] h-[340px] sm:w-[280px] sm:h-[380px] lg:w-[320px] lg:h-[420px]',
+                photo: 'w-64 h-64 mt-2 mb-6',
+                name: 'mb-2 min-h-12',
+            };
+        case 3:
+            return {
+                card: 'w-[220px] h-[320px] sm:w-[260px] sm:h-[360px] lg:w-[300px] lg:h-[400px]',
+                photo: 'w-60 h-60 mt-2 mb-6',
+                name: 'mb-2 min-h-12',
+            };
+        case 4:
+            return {
+                card: 'w-[200px] h-[300px] sm:w-[230px] sm:h-[330px] lg:w-[260px] lg:h-[360px]',
+                photo: 'w-50 h-50 mt-2 mb-6',
+                name: 'mb-2 min-h-12',
+            };
+        default:
+            return {
+                card: 'w-[160px] h-[225px] sm:w-[190px] sm:h-[255px] lg:w-[220px] lg:h-[275px]',
+                photo: 'w-33 h-33 mt-2 mb-5',
+                name: 'mb-2 min-h-10 text-sm',
+            };
+    }
+}
+
+function getCandidateLayoutClass(candidateCount: number): string {
+    switch (Math.min(Math.max(candidateCount, 1), 5)) {
+        case 1:
+            return 'flex justify-center';
+        case 2:
+            return 'inline-flex max-w-6xl flex-wrap items-start justify-center gap-6 sm:gap-8 mx-auto';
+        case 3:
+            return 'inline-flex max-w-6xl flex-wrap items-start justify-center gap-4 sm:gap-5 mx-auto';
+        case 4:
+            return 'inline-flex max-w-6xl flex-wrap items-start justify-center gap-3 sm:gap-4 mx-auto';
+        default:
+            return 'inline-flex max-w-6xl flex-wrap items-start justify-center gap-2 sm:gap-3 mx-auto';
+    }
 }
 
 export default function VotingPage() {
@@ -79,6 +145,23 @@ export default function VotingPage() {
         }
     }, [positions, selectedVotes.length]);
 
+    const advanceAfterPosition = () => {
+        if (isChangingVote) {
+            setTimeout(() => {
+                setCurrentPositionIndex(positions.length);
+                setIsChangingVote(false);
+                setTimeLeft(15);
+            }, 300);
+        } else if (currentPositionIndex < positions.length - 1) {
+            setTimeout(() => setCurrentPositionIndex(prev => prev + 1), 300);
+        } else if (currentPositionIndex === positions.length - 1) {
+            setTimeout(() => {
+                setCurrentPositionIndex(prev => prev + 1);
+                setTimeLeft(45);
+            }, 300);
+        }
+    };
+
     // Handle query error
     useEffect(() => {
         if (queryError) {
@@ -116,23 +199,7 @@ export default function VotingPage() {
                     : vote
             )
         );
-        // Auto-advance to next position after voting
-        if (isChangingVote) {
-            // If changing a vote, return to submit card after selection
-            setTimeout(() => {
-                setCurrentPositionIndex(positions.length);
-                setIsChangingVote(false);
-                setTimeLeft(15);
-            }, 300);
-        } else if (currentPositionIndex < positions.length - 1) {
-            setTimeout(() => setCurrentPositionIndex(prev => prev + 1), 300);
-        } else if (currentPositionIndex === positions.length - 1) {
-            // Advance to submit card when last position is voted
-            setTimeout(() => {
-                setCurrentPositionIndex(prev => prev + 1);
-                setTimeLeft(45);
-            }, 300);
-        }
+        advanceAfterPosition();
     };
 
     const handleSelectApproval = (positionId: number, choice: 'yes' | 'no') => {
@@ -153,20 +220,25 @@ export default function VotingPage() {
             )
         );
 
-        if (isChangingVote) {
-            setTimeout(() => {
-                setCurrentPositionIndex(positions.length);
-                setIsChangingVote(false);
-                setTimeLeft(15);
-            }, 300);
-        } else if (currentPositionIndex < positions.length - 1) {
-            setTimeout(() => setCurrentPositionIndex(prev => prev + 1), 300);
-        } else if (currentPositionIndex === positions.length - 1) {
-            setTimeout(() => {
-                setCurrentPositionIndex(prev => prev + 1);
-                setTimeLeft(45);
-            }, 300);
-        }
+        advanceAfterPosition();
+    };
+
+    const handleSkipPosition = (positionId: number) => {
+        setSelectedVotes(prev =>
+            prev.map(vote =>
+                vote.position_id === positionId
+                    ? {
+                        ...vote,
+                        candidate_id: null,
+                        candidate_name: '',
+                        candidate_photo: undefined,
+                        choice: 'skip',
+                    }
+                    : vote
+            )
+        );
+        setError(null);
+        advanceAfterPosition();
     };
 
     const handleSubmitVotes = useCallback(async () => {
@@ -175,20 +247,21 @@ export default function VotingPage() {
             return;
         }
 
-        // Filter votes where candidate was selected (not skipped)
-        const votesToSubmit = selectedVotes
-            .filter(vote => vote.candidate_id !== null)
-            .map(vote => ({
-                election: election?.id,
-                position: vote.position_id,
-                candidate: vote.candidate_id,
-                choice: vote.choice,
-            }));
+        const ballotIsComplete = selectedVotes.length === positions.length && selectedVotes.every(
+            vote => vote.choice === 'skip' || vote.candidate_id !== null
+        );
 
-        if (votesToSubmit.length !== positions.length || selectedVotes.some(vote => vote.candidate_id === null)) {
-            setError('Please vote for every position before submitting.');
+        if (!ballotIsComplete) {
+            setError('Please choose a candidate, select Yes or No, or skip every position before submitting.');
             return;
         }
+
+        const votesToSubmit = selectedVotes.map(vote => ({
+            election: election?.id,
+            position: vote.position_id,
+            candidate: vote.candidate_id,
+            choice: vote.choice,
+        }));
 
 
         submissionInFlight.current = true;
@@ -368,7 +441,6 @@ export default function VotingPage() {
                         {election && (
                             <>
                                 <span className="text-white font-medium">{election.name} ({election.year})</span>
-                                <ElectionStatusBadge status={election.status}/>
                             </>
                         )}
                     </div>
@@ -385,6 +457,9 @@ export default function VotingPage() {
                     const selectedVote = position
                         ? selectedVotes.find(v => v.position_id === position.id)
                         : null;
+                    const isPositionSkipped = selectedVote?.choice === 'skip';
+                    const cardSizing = getCandidateCardSizing(candidates.length);
+                    const candidateLayoutClass = getCandidateLayoutClass(candidates.length);
 
                     return (
                         <div className="flex min-h-0 w-full flex-1 flex-col m-0">
@@ -437,12 +512,18 @@ export default function VotingPage() {
                                             return (
                                                 <div key={vote.position_id} className="flex flex-col items-center">
                                                     <h4 className="font-bold text-gray-800 text-center mb-2 text-xs">{vote.position_name}</h4>
-                                                    {vote.choice !== 'candidate' && (
+                                                    {vote.choice !== 'candidate' && vote.choice !== 'skip' && (
                                                         <span className="mb-2 text-xs font-semibold text-cyan-800">
                                                             {vote.choice === 'yes' ? 'Yes' : 'No'}
                                                         </span>
                                                     )}
-                                                    {vote.candidate_photo ? (
+                                                    {vote.choice === 'skip' ? (
+                                                        <div
+                                                            className="w-14 h-14 rounded-full bg-gray-200 flex items-center justify-center mb-2 border-2 border-gray-400">
+                                                            <span
+                                                                className="text-xs font-semibold text-gray-600">Skipped</span>
+                                                        </div>
+                                                    ) : vote.candidate_photo ? (
                                                         <img
                                                             src={vote.candidate_photo}
                                                             alt={vote.candidate_name}
@@ -481,15 +562,21 @@ export default function VotingPage() {
                                             <div className="flex justify-center">
                                                 <h3 className="text-2xl  font-bold">{position?.name}</h3>
                                             </div>
+                                            {isPositionSkipped && (
+                                                <p className="text-center text-sm font-semibold text-red-600">
+                                                    You skipped this position
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
 
                                     {/* Candidates - Centered with fit width */}
-                                    <div className="p-3 sm:p-1 flex flex-1 items-center justify-center min-h-0">
+                                    <div
+                                        className="flex min-h-0 flex-1 items-start justify-start overflow-auto p-2 pt-4 pb-6 sm:items-center sm:justify-center sm:overflow-hidden sm:p-1">
                                         {candidates.length > 0 ? (
-                                            <div className="flex w-full items-center justify-center">
-                                                <div
-                                                    className="inline-flex flex-wrap items-start justify-center gap-4">
+                                            <div
+                                                className="flex w-full flex-col items-center justify-start gap-4 overflow-visible sm:justify-center">
+                                                <div className={candidateLayoutClass}>
                                                     {position?.voting_mode === 'yes_no' ? (
                                                         // One candidate remains one card; the two choices live in its vote control.
                                                         (() => {
@@ -502,15 +589,15 @@ export default function VotingPage() {
                                                                 <div
                                                                     role="group"
                                                                     aria-label={`Approval choice for ${candidate.student_name}`}
-                                                                    className={`flex-none flex relative flex-col items-center p-4 sm:p-3 rounded-sm shadow-lg transition-all w-[165px] sm:w-[190px] h-[250px] ${
+                                                                    className={`flex-none flex relative flex-col items-center p-2 sm:p-3 rounded-sm shadow-lg transition-all ${cardSizing.card} ${
                                                                         selectedChoice
-                                                                            ? 'bg-emerald-50 ring-1 ring-emerald-500 shadow-md'
+                                                                            ? 'bg-emerald-50 border-1 border-emerald-500 shadow-md'
                                                                             : 'border border-cyan-600 hover:border-blue-300 hover:bg-cyan-100 hover:shadow-md'
                                                                     }`}
                                                                 >
                                                                     {/* Candidate Photo */}
                                                                     <div
-                                                                        className="w-23 h-23 md:w-35 md:h-35 mt-0 rounded-full overflow-hidden bg-gray-100 mb-3 flex items-center justify-center border-2 border-white shadow relative">
+                                                                        className={`${cardSizing.photo} rounded-full overflow-hidden bg-gray-100 flex items-center justify-center border-2 border-white shadow relative`}>
                                                                         {candidate.photo_url ? (
                                                                             <img
                                                                                 src={candidate.photo_url}
@@ -519,7 +606,7 @@ export default function VotingPage() {
                                                                             />
                                                                         ) : (
                                                                             <span
-                                                                                className="text-3xl font-bold text-gray-400">
+                                                                                className="text-4xl font-bold text-gray-400">
                                                                                 {candidate.student_name.charAt(0)}
                                                                             </span>
                                                                         )}
@@ -530,50 +617,54 @@ export default function VotingPage() {
                                                                     </div>
 
                                                                     {/* Candidate Name */}
-                                                                    <h4 className="text-sm font-semibold text-gray-800 text-center line-clamp-2 h-10">
+                                                                    <h4 className={`w-full break-words whitespace-normal text-base leading-5 font-semibold text-gray-800 text-center ${cardSizing.name}`}>
                                                                         {candidate.student_name}
                                                                     </h4>
 
-                                                                    {/* Approval choices use the same vote-indicator treatment as candidate cards. */}
-                                                                    <div role="radiogroup" aria-label="Approval choices"
-                                                                         className="flex gap-2 w-full">
-                                                                        {(['yes', 'no'] as const).map(choice => {
-                                                                            const isSelected = selectedChoice === choice;
-                                                                            const ChoiceIcon = choice === 'yes' ? FiThumbsUp : FiThumbsDown;
-                                                                            const label = choice === 'yes' ? 'Yes' : 'No';
+                                                                    <div className="mt-auto w-full">
+                                                                        {/* Approval choices use the same vote-indicator treatment as candidate cards. */}
+                                                                        <div role="radiogroup"
+                                                                             aria-label="Approval choices"
+                                                                             className="flex gap-2 w-full">
+                                                                            {(['yes', 'no'] as const).map(choice => {
+                                                                                const isSelected = selectedChoice === choice;
+                                                                                const ChoiceIcon = choice === 'yes' ? FiThumbsUp : FiThumbsDown;
+                                                                                const label = choice === 'yes' ? 'Yes' : 'No';
 
-                                                                            return (
-                                                                                <button
-                                                                                    key={choice}
-                                                                                    type="button"
-                                                                                    role="radio"
-                                                                                    aria-checked={isSelected}
-                                                                                    disabled={submitting}
-                                                                                    aria-label={`${label}, ${candidate.student_name}`}
-                                                                                    onClick={() => position && handleSelectApproval(position.id, choice)}
-                                                                                    className={`flex-1 py-2 px-2 rounded-sm text-sm font-medium flex items-center justify-center gap-1 transition-colors duration-200 ${
-                                                                                        isSelected
-                                                                                            ? 'bg-emerald-600 text-white'
-                                                                                            : 'bg-cyan-700 hover:bg-emerald-600 text-white'
-                                                                                    }`}
-                                                                                >
-                                                                                    {isSelected ? (
-                                                                                        <>
-                                                                                            <FiCheck className="w-4 h-4"
-                                                                                                     aria-hidden="true"/>
-                                                                                            {label}
-                                                                                        </>
-                                                                                    ) : (
-                                                                                        <>
-                                                                                            <ChoiceIcon
-                                                                                                className="w-4 h-4"
-                                                                                                aria-hidden="true"/>
-                                                                                            {label}
-                                                                                        </>
-                                                                                    )}
-                                                                                </button>
-                                                                            );
-                                                                        })}
+                                                                                return (
+                                                                                    <button
+                                                                                        key={choice}
+                                                                                        type="button"
+                                                                                        role="radio"
+                                                                                        aria-checked={isSelected}
+                                                                                        disabled={submitting}
+                                                                                        aria-label={`${label}, ${candidate.student_name}`}
+                                                                                        onClick={() => position && handleSelectApproval(position.id, choice)}
+                                                                                        className={`flex-1 py-3 px-4 rounded-sm text-base font-semibold flex items-center justify-center gap-2 transition-colors duration-200 ${
+                                                                                            isSelected
+                                                                                                ? 'bg-emerald-600 text-white'
+                                                                                                : 'bg-cyan-700 hover:bg-emerald-600 text-white'
+                                                                                        }`}
+                                                                                    >
+                                                                                        {isSelected ? (
+                                                                                            <>
+                                                                                                <FiCheck
+                                                                                                    className="w-7 h-7"
+                                                                                                    aria-hidden="true"/>
+                                                                                                <p className="text-lg">{label}</p>
+                                                                                            </>
+                                                                                        ) : (
+                                                                                            <>
+                                                                                                <ChoiceIcon
+                                                                                                    className="w-7 h-7"
+                                                                                                    aria-hidden="true"/>
+                                                                                                <p className="text-lg">{label}</p>
+                                                                                            </>
+                                                                                        )}
+                                                                                    </button>
+                                                                                );
+                                                                            })}
+                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                             );
@@ -591,9 +682,9 @@ export default function VotingPage() {
                                                                     aria-checked={isSelected}
                                                                     aria-label={`${candidate.ballot_number}: ${candidate.student_name}`}
                                                                     key={candidate.id}
-                                                                    className={`flex-none flex relative flex-col items-center p-2 sm:p-3 rounded-sm shadow-lg transition-all w-[175px] sm:w-[190px] h-[250px] cursor-pointer ${
+                                                                    className={`flex-none flex relative flex-col items-center p-2 sm:p-3 rounded-sm shadow-lg transition-all ${cardSizing.card} cursor-pointer ${
                                                                         isSelected
-                                                                            ? 'bg-emerald-50 ring-1 ring-emerald-500 shadow-md'
+                                                                            ? 'bg-emerald-50 border-1 border-emerald-500 shadow-md'
                                                                             : 'border border-cyan-600 hover:border-blue-300 hover:bg-cyan-100 hover:shadow-md'
                                                                     }`}
                                                                     onClick={() => position && handleSelectCandidate(position.id, candidate)}
@@ -607,7 +698,7 @@ export default function VotingPage() {
 
                                                                     {/* Candidate Photo */}
                                                                     <div
-                                                                        className="w-28 h-28 md:w-32 md:h-32 mt-0 rounded-full overflow-hidden bg-gray-100 mb-3 flex items-center justify-center border-2 border-white shadow relative">
+                                                                        className={`${cardSizing.photo} rounded-full overflow-hidden bg-gray-100 flex items-center justify-center border-2 border-white shadow relative`}>
                                                                         {candidate.photo_url ? (
                                                                             <img
                                                                                 src={candidate.photo_url}
@@ -616,7 +707,7 @@ export default function VotingPage() {
                                                                             />
                                                                         ) : (
                                                                             <span
-                                                                                className="text-3xl font-bold text-gray-400">
+                                                                                className="text-4xl font-bold text-gray-400">
                                                                                 {candidate.student_name.charAt(0)}
                                                                             </span>
                                                                         )}
@@ -627,36 +718,54 @@ export default function VotingPage() {
                                                                     </div>
 
                                                                     {/* Candidate Name */}
-                                                                    <h4 className="text-sm font-semibold text-gray-800 text-center mb-3 line-clamp-2 h-10">
+                                                                    <h4 className={`w-full break-words whitespace-normal text-base leading-5 font-semibold text-gray-800 text-center ${cardSizing.name}`}>
                                                                         {candidate.student_name}
                                                                     </h4>
 
-                                                                    {/* Vote Indicator */}
-                                                                    <div
-                                                                        className={`w-full py-2 px-4 rounded-sm text-sm font-medium flex items-center justify-center gap-2 transition-colors duration-200 ${
-                                                                            isSelected
-                                                                                ? 'bg-emerald-600 text-white'
-                                                                                : 'bg-cyan-700 hover:bg-emerald-600 text-white'
-                                                                        }`}>
-                                                                        {isSelected ? (
-                                                                            <>
-                                                                                <FiCheck className="w-4 h-4"
-                                                                                         aria-hidden="true"/>
-                                                                                Selected
-                                                                            </>
-                                                                        ) : (
-                                                                            <>
-                                                                                <FiThumbsUp className="w-4 h-4"
-                                                                                            aria-hidden="true"/>
-                                                                                Vote
-                                                                            </>
-                                                                        )}
+                                                                    <div className="mt-auto w-full flex flex-col gap-1">
+                                                                        {/* Vote Indicator */}
+                                                                        <div
+                                                                            className={`w-full py-3 px-4 rounded-sm ${candidates.length >= 5 ? 'text-md' : 'text-base'} font-semibold flex items-center justify-center gap-2 transition-colors duration-200 ${
+                                                                                isSelected
+                                                                                    ? 'bg-emerald-600 text-white'
+                                                                                    : 'bg-cyan-700 hover:bg-emerald-600 text-white'
+                                                                            }`}>
+                                                                            {isSelected ? (
+                                                                                <>
+                                                                                    <FiCheck
+                                                                                        className={candidates.length >= 5 ? 'w-4 h-4' : 'w-6 h-6'}
+                                                                                        aria-hidden="true"/>
+                                                                                    <p className={candidates.length >= 5 ? 'text-md' : 'text-lg'}>Selected</p>
+                                                                                </>
+                                                                            ) : (
+                                                                                <>
+                                                                                    <FiThumbsUp
+                                                                                        className={candidates.length >= 5 ? 'w-4 h-4' : 'w-6 h-6'}
+                                                                                        aria-hidden="true"/>
+                                                                                    <p className={candidates.length >= 5 ? 'text-md' : 'text-lg'}>Vote</p>
+                                                                                </>
+                                                                            )}
+                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                             );
                                                         })
                                                     )}
                                                 </div>
+                                                <button
+                                                    type="button"
+                                                    disabled={submitting}
+                                                    onClick={() => position && handleSkipPosition(position.id)}
+                                                    aria-label={isPositionSkipped ? 'Position skipped' : 'Skip this position'}
+                                                    className={`inline-flex items-center justify-center gap-2 rounded-sm px-6 py-3 text-sm sm:text-base font-semibold text-white shadow-md transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-60 ${
+                                                        isPositionSkipped
+                                                            ? 'bg-red-700 hover:bg-red-800'
+                                                            : 'bg-red-600 hover:bg-red-700'
+                                                    }`}
+                                                >
+                                                    <FiSkipForward className="h-5 w-5" aria-hidden="true"/>
+                                                    {isPositionSkipped ? 'Position skipped' : 'Skip this position'}
+                                                </button>
                                             </div>
                                         ) : (
                                             <div className="text-center py-8 text-gray-500">

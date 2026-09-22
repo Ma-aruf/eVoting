@@ -6,7 +6,6 @@ import {useElections} from '../../queries/useElections';
 import {useResults, type CandidateResult} from '../../queries/useResults';
 import LoadingState from '../../components/ui/LoadingState';
 import ErrorState from '../../components/ui/ErrorState';
-import ElectionStatusBadge from '../../components/ElectionStatusBadge';
 
 function formatUpdateTime(value: number) {
     if (!value) return 'Waiting for first update';
@@ -24,38 +23,26 @@ function candidateOrder(candidate: CandidateResult) {
 type CandidateDisplay = {
     candidate: CandidateResult;
     positionName: string;
-    tied: boolean;
-    winner: boolean;
-    approval?: {yesVotes: number; noVotes: number; approved: boolean | null};
+
+    approval?: { yesVotes: number; noVotes: number; approved: boolean | null };
 };
 
-function CandidateResultBox({candidate, positionName, tied, winner, approval}: {
+function CandidateResultBox({candidate, positionName, approval}: {
     candidate: CandidateResult;
     positionName: string;
-    tied: boolean;
-    winner: boolean;
-    approval?: {yesVotes: number; noVotes: number; approved: boolean | null};
+    approval?: { yesVotes: number; noVotes: number; approved: boolean | null };
 }) {
     const percent = percentage(candidate.percentage);
     const ringStyle = {'--live-result-angle': `${percent * 3.6}deg`} as CSSProperties;
-    const statusLabel = approval
-        ? approval.approved === true
-            ? 'Approved'
-            : approval.approved === false
-                ? 'Rejected'
-                : 'No decision yet'
-        : winner ? 'Winner' : tied ? 'Tied for lead' : undefined;
 
     return (
-        <article className={'live-result-candidate' + (statusLabel ? ' live-result-candidate--emphasis' : '')}>
+        <article className={'live-result-candidate live-result-candidate--emphasis'}>
             <p className="live-result-candidate-position">{positionName}</p>
-            <div className="live-result-candidate-status" aria-live="polite">
-                {statusLabel && <span className="live-result-status-label">{statusLabel}</span>}
-            </div>
-            <div className="live-result-photo-ring" style={ringStyle} aria-label={`${percent.toFixed(1)} percent of valid votes`}>
+            <div className="live-result-photo-ring" style={ringStyle}
+                 aria-label={`${percent.toFixed(1)} percent of valid votes`}>
                 <div className="live-result-photo">
                     {candidate.photo_url ? (
-                        <img src={candidate.photo_url} alt={`${candidate.candidate_name} photograph`} />
+                        <img src={candidate.photo_url} alt={`${candidate.candidate_name} photograph`}/>
                     ) : (
                         <span aria-hidden="true">{candidate.candidate_name.charAt(0).toUpperCase()}</span>
                     )}
@@ -83,7 +70,11 @@ export default function LiveResultsPage() {
     const {user} = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
-    const {data: elections = [], isLoading: electionsLoading, isError: electionsError} = useElections({refetchInterval: 45_000});
+    const {
+        data: elections = [],
+        isLoading: electionsLoading,
+        isError: electionsError
+    } = useElections({refetchInterval: 45_000});
     const isStaff = user?.role === 'staff';
     const requestedElectionId = new URLSearchParams(location.search).get('election');
     const requestedId = requestedElectionId ? Number(requestedElectionId) : null;
@@ -129,32 +120,52 @@ export default function LiveResultsPage() {
     const closePage = () => navigate('/admin/dashboard');
 
     if (initialLoading) {
-        return <main className="live-results-page"><LoadingState title="Loading live results" message="Preparing the strong-room display…" /></main>;
+        return <main className="live-results-page"><LoadingState title="Loading live results"
+                                                                 message="Preparing the strong-room display…"/></main>;
     }
 
     if (!user || (user.role !== 'superuser' && user.role !== 'staff')) {
-        return <main className="live-results-page"><ErrorState title="Access denied" message="You do not have permission to view live results." action={<button className="ui-button ui-button--secondary ui-button--compact" onClick={closePage}>Return to dashboard</button>} /></main>;
+        return <main className="live-results-page"><ErrorState title="Access denied"
+                                                               message="You do not have permission to view live results."
+                                                               action={<button
+                                                                   className="ui-button ui-button--secondary ui-button--compact"
+                                                                   onClick={closePage}>Return to dashboard</button>}/>
+        </main>;
     }
 
     if (electionsError) {
-        return <main className="live-results-page"><ErrorState title="Live results unavailable" message="We could not load the permitted election context." action={<button className="ui-button ui-button--secondary ui-button--compact" onClick={closePage}>Return to dashboard</button>} /></main>;
+        return <main className="live-results-page"><ErrorState title="Live results unavailable"
+                                                               message="We could not load the permitted election context."
+                                                               action={<button
+                                                                   className="ui-button ui-button--secondary ui-button--compact"
+                                                                   onClick={closePage}>Return to dashboard</button>}/>
+        </main>;
     }
 
     if (!effectiveElectionId || !election) {
-        return <main className="live-results-page"><ErrorState title="No election selected" message={isStaff ? 'Your assigned election is unavailable.' : 'Return to Election Results and select an election first.'} action={<button className="ui-button ui-button--secondary ui-button--compact" onClick={closePage}>Return to dashboard</button>} /></main>;
+        return <main className="live-results-page"><ErrorState title="No election selected"
+                                                               message={isStaff ? 'Your assigned election is unavailable.' : 'Return to Election Results and select an election first.'}
+                                                               action={<button
+                                                                   className="ui-button ui-button--secondary ui-button--compact"
+                                                                   onClick={closePage}>Return to dashboard</button>}/>
+        </main>;
     }
 
     if (resultsQuery.isError && !results) {
-        return <main className="live-results-page"><ErrorState title="Results unavailable" message="The selected election could not be loaded. It may be outside your permitted scope." action={<button className="ui-button ui-button--secondary ui-button--compact" onClick={closePage}>Return to dashboard</button>} /></main>;
+        return <main className="live-results-page"><ErrorState title="Results unavailable"
+                                                               message="The selected election could not be loaded. It may be outside your permitted scope."
+                                                               action={<button
+                                                                   className="ui-button ui-button--secondary ui-button--compact"
+                                                                   onClick={closePage}>Return to dashboard</button>}/>
+        </main>;
     }
 
     return (
         <main className="live-results-page">
-            <header className="live-results-header bg-cyan-900">
+            <header className="live-results-header px-2 py-1 bg-cyan-900">
                 <div className="live-results-heading">
                     <div>
                         <h1>{results?.election_name ?? election.name}</h1>
-                        <ElectionStatusBadge status={lifecycleStatus}/>
                     </div>
                 </div>
                 <div className="live-results-header-actions">
@@ -162,35 +173,41 @@ export default function LiveResultsPage() {
                         <div><span>Eligible</span><strong>{results?.total_voters.toLocaleString() ?? '—'}</strong></div>
                         <div><span>Votes</span><strong>{results?.voters_voted.toLocaleString() ?? '—'}</strong></div>
                         <div><span>Turnout</span><strong>{results?.voter_turnout.toFixed(1) ?? '0.0'}%</strong></div>
-                        <div><span>Remaining</span><strong>{results ? Math.max(0, results.total_voters - results.voters_voted).toLocaleString() : '—'}</strong></div>
+                        <div>
+                            <span>Remaining</span><strong>{results ? Math.max(0, results.total_voters - results.voters_voted).toLocaleString() : '—'}</strong>
+                        </div>
                     </div>
                     <div className="live-results-update" aria-live="polite">
-                        <span className="live-results-dot" aria-hidden="true" />
+                        <span className="live-results-dot" aria-hidden="true"/>
                         <span>Live</span>
-                        <small>Updated {formatUpdateTime(resultsQuery.dataUpdatedAt)}</small>
                     </div>
-                    <button type="button" className="live-results-close" onClick={closePage} aria-label="Return to dashboard" title="Return to dashboard">
-                        <FiX aria-hidden="true" />
+                    <button type="button" className="live-results-close" onClick={closePage}
+                            aria-label="Return to dashboard" title="Return to dashboard">
+                        <FiX aria-hidden="true"/>
                     </button>
                 </div>
             </header>
 
-            {resultsQuery.isError && results && <p className="live-results-connection-warning" role="status"><FiAlertCircle aria-hidden="true" /> Connection interrupted. Showing the last successful results.</p>}
-            {electionClosed && <p className="live-results-closed" role="status"><FiClock aria-hidden="true" /> Election closed. Winner labels reflect the final aggregate only.</p>}
+            {resultsQuery.isError && results &&
+                <p className="live-results-connection-warning" role="status"><FiAlertCircle
+                    aria-hidden="true"/> Connection interrupted. Showing the last successful results.</p>}
+            {electionClosed &&
+                <p className="live-results-closed" role="status"><FiClock aria-hidden="true"/> Election closed. Winner
+                    labels reflect the final aggregate only.</p>}
 
             {!positions.length ? (
-                <section className="live-results-empty"><FiUsers aria-hidden="true" /><h2>No positions found</h2><p>This election does not have any positions yet.</p></section>
+                <section className="live-results-empty"><FiUsers aria-hidden="true"/><h2>No positions found</h2><p>This
+                    election does not have any positions yet.</p></section>
             ) : !candidates.length ? (
-                <section className="live-results-empty"><FiUsers aria-hidden="true" /><h2>No candidates found</h2><p>The positions in this election do not have candidates yet.</p></section>
+                <section className="live-results-empty"><FiUsers aria-hidden="true"/><h2>No candidates found</h2><p>The
+                    positions in this election do not have candidates yet.</p></section>
             ) : (
                 <section className="live-results-candidate-grid" aria-label="Election candidates">
-                    {candidates.map(({candidate, positionName, tied, winner, approval}) => (
+                    {candidates.map(({candidate, positionName, approval}) => (
                         <CandidateResultBox
                             key={candidate.id}
                             candidate={candidate}
                             positionName={positionName}
-                            tied={tied}
-                            winner={winner}
                             approval={approval}
                         />
                     ))}

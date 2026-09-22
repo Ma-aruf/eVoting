@@ -209,8 +209,31 @@ export default function ResultsPage() {
                                 {/* Position Header */}
                                 <div className="results-position-header">
                                     <div className="results-position-header__inner">
-                                        <div>
-                                            <h3 className="text-sm font-semibold text-gray-900">{currentPosition.position_name}</h3>
+                                        <div
+                                            className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                                            <h3 className="shrink-0 text-sm font-semibold text-gray-900">{currentPosition.position_name}</h3>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <span
+                                                    className="inline-flex items-center gap-1.5 px-2.5 py-1  bg-cyan-50 border border-cyan-200">
+                                                    <span className="text-xs font-medium ">Total</span>
+                                                    <span
+                                                        className="text-lg font-bold text-blue-900">{currentPosition.total_votes}</span>
+                                                </span>
+                                                <span
+                                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 border border-emerald-200">
+                                                    <span className="text-xs font-medium">Voted</span>
+                                                    <span
+                                                        className="font-bold text-lg text-emerald-900">{currentPosition.total_valid_votes}</span>
+                                                </span>
+                                                <span
+                                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200">
+                                                    <span className="text-xs font-medium ">Skipped</span>
+                                                    <span
+                                                        className="text-lg font-bold text-amber-900">{currentPosition.skipped_votes}</span>
+                                                    <span
+                                                        className="text-md font-semibold text-amber-600">({currentPosition.skipped_percentage.toFixed(1)}%)</span>
+                                                </span>
+                                            </div>
                                         </div>
                                         {results.positions.length > 0 && (
                                             <div
@@ -242,139 +265,226 @@ export default function ResultsPage() {
                                 {/* Candidate Cards */}
                                 <div className="results-candidate-area">
                                     {currentPosition.voting_mode === 'yes_no' ? (
-                                        <div className="mx-auto max-w-md border border-gray-200 bg-white p-6 text-center shadow-sm">
-                                            <h4 className="text-base font-semibold text-gray-800">
-                                                {currentPosition.candidates[0]?.candidate_name ?? 'Candidate'}
-                                            </h4>
-                                            <p className="mt-2 text-sm text-gray-600">Approval result</p>
-                                            <div className="mt-5 grid grid-cols-2 gap-4">
-                                                <div className="border border-emerald-200 bg-emerald-50 p-4">
-                                                    <p className="text-xs font-medium text-emerald-800">Yes</p>
-                                                    <strong className="mt-1 block text-2xl text-emerald-700">{currentPosition.yes_votes.toLocaleString()}</strong>
-                                                </div>
-                                                <div className="border border-red-200 bg-red-50 p-4">
-                                                    <p className="text-xs font-medium text-red-800">No</p>
-                                                    <strong className="mt-1 block text-2xl text-red-700">{currentPosition.no_votes.toLocaleString()}</strong>
-                                                </div>
-                                            </div>
-                                            <p className="mt-5 text-sm font-semibold text-gray-800">
-                                                {currentPosition.approved === true
-                                                    ? 'Approved'
-                                                    : currentPosition.approved === false
-                                                        ? 'Rejected'
-                                                        : 'No decision yet'}
-                                            </p>
-                                        </div>
-                                    ) : (
-                                    <div className="flex justify-center">
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
-                                            {currentPosition.candidates.map((candidate) => {
-                                                const barWidth = candidate.percentage; // Use the actual percentage from data
+                                        <div className="flex justify-center">
+                                            <div
+                                                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
+                                                {currentPosition.candidates.map((candidate) => {
+                                                    const isApproved = currentPosition.approved === true;
+                                                    const isRejected = currentPosition.approved === false;
 
-                                                // Find highest percentage and check for ties
-                                                const percentages = currentPosition.candidates.map(c => c.percentage);
-                                                const highestPercentage = Math.max(...percentages);
-                                                const candidatesWithHighest = currentPosition.candidates.filter(c => c.percentage === highestPercentage);
-                                                const isRunOff = candidatesWithHighest.length > 1 && candidate.percentage === highestPercentage && highestPercentage > 0;
-                                                const isWinner = candidatesWithHighest.length === 1 && candidate.percentage === highestPercentage && candidate.vote_count > 0;
-
-                                                return (
-                                                    <div
-                                                        key={candidate.id}
-                                                        className={`relative flex flex-col items-center p-2 rounded-none transition-all ${
-                                                            isWinner
-                                                                ? 'bg-[#fffaf0] border border-[#d4af37] shadow-sm'
-                                                                : isRunOff
-                                                                    ? 'bg-green-50 border border-green-200 shadow-sm'
-                                                                    : 'bg-white border border-gray-200 shadow-sm'
-                                                        }`}
-                                                    >
-                                                        {/* Winner/Run-off Badge */}
-                                                        {isWinner && (
-                                                            <span
-                                                                className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#d4af37] text-white shadow-sm"
-                                                                title="Winner"
-                                                                aria-label="Winner"
-                                                            >
-                                                                <FiAward aria-hidden="true"/>
-                                                            </span>
-                                                        )}
-                                                        {isRunOff && (
-                                                            <div className="mb-2">
-                                                            <span
-                                                                className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-600 text-white">
-                                                                <FiRefreshCw aria-hidden="true"/> Run Off
-                                                            </span>
-                                                            </div>
-                                                        )}
-
-                                                        {/* Candidate Photo */}
+                                                    return (
                                                         <div
-                                                            className={`w-28 h-28 rounded-full overflow-hidden mb-4 flex items-center justify-center shadow-lg ${
-                                                                isWinner ? 'ring-4 ring-[#d4af37]' : isRunOff ? 'ring-4 ring-green-400' : 'ring-4 ring-[#b8cbea]'
-                                                            }`}>
-                                                            {candidate.photo_url ? (
-                                                                <img
-                                                                    src={candidate.photo_url}
-                                                                    alt={candidate.candidate_name}
-                                                                    className="w-full h-full object-cover"
-                                                                />
-                                                            ) : (
-                                                                <div
-                                                                    className="w-full h-full bg-cyan-700/80 flex items-center justify-center">
+                                                            key={candidate.id}
+                                                            className={`relative flex flex-col items-center p-2 rounded-none transition-all ${
+                                                                isApproved
+                                                                    ? 'bg-[#fffaf0] border border-[#d4af37] shadow-sm'
+                                                                    : isRejected
+                                                                        ? 'bg-red-50 border border-red-200 shadow-sm'
+                                                                        : 'bg-white border border-gray-200 shadow-sm'
+                                                            }`}
+                                                        >
+                                                            {/* Status Badge */}
+                                                            {isApproved && (
+                                                                <span
+                                                                    className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#d4af37] text-white shadow-sm"
+                                                                    title="Approved"
+                                                                    aria-label="Approved"
+                                                                >
+                                                                    <FiAward aria-hidden="true"/>
+                                                                </span>
+                                                            )}
+                                                            {isRejected && (
+                                                                <div className="mb-2">
+                                                            <span
+                                                                className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-600 text-white">
+                                                                Rejected
+                                                            </span>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Candidate Photo */}
+                                                            <div
+                                                                className={`w-28 h-28 rounded-full overflow-hidden mb-4 flex items-center justify-center shadow-lg ${
+                                                                    isApproved ? 'ring-4 ring-[#d4af37]' : isRejected ? 'ring-4 ring-red-400' : 'ring-4 ring-[#b8cbea]'
+                                                                }`}>
+                                                                {candidate.photo_url ? (
+                                                                    <img
+                                                                        src={candidate.photo_url}
+                                                                        alt={candidate.candidate_name}
+                                                                        className="w-full h-full object-cover"
+                                                                    />
+                                                                ) : (
+                                                                    <div
+                                                                        className="w-full h-full bg-cyan-700/80 flex items-center justify-center">
                                                                     <span className="text-2xl font-bold text-white">
                                                                     {candidate.candidate_name.charAt(0)}
                                                                 </span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Candidate Name */}
+                                                            <h4 className="text-sm font-semibold text-gray-800 text-center mb-1">
+                                                                {candidate.candidate_name}
+                                                            </h4>
+
+                                                            {/* Stats */}
+                                                            <div className="w-full space-y-3">
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-xs text-gray-600">Yes</span>
+                                                                    <span
+                                                                        className={`text-lg font-bold text-emerald-900`}>
+                                                                        {currentPosition.yes_votes.toLocaleString()}
+                                                                    </span>
+                                                                    <span
+                                                                        className={`text-sm font-semibold text-emerald-700`}>
+                                                                        ({((currentPosition.yes_votes / (currentPosition.yes_votes + currentPosition.no_votes)) * 100).toFixed(1)}%)
+                                                                    </span>
+                                                                </div>
+
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-xs text-gray-600">No</span>
+                                                                    <span
+                                                                        className={`text-lg font-bold text-red-900`}>
+                                                                        {currentPosition.no_votes.toLocaleString()}
+                                                                    </span>
+                                                                    <span
+                                                                        className={`text-sm font-semibold text-red-700`}>
+                                                                        ({((currentPosition.no_votes / (currentPosition.yes_votes + currentPosition.no_votes)) * 100).toFixed(1)}%)
+                                                                    </span>
+                                                                </div>
+
+                                                                {/* Progress Bar */}
+                                                                <div className="pt-2">
+                                                                    <div
+                                                                        className="relative w-full bg-gray-200 rounded-full h-3">
+                                                                        <span
+                                                                            className="absolute left-1 top-1/2 -translate-y-1/2 text-[10px] font-medium text-emerald-700">Yes</span>
+                                                                        <div
+                                                                            className={`h-3 rounded-full transition-all bg-emerald-500`}
+                                                                            style={{width: `${(currentPosition.yes_votes / (currentPosition.yes_votes + currentPosition.no_votes)) * 100}%`}}
+                                                                        ></div>
+                                                                        <span
+                                                                            className="absolute right-1 top-1/2 -translate-y-1/2 text-[10px] font-medium text-red-700">No</span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="flex justify-center">
+                                            <div
+                                                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
+                                                {currentPosition.candidates.map((candidate) => {
+                                                    const barWidth = candidate.percentage; // Use the actual percentage from data
+
+                                                    // Find highest percentage and check for ties
+                                                    const percentages = currentPosition.candidates.map(c => c.percentage);
+                                                    const highestPercentage = Math.max(...percentages);
+                                                    const candidatesWithHighest = currentPosition.candidates.filter(c => c.percentage === highestPercentage);
+                                                    const isRunOff = candidatesWithHighest.length > 1 && candidate.percentage === highestPercentage && highestPercentage > 0;
+                                                    const isWinner = candidatesWithHighest.length === 1 && candidate.percentage === highestPercentage && candidate.vote_count > 0;
+
+                                                    return (
+                                                        <div
+                                                            key={candidate.id}
+                                                            className={`relative flex flex-col items-center p-2 rounded-none transition-all ${
+                                                                isWinner
+                                                                    ? 'bg-[#fffaf0] border border-[#d4af37] shadow-sm'
+                                                                    : isRunOff
+                                                                        ? 'bg-green-50 border border-green-200 shadow-sm'
+                                                                        : 'bg-white border border-gray-200 shadow-sm'
+                                                            }`}
+                                                        >
+                                                            {/* Winner/Run-off Badge */}
+                                                            {isWinner && (
+                                                                <span
+                                                                    className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#d4af37] text-white shadow-sm"
+                                                                    title="Winner"
+                                                                    aria-label="Winner"
+                                                                >
+                                                                <FiAward aria-hidden="true"/>
+                                                            </span>
+                                                            )}
+                                                            {isRunOff && (
+                                                                <div className="mb-2">
+                                                            <span
+                                                                className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-600 text-white">
+                                                                <FiRefreshCw aria-hidden="true"/> Rerun
+                                                            </span>
                                                                 </div>
                                                             )}
-                                                        </div>
 
-                                                        {/* Candidate Name */}
-                                                        <h4 className="text-sm font-semibold text-gray-800 text-center mb-1">
-                                                            {candidate.candidate_name}
-                                                        </h4>
+                                                            {/* Candidate Photo */}
+                                                            <div
+                                                                className={`w-28 h-28 rounded-full overflow-hidden mb-4 flex items-center justify-center shadow-lg ${
+                                                                    isWinner ? 'ring-4 ring-[#d4af37]' : isRunOff ? 'ring-4 ring-green-400' : 'ring-4 ring-[#b8cbea]'
+                                                                }`}>
+                                                                {candidate.photo_url ? (
+                                                                    <img
+                                                                        src={candidate.photo_url}
+                                                                        alt={candidate.candidate_name}
+                                                                        className="w-full h-full object-cover"
+                                                                    />
+                                                                ) : (
+                                                                    <div
+                                                                        className="w-full h-full bg-cyan-700/80 flex items-center justify-center">
+                                                                    <span className="text-2xl font-bold text-white">
+                                                                    {candidate.candidate_name.charAt(0)}
+                                                                </span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
 
-                                                        {/* Stats */}
-                                                        <div className="w-full space-y-3">
-                                                            <div className="flex justify-between items-center">
-                                                                <span className="text-xs text-gray-600">Votes</span>
-                                                                <span
-                                                                    className={`text-lg font-bold ${
-                                                                        isWinner ? 'text-[#b38728]' : isRunOff ? 'text-green-600' : 'text-[#1d4f91]'
-                                                                    }`}>
+                                                            {/* Candidate Name */}
+                                                            <h4 className="text-sm font-semibold text-gray-800 text-center mb-1">
+                                                                {candidate.candidate_name}
+                                                            </h4>
+
+                                                            {/* Stats */}
+                                                            <div className="w-full space-y-3">
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-xs text-gray-600">Votes</span>
+                                                                    <span
+                                                                        className={`text-lg font-bold ${
+                                                                            isWinner ? 'text-[#b38728]' : isRunOff ? 'text-green-600' : 'text-[#1d4f91]'
+                                                                        }`}>
                                                                 {candidate.vote_count.toLocaleString()}
                                                             </span>
-                                                            </div>
+                                                                </div>
 
-                                                            <div className="flex justify-between items-center">
+                                                                <div className="flex justify-between items-center">
                                                                 <span
                                                                     className="text-xs text-gray-600">Percentage</span>
-                                                                <span
-                                                                    className={`text-sm font-semibold ${
-                                                                        isWinner ? 'text-[#b38728]' : isRunOff ? 'text-green-600' : 'text-[#1d4f91]'
-                                                                    }`}>
+                                                                    <span
+                                                                        className={`text-sm font-semibold ${
+                                                                            isWinner ? 'text-[#b38728]' : isRunOff ? 'text-green-600' : 'text-[#1d4f91]'
+                                                                        }`}>
                                                                 {candidate.percentage.toFixed(1)}%
                                                             </span>
-                                                            </div>
+                                                                </div>
 
-                                                            {/* Progress Bar */}
-                                                            <div className="pt-2">
-                                                                <div
-                                                                    className={`w-full ${isWinner ? 'bg-[#f5e7b2]' : 'bg-gray-200'} rounded-full h-3`}>
+                                                                {/* Progress Bar */}
+                                                                <div className="pt-2">
                                                                     <div
-                                                                        className={`h-3 rounded-full transition-all ${
-                                                                            isWinner ? 'bg-[#d4af37]' : isRunOff ? 'bg-green-500' : 'bg-[#1d4f91]'
-                                                                        }`}
-                                                                        style={{width: `${barWidth}%`}}
-                                                                    ></div>
+                                                                        className={`w-full ${isWinner ? 'bg-[#f5e7b2]' : 'bg-gray-200'} rounded-full h-3`}>
+                                                                        <div
+                                                                            className={`h-3 rounded-full transition-all ${
+                                                                                isWinner ? 'bg-[#d4af37]' : isRunOff ? 'bg-green-500' : 'bg-[#1d4f91]'
+                                                                            }`}
+                                                                            style={{width: `${barWidth}%`}}
+                                                                        ></div>
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                );
-                                            })}
+                                                    );
+                                                })}
+                                            </div>
                                         </div>
-                                    </div>
                                     )}
                                 </div>
                             </section>

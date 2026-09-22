@@ -70,7 +70,8 @@ export default function StudentLoginPage() {
                            placeholder="e.g. STU-001" required autoFocus/>
             </FormField>
             <Button type="submit" className="auth-submit" loading={loading} disabled={!studentId.trim()}
-                    leadingIcon={<FiUser aria-hidden="true"/>} trailingIcon={<FiArrowRight aria-hidden="true"/>}>
+                    leadingIcon={<FiUser aria-hidden="true"/>}
+                    trailingIcon={<FiArrowRight className="text-orange-300 h-4 w-5" varia-hidden="true"/>}>
                 Enter voting portal
             </Button>
         </form>

@@ -832,7 +832,7 @@ class MultiVoteView(APIView):
                 for vote_data in data["votes"]:
                     election_id = vote_data["election"]
                     position_id = vote_data["position"]
-                    candidate_id = vote_data["candidate"]
+                    candidate_id = vote_data.get("candidate")
                     choice = vote_data.get("choice", "candidate")
 
                     if (
@@ -875,46 +875,59 @@ class MultiVoteView(APIView):
                             status=status.HTTP_400_BAD_REQUEST,
                         )
 
-                    # Validate candidate belongs to position
-                    candidate = candidate_cache.get(candidate_id)
-                    if candidate is None:
-                        candidate = (
-                            Candidate.objects.filter(
-                                pk=candidate_id, position_id=position.pk
+                    candidate = None
+                    if choice != "skip":
+                        if candidate_id is None:
+                            return Response(
+                                {"detail": "A candidate is required unless the position is skipped."},
+                                status=status.HTTP_400_BAD_REQUEST,
                             )
-                            .select_for_update()
-                            .first()
-                        )
-                        candidate_cache[candidate_id] = candidate
-                    if candidate is None:
-                        return Response(
-                            {"detail": "Candidate does not belong to position."},
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
 
-                    if candidate.student.election_id != election.pk:
-                        return Response(
-                            {"detail": "Candidate does not belong to election."},
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
+                        # Validate candidate belongs to position
+                        candidate = candidate_cache.get(candidate_id)
+                        if candidate is None:
+                            candidate = (
+                                Candidate.objects.filter(
+                                    pk=candidate_id, position_id=position.pk
+                                )
+                                .select_for_update()
+                                .first()
+                            )
+                            candidate_cache[candidate_id] = candidate
+                        if candidate is None:
+                            return Response(
+                                {"detail": "Candidate does not belong to position."},
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
 
-                    voting_mode = position_voting_mode(position)
-                    if voting_mode == "yes_no" and choice not in {"yes", "no"}:
+                        if candidate.student.election_id != election.pk:
+                            return Response(
+                                {"detail": "Candidate does not belong to election."},
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+
+                        voting_mode = position_voting_mode(position)
+                        if voting_mode == "yes_no" and choice not in {"yes", "no"}:
+                            return Response(
+                                {
+                                    "detail": (
+                                        "This position requires a Yes or No approval choice."
+                                    )
+                                },
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+                        if voting_mode == "candidate" and choice != "candidate":
+                            return Response(
+                                {
+                                    "detail": (
+                                        "This position requires a candidate selection."
+                                    )
+                                },
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+                    elif candidate_id is not None:
                         return Response(
-                            {
-                                "detail": (
-                                    "This position requires a Yes or No approval choice."
-                                )
-                            },
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
-                    if voting_mode == "candidate" and choice != "candidate":
-                        return Response(
-                            {
-                                "detail": (
-                                    "This position requires a candidate selection."
-                                )
-                            },
+                            {"detail": "A skipped position cannot include a candidate."},
                             status=status.HTTP_400_BAD_REQUEST,
                         )
 
@@ -1353,16 +1366,20 @@ class PositionStatsView(APIView):
 
         election = position.election
 
-        # Unique voters who cast any vote in this election
+        # Each submitted ballot has one row per position, including skips.
         unique_voters = Vote.objects.filter(election=election).values('voter_hash').distinct().count()
 
-        # Votes actually cast for this position
+        # Valid choices exclude explicit skips.
         position_votes = Vote.objects.filter(
             election=election,
             position=position
-        ).count()
+        ).exclude(choice="skip").count()
 
-        skipped = max(0, unique_voters - position_votes)
+        skipped = Vote.objects.filter(
+            election=election,
+            position=position,
+            choice="skip",
+        ).count()
         voting_mode = position_voting_mode(position)
         # Legacy candidate-only votes on a single-candidate position represent approval.
         yes_votes = Vote.objects.filter(
@@ -1411,8 +1428,11 @@ class ElectionResultsView(APIView):
         # All positions in display order
         positions = Position.objects.filter(election=election).order_by('display_order')
 
-        # Total unique voters in this election (across all positions)
+        # Each submitted ballot has one row per position, including skips.
         unique_voters = Vote.objects.filter(election=election).values('voter_hash').distinct().count()
+        unique_voters_who_cast_at_least_one_vote = Vote.objects.filter(
+            election=election
+        ).exclude(choice="skip").values('voter_hash').distinct().count()
 
         results = []
 
@@ -1472,13 +1492,17 @@ class ElectionResultsView(APIView):
                     candidate["vote_count"] for candidate in candidate_results
                 )
 
-            skipped = max(0, unique_voters - total_valid_votes_this_position)
+            skipped = Vote.objects.filter(
+                election=election,
+                position=position,
+                choice="skip",
+            ).count()
 
-            # Add percentages
+            # Candidate and skipped percentages share the full ballot total.
             for cand in candidate_results:
                 cand["percentage"] = (
-                    round((cand["vote_count"] / total_valid_votes_this_position * 100), 2)
-                    if total_valid_votes_this_position > 0 else 0.0
+                    round((cand["vote_count"] / unique_voters * 100), 2)
+                    if unique_voters > 0 else 0.0
                 )
 
             # Sort candidates by votes descending
@@ -1516,7 +1540,7 @@ class ElectionResultsView(APIView):
             "students_who_voted": students_who_voted,
             "voter_turnout_percentage": round((students_who_voted / total_students * 100),
                                               2) if total_students > 0 else 0.0,
-            "unique_voters_who_cast_at_least_one_vote": unique_voters,
+            "unique_voters_who_cast_at_least_one_vote": unique_voters_who_cast_at_least_one_vote,
             "positions": results,
         })
 

@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import threading
 from unittest.mock import patch
 
-from django.db import IntegrityError, connection
+from django.db import IntegrityError, connection, transaction
 from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
@@ -143,6 +143,130 @@ class VotingIntegrityTests(TestCase):
         response = self.post(payload, **self.headers())
         self.assertEqual(response.status_code, 400)
         self.assertIn("yes or no", str(response.data).lower())
+
+    def test_skipping_a_position_is_recorded_without_a_candidate(self):
+        payload = self.ballot()
+        payload["votes"][0] = {
+            "election": self.election.id,
+            "position": self.position.id,
+            "candidate": None,
+            "choice": "skip",
+        }
+
+        response = self.post(payload, **self.headers())
+
+        self.assertEqual(response.status_code, 201, response.content)
+        skipped_vote = Vote.objects.get(
+            election=self.election,
+            position=self.position,
+            voter_hash=self.headers()["HTTP_X_VOTER_TOKEN"],
+        )
+        self.assertIsNone(skipped_vote.candidate)
+        self.assertEqual(skipped_vote.choice, "skip")
+        self.student.refresh_from_db()
+        self.assertTrue(self.student.has_voted)
+        self.assertFalse(self.student.is_active)
+
+    def test_all_skipped_positions_still_count_as_a_submitted_ballot(self):
+        payload = {
+            "votes": [
+                {
+                    "election": self.election.id,
+                    "position": self.position.id,
+                    "candidate": None,
+                    "choice": "skip",
+                },
+                {
+                    "election": self.election.id,
+                    "position": self.position_two.id,
+                    "candidate": None,
+                    "choice": "skip",
+                },
+            ]
+        }
+
+        response = self.post(payload, **self.headers())
+
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(
+            Vote.objects.filter(election=self.election, choice="skip").count(), 2
+        )
+        self.student.refresh_from_db()
+        self.assertTrue(self.student.has_voted)
+
+        staff = User.objects.create_user(
+            "all-skipped-results", password="x", role="staff", assigned_election=self.election
+        )
+        request = APIRequestFactory().get("/api/results/")
+        force_authenticate(request, user=staff)
+        results = ElectionResultsView.as_view()(request, election_id=self.election.id)
+        self.assertEqual(results.data["students_who_voted"], 1)
+        self.assertEqual(results.data["unique_voters_who_cast_at_least_one_vote"], 0)
+        self.assertEqual(results.data["positions"][0]["skipped_votes"], 1)
+        self.assertEqual(results.data["positions"][0]["total_valid_votes"], 0)
+
+    def test_candidate_and_skipped_percentages_share_the_full_ballot_total(self):
+        second_candidate_student = self.make_student("C005")
+        second_candidate = Candidate.objects.create(
+            student=second_candidate_student,
+            position=self.position,
+            ballot_number=2,
+        )
+        Vote.objects.create(
+            election=self.election,
+            position=self.position,
+            candidate=self.candidate,
+            choice="candidate",
+            voter_hash="percentage-candidate-one",
+        )
+        Vote.objects.create(
+            election=self.election,
+            position=self.position,
+            candidate=second_candidate,
+            choice="candidate",
+            voter_hash="percentage-candidate-two",
+        )
+        Vote.objects.create(
+            election=self.election,
+            position=self.position,
+            candidate=None,
+            choice="skip",
+            voter_hash="percentage-skipped",
+        )
+
+        staff = User.objects.create_user(
+            "percentage-results", password="x", role="staff", assigned_election=self.election
+        )
+        request = APIRequestFactory().get("/api/results/")
+        force_authenticate(request, user=staff)
+        results = ElectionResultsView.as_view()(request, election_id=self.election.id)
+        position_result = results.data["positions"][0]
+
+        self.assertEqual(position_result["total_valid_votes"], 2)
+        self.assertEqual(position_result["skipped_votes"], 1)
+        self.assertEqual(position_result["skip_percentage"], 33.33)
+        self.assertEqual(
+            [candidate["percentage"] for candidate in position_result["candidates"]],
+            [33.33, 33.33],
+        )
+
+    def test_skipped_position_cannot_include_a_candidate(self):
+        payload = self.ballot()
+        payload["votes"][0]["choice"] = "skip"
+        response = self.post(payload, **self.headers())
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("cannot include a candidate", str(response.data).lower())
+
+    def test_database_constraint_rejects_non_skip_vote_without_candidate(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Vote.objects.create(
+                    election=self.election,
+                    position=self.position,
+                    candidate=None,
+                    choice="candidate",
+                    voter_hash="invalid-no-candidate",
+                )
 
     def test_multiple_candidate_position_requires_candidate_selection(self):
         second_candidate_student = self.make_student("C005")

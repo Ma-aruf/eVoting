@@ -380,9 +380,9 @@ class MultiVoteSerializer(serializers.Serializer):
     class VoteItemSerializer(serializers.Serializer):
         election = serializers.IntegerField()
         position = serializers.IntegerField()
-        candidate = serializers.IntegerField()
+        candidate = serializers.IntegerField(allow_null=True)
         choice = serializers.ChoiceField(
-            choices=("candidate", "yes", "no"), default="candidate"
+            choices=("candidate", "yes", "no", "skip"), default="candidate"
         )
 
     votes = serializers.ListField(child=VoteItemSerializer(), allow_empty=True)

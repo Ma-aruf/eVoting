@@ -199,17 +199,37 @@ class Vote(models.Model):
         ("candidate", "Candidate"),
         ("yes", "Yes"),
         ("no", "No"),
+        ("skip", "Skipped"),
     )
 
     election = models.ForeignKey(Election, on_delete=models.PROTECT)
     position = models.ForeignKey(Position, on_delete=models.PROTECT)
-    candidate = models.ForeignKey(Candidate, on_delete=models.PROTECT)
+    candidate = models.ForeignKey(
+        Candidate,
+        on_delete=models.PROTECT,
+        blank=True,
+        null=True,
+    )
     choice = models.CharField(max_length=10, choices=CHOICE_CHOICES, default="candidate")
     voter_hash = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = ('voter_hash', 'position')
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    Q(choice="skip", candidate__isnull=True)
+                    | Q(
+                        choice__in=("candidate", "yes", "no"),
+                        candidate__isnull=False,
+                    )
+                ),
+                name="vote_choice_candidate_consistency",
+            ),
+        ]
 
     def __str__(self):
+        if self.choice == "skip":
+            return f"Skipped vote for {self.position}"
         return f"Vote for {self.candidate}"
