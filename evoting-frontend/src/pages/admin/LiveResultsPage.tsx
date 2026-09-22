@@ -186,7 +186,7 @@ export default function LiveResultsPage() {
 
     return (
         <main className="live-results-page">
-            <header className="live-results-header px-2 py-1 bg-cyan-900">
+            <header className="live-results-header px-2 py-1">
                 <div className="live-results-heading">
                     <div>
                         <h1>{results?.election_name ?? election.name}</h1>
