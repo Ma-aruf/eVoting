@@ -22,7 +22,6 @@ import TextInput from '../../components/ui/TextInput';
 import SelectField from '../../components/ui/SelectField';
 import Button from '../../components/ui/Button';
 import Alert from '../../components/ui/Alert';
-import Badge from '../../components/ui/Badge';
 import LoadingState from '../../components/ui/LoadingState';
 import EmptyState from '../../components/ui/EmptyState';
 import ErrorState from '../../components/ui/ErrorState';
@@ -63,20 +62,6 @@ type UploadResult = {
 
 const message = (error: unknown, fallback: string) =>
     (error as ApiError)?.response?.data?.detail || fallback;
-
-function StudentStatus({student}: { student: Student }) {
-    return (
-        <div className="student-status-stack">
-            <Badge variant={student.is_active ? 'success' : 'neutral'}>
-                {student.is_active ? 'Active' : 'Inactive'}
-            </Badge>
-
-            <Badge variant={student.has_voted ? 'primary' : 'neutral'}>
-                {student.has_voted ? 'Voted' : 'Not voted'}
-            </Badge>
-        </div>
-    );
-}
 
 function StudentForm({
                          studentId,
@@ -633,16 +618,13 @@ export default function StudentsPage() {
                                     className="student-mobile-card"
                                 >
                                     <div className="student-mobile-card-heading">
-                                        <div>
+                                        <div className="w-full flex justify-between items-center">
                                             <h3>{student.full_name}</h3>
-
                                             <p>
                                                 {student.student_id} ·{' '}
                                                 {student.class_name}
                                             </p>
                                         </div>
-
-                                        <StudentStatus student={student}/>
                                     </div>
 
                                     <dl className="student-mobile-details">
@@ -663,35 +645,34 @@ export default function StudentsPage() {
                                                     : 'Not voted'}
                                             </dd>
                                         </div>
+                                        <div className="student-mobile-actions">
+                                            <IconButton
+                                                label={`Edit ${student.full_name}`}
+                                                icon={
+                                                    <FiEdit2 aria-hidden="true"/>
+                                                }
+                                                onClick={() =>
+                                                    setEditing(student)
+                                                }
+                                            />
+
+                                            <IconButton
+                                                label={
+                                                    student.has_voted
+                                                        ? 'Cannot delete a student who has voted'
+                                                        : `Delete ${student.full_name}`
+                                                }
+                                                icon={
+                                                    <FiTrash2 aria-hidden="true"/>
+                                                }
+                                                variant="danger"
+                                                disabled={student.has_voted}
+                                                onClick={() =>
+                                                    setDeleting(student)
+                                                }
+                                            />
+                                        </div>
                                     </dl>
-
-                                    <div className="student-mobile-actions">
-                                        <IconButton
-                                            label={`Edit ${student.full_name}`}
-                                            icon={
-                                                <FiEdit2 aria-hidden="true"/>
-                                            }
-                                            onClick={() =>
-                                                setEditing(student)
-                                            }
-                                        />
-
-                                        <IconButton
-                                            label={
-                                                student.has_voted
-                                                    ? 'Cannot delete a student who has voted'
-                                                    : `Delete ${student.full_name}`
-                                            }
-                                            icon={
-                                                <FiTrash2 aria-hidden="true"/>
-                                            }
-                                            variant="danger"
-                                            disabled={student.has_voted}
-                                            onClick={() =>
-                                                setDeleting(student)
-                                            }
-                                        />
-                                    </div>
                                 </article>
                             ))}
                         </div>

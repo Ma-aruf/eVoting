@@ -485,7 +485,7 @@
 /* Full-screen strong-room results display. */
 .live-results-page {
     min-height: 100dvh;
-    padding: 1rem clamp(1rem, 3vw, 3rem) 4.75rem;
+    padding: 4.75rem clamp(1rem, 3vw, 3rem) 4.75rem;
     color: var(--color-text);
     background: var(--color-background);
 }
@@ -869,7 +869,7 @@
 
 @media (max-width: 30rem) {
     .live-results-page {
-        padding: .75rem .75rem 4.5rem;
+        padding: 6.75rem .75rem 4.5rem;
     }
 
     .live-results-header {
@@ -897,6 +897,78 @@
 
     .live-results-candidate-grid {
         grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 48rem) {
+    .live-results-page {
+        padding-top: 4.75rem;
+    }
+
+    .live-results-header {
+        padding: .6rem .75rem;
+    }
+}
+
+@media (max-width: 30rem) {
+    .live-results-page {
+        padding: 6.75rem .75rem 4.5rem;
+    }
+
+    .live-results-header {
+        display: block;
+        padding: .55rem .75rem;
+    }
+
+    .live-results-heading {
+        min-width: 0;
+        margin-bottom: .5rem;
+    }
+
+    .live-results-heading h1 {
+        max-width: 100%;
+        overflow: hidden;
+        font-size: 1.1rem;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .live-results-header-actions {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: .45rem .6rem;
+    }
+
+    .live-results-header-stats {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+        border: 0;
+    }
+
+    .live-results-header-stats > div {
+        min-width: 0;
+        padding: .15rem .3rem;
+        text-align: center;
+    }
+
+    .live-results-header-stats strong {
+        font-size: var(--font-size-sm);
+    }
+
+    .live-results-update {
+        justify-content: flex-start;
+    }
+
+    .live-results-close {
+        justify-self: end;
+    }
+
+    .live-results-skip-bar {
+        min-height: 3rem;
+        padding: .45rem .75rem;
     }
 }
 
@@ -1690,10 +1762,9 @@
 }
 
 .student-mobile-details {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    display: flex;
+    justify-content: space-between;
     gap: .625rem;
-    margin: .75rem 0;
     padding-top: .75rem;
     border-top: 1px solid var(--color-border);
 }
