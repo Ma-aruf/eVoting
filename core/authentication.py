@@ -5,7 +5,7 @@ from rest_framework.exceptions import AuthenticationFailed
 from django.utils.translation import gettext as _
 from django.utils import timezone
 from .models import Student, Election
-from .utils import verify_voter_hmac
+from .utils import verify_voter_token
 from .election_lifecycle import election_lifecycle
 
 
@@ -85,7 +85,7 @@ class VoterAuthentication(BaseAuthentication):
             raise AuthenticationFailed(_("Invalid student identifier for this election."))
 
         # Verify token using election-scoped key (student_id_electionId)
-        if not verify_voter_hmac(f"{student.student_id}_{election.id}", token):
+        if not verify_voter_token(f"{student.student_id}_{election.id}", token):
             self.security_logger.warning(
                 f"AUTH_FAILED_TOKEN: student_id={student_id}, election_id={election_id}, ip={client_ip}"
             )

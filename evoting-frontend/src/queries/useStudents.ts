@@ -1,5 +1,6 @@
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import api from '../apiConfig';
+import api from '../apiClient';
+import {getApiErrorDetail} from '../utils/apiErrors';
 import {queryKeys} from './queryKeys';
 import {showError, showSuccess} from '../utils/toast';
 
@@ -20,26 +21,24 @@ export interface Student {
 export const getStudentElectionId = (student: Student) =>
     typeof student.election === 'number' ? student.election : student.election?.id;
 
-export const useStudents = (electionId: number | null) => {
-    return useQuery({
+export const useStudents = (electionId: number | null) =>
+    useQuery({
         queryKey: queryKeys.students(electionId),
         queryFn: async (): Promise<Student[]> => {
-            const params = electionId ? {election_id: electionId} : {};
-            const res = await api.get('api/students/', {params});
-            const data = res.data;
+            const response = await api.get('api/students/', {
+                params: electionId ? {election_id: electionId} : {},
+            });
+            const data = response.data;
 
             if (Array.isArray(data)) {
                 return data;
-            } else if (Array.isArray(data.results)) {
-                return data.results;
             }
-            return [];
-        },
-        enabled: !!electionId,
-        staleTime: 30 * 1000, // 30 seconds
-    });
-};
 
+            return Array.isArray(data.results) ? data.results : [];
+        },
+        enabled: electionId !== null,
+        staleTime: 30 * 1000,
+    });
 
 export const useCreateStudent = () => {
     const queryClient = useQueryClient();
@@ -51,16 +50,20 @@ export const useCreateStudent = () => {
             class_name: string;
             election_id: number;
         }) => {
-            const res = await api.post('api/students/', data);
-            return res.data;
+            const response = await api.post('api/students/', data);
+            return response.data;
         },
         onSuccess: (_, variables) => {
             showSuccess('Voter added successfully.');
-            queryClient.invalidateQueries({queryKey: queryKeys.students(variables.election_id)});
+            queryClient.invalidateQueries({
+                queryKey: queryKeys.students(variables.election_id),
+            });
         },
-        onError: (err: any) => {
-            const detail = err.response?.data?.detail;
-            showError(detail || 'Failed to add voter. Make sure the ID is unique within this election.');
+        onError: (error: unknown) => {
+            showError(
+                getApiErrorDetail(error) ??
+                    'Failed to add voter. Make sure the ID is unique within this election.',
+            );
         },
     });
 };
@@ -75,42 +78,47 @@ export const useUpdateStudent = () => {
             class_name: string;
             election_id: number;
         }) => {
-            const res = await api.patch(`api/students/${id}/`, {
+            const response = await api.patch(`api/students/${id}/`, {
                 full_name: data.full_name,
                 class_name: data.class_name,
             });
-            return res.data;
+            return response.data;
         },
-        onMutate: async (variables) => {
-            // Cancel any outgoing refetches
-            await queryClient.cancelQueries({queryKey: queryKeys.students(variables.election_id)});
-            
-            // Snapshot the previous value
-            const previousStudents = queryClient.getQueryData(queryKeys.students(variables.election_id));
-            
-            // Optimistically update the cache
-            queryClient.setQueryData(queryKeys.students(variables.election_id), (old: Student[] | undefined) => {
-                if (!old) return old;
-                return old.map(student => 
-                    student.id === variables.id 
-                        ? {...student, ...variables}
-                        : student
-                );
+        onMutate: async variables => {
+            await queryClient.cancelQueries({
+                queryKey: queryKeys.students(variables.election_id),
             });
-            
+
+            const previousStudents = queryClient.getQueryData<Student[]>(
+                queryKeys.students(variables.election_id),
+            );
+
+            queryClient.setQueryData<Student[]>(
+                queryKeys.students(variables.election_id),
+                students =>
+                    students?.map(student =>
+                        student.id === variables.id
+                            ? {...student, ...variables}
+                            : student,
+                    ),
+            );
+
             return {previousStudents};
         },
-        onError: (err, variables, context) => {
-            // Rollback on error
+        onError: (error: unknown, variables, context) => {
             if (context?.previousStudents) {
-                queryClient.setQueryData(queryKeys.students(variables.election_id), context.previousStudents);
+                queryClient.setQueryData(
+                    queryKeys.students(variables.election_id),
+                    context.previousStudents,
+                );
             }
-            const detail = (err as any).response?.data?.detail;
-            showError(detail || 'Failed to update voter.');
+
+            showError(getApiErrorDetail(error) ?? 'Failed to update voter.');
         },
         onSettled: (_data, _error, variables) => {
-            // Refetch to ensure server state
-            queryClient.invalidateQueries({queryKey: queryKeys.students(variables.election_id)});
+            queryClient.invalidateQueries({
+                queryKey: queryKeys.students(variables.election_id),
+            });
         },
         onSuccess: () => {
             showSuccess('Voter updated successfully.');
@@ -126,20 +134,22 @@ export const useDeleteStudent = () => {
             if (student.has_voted) {
                 throw new Error('Cannot delete a student who has already voted.');
             }
+
             await api.delete(`api/students/${student.id}/`);
             return student;
         },
         onSuccess: (_data, student) => {
             showSuccess('Voter deleted successfully.');
-            queryClient.invalidateQueries({queryKey: queryKeys.students(getStudentElectionId(student) ?? null)});
+            queryClient.invalidateQueries({
+                queryKey: queryKeys.students(getStudentElectionId(student) ?? null),
+            });
         },
-        onError: (err: any) => {
-            if (err.message === 'Cannot delete a student who has already voted.') {
-                showError(err.message);
-            } else {
-                const detail = err.response?.data?.detail;
-                showError(detail || 'Failed to delete voter.');
-            }
+        onError: (error: unknown) => {
+            const message = error instanceof Error
+                ? error.message
+                : getApiErrorDetail(error);
+
+            showError(message ?? 'Failed to delete voter.');
         },
     });
 };
@@ -148,22 +158,24 @@ export const useBulkUploadStudents = () => {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async (data: { file: File; election_id: number }) => {
+        mutationFn: async (data: {file: File; election_id: number}) => {
             const formData = new FormData();
             formData.append('file', data.file);
             formData.append('election_id', data.election_id.toString());
 
-            const res = await api.post('api/students/bulk-upload/', formData, {
+            const response = await api.post('api/students/bulk-upload/', formData, {
                 headers: {'Content-Type': 'multipart/form-data'},
             });
-            return res.data;
+            return response.data;
         },
         onSuccess: (data, variables) => {
             showSuccess(data.detail || 'Voter import completed');
-            queryClient.invalidateQueries({queryKey: queryKeys.students(variables.election_id)});
+            queryClient.invalidateQueries({
+                queryKey: queryKeys.students(variables.election_id),
+            });
         },
-        onError: (err: any) => {
-            showError(err.response?.data?.detail || 'Voter import failed');
+        onError: (error: unknown) => {
+            showError(getApiErrorDetail(error) ?? 'Voter import failed');
         },
     });
 };

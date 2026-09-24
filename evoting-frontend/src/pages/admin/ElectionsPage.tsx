@@ -15,41 +15,7 @@ import {useElections} from '../../queries/useElections';
 import {useCreateElection, useUpdateElectionSchedule} from '../../queries/useElectionsMutations';
 import type {Election} from '../../types/election';
 import {electionStatusPresentation} from '../../utils/electionLifecycle';
-
-type ApiError = {
-    response?: {
-        data?: {
-            detail?: string;
-            start_time?: string | string[];
-            end_time?: string | string[];
-        };
-    };
-};
-
-function formatDateTime(value: string) {
-    return new Date(value).toLocaleString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-    });
-}
-
-function toDateTimeLocalValue(value: string) {
-    const date = new Date(value);
-    return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
-        .toISOString()
-        .slice(0, 16);
-}
-
-function mutationMessage(error: unknown, fallback: string) {
-    const data = (error as ApiError).response?.data;
-    if (data?.detail) return data.detail;
-    const fieldError = [data?.start_time, data?.end_time]
-        .flatMap(value => Array.isArray(value) ? value : value ? [value] : [])[0];
-    return fieldError || fallback;
-}
+import {formatElectionDateTime, getElectionMutationMessage, toDateTimeLocalValue} from '../../utils/electionForm';
 
 export default function ElectionsPage() {
     const electionsQuery = useElections({refetchInterval: 45_000});
@@ -210,7 +176,7 @@ export default function ElectionsPage() {
                     variant="error"
                     title="Election could not be created"
                 >
-                    {mutationMessage(
+                    {getElectionMutationMessage(
                         createElection.error,
                         'Please review the election details and try again.'
                     )}
@@ -292,13 +258,13 @@ export default function ElectionsPage() {
                                     </td>
 
                                     <td data-label="Voting opens">
-                                        {formatDateTime(
+                                        {formatElectionDateTime(
                                             election.start_time
                                         )}
                                     </td>
 
                                     <td data-label="Voting closes">
-                                        {formatDateTime(
+                                        {formatElectionDateTime(
                                             election.end_time
                                         )}
                                     </td>
@@ -482,7 +448,7 @@ export default function ElectionsPage() {
                         </section>
                         {(scheduleEditError || updateSchedule.isError) && (
                             <Alert variant="error" title="Schedule not updated">
-                                {scheduleEditError || mutationMessage(updateSchedule.error, 'Please try again.')}
+                                {scheduleEditError || getElectionMutationMessage(updateSchedule.error, 'Please try again.')}
                             </Alert>
                         )}
                         <div className="election-form-footer">

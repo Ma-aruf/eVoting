@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import api from '../apiConfig';
+import api from '../apiClient';
 import { queryKeys } from './queryKeys';
 import type { ElectionResultsLifecycle } from '../types/election';
 

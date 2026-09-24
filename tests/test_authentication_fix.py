@@ -74,10 +74,10 @@ def test_authentication_fix():
     print(f'\n🔐 Test 1: Authentication with valid student in active election...')
     
     try:
-        from core.utils import generate_voter_hmac
+        from core.utils import create_voter_token
         
         # Generate valid token
-        token = generate_voter_hmac('AUTH001')
+        token = create_voter_token('AUTH001')
         
         # Mock request
         factory = RequestFactory()

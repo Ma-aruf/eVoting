@@ -6,7 +6,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from .models import Election, Position, Candidate, Student, Vote, User
-from .utils import make_voter_hmac
+from .utils import create_voter_token
 from openpyxl import Workbook
 from io import BytesIO
 
@@ -44,7 +44,7 @@ class MultiVoteViewTests(TestCase):
             student=self.student_b, position=self.position2
         )
 
-        token = make_voter_hmac(f"{self.student.student_id}_{self.election.id}")
+        token = create_voter_token(f"{self.student.student_id}_{self.election.id}")
         self.headers = {
             "HTTP_X_STUDENT_ID": self.student.student_id,
             "HTTP_X_ELECTION_ID": str(self.election.id),

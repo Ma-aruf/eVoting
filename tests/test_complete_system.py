@@ -68,10 +68,10 @@ def test_complete_system():
     print(f'\n🔐 Testing authentication system...')
     
     try:
-        from core.utils import generate_voter_hmac
+        from core.utils import create_voter_token
         
         # Test authentication for active election student
-        token = generate_voter_hmac('SYS001')
+        token = create_voter_token('SYS001')
         
         factory = RequestFactory()
         request = factory.post('/api/vote/', {})

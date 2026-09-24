@@ -1,83 +1,65 @@
 from io import BytesIO
 import logging
-import sys
-from contextlib import contextmanager
 
 from django.contrib.admin.models import CHANGE, LogEntry
-from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import ProtectedError
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from openpyxl import load_workbook
-from rest_framework import viewsets, status, serializers
+from rest_framework import serializers, status, viewsets
 from rest_framework.exceptions import ParseError
-from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.permissions import AllowAny
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from .authentication import VoterAuthentication
-from .models import Election, Position, Candidate, Vote, Student
-from .permissions import (
-    IsAdminUser,
-    IsElectionDataViewer,
-    IsStaffOrSuperUser,
-    CanActivateVoters,
-    IsStaffOrSuperUserOrReadOnlyActivator,
-    IsSuperUser,
+from .ballot_operations import lock_elections_for_ballot_change
+from .result_views import (
+    CandidatesForPositionView,
+    ElectionResultsView,
+    ElectionStatsView,
+    PositionStatsView,
 )
 from .election_access import get_scoped_election_or_404, scope_queryset
-from .serializers import (
-    StudentSerializer,
-    BulkStudentUploadSerializer,
-    ElectionSerializer,
-    PositionSerializer,
-    CandidateSerializer,
-    MultiVoteSerializer,
-    ElectionToggleSerializer,
-    ElectionEndTimeExtensionSerializer,
-    ElectionScheduleUpdateSerializer,
-    UserSerializer,
-)
-from .utils import (
-    generate_voter_hmac,
-    election_has_votes,
-)
 from .election_lifecycle import (
+    VOTING_MODE_YES_NO,
     election_ballot_ready,
     election_lifecycle,
     election_status,
-    student_can_vote_now,
-    ballot_change_lock_detail,
     position_voting_mode,
-    VOTING_MODE_YES_NO,
+    student_can_vote_now,
 )
+from .media_views import ImageUploadView
+from .models import Candidate, Election, Position, Student, Vote
+from .permissions import (
+    CanAccessStudents,
+    CanActivateVoters,
+    IsElectionDataViewer,
+    IsManagementUser,
+    IsStaffOrSuperUser,
+    IsSuperUser,
+)
+from .serializers import (
+    BulkStudentUploadSerializer,
+    CandidateSerializer,
+    ElectionEndTimeExtensionSerializer,
+    ElectionScheduleUpdateSerializer,
+    ElectionSerializer,
+    ElectionToggleSerializer,
+    MultiVoteSerializer,
+    PositionSerializer,
+    StudentSerializer,
+    UserSerializer,
+)
+from .utils import create_voter_token, election_has_votes
 
 User = get_user_model()
-
-
-@contextmanager
-def ballot_change_transaction(*election_ids):
-    """Lock affected elections and enforce the shared ballot freeze rule."""
-    ids = sorted({int(election_id) for election_id in election_ids if election_id})
-    with transaction.atomic():
-        elections = list(
-            Election.objects.select_for_update()
-            .filter(pk__in=ids)
-            .order_by("pk")
-        )
-        now = timezone.now()
-        for election in elections:
-            detail = ballot_change_lock_detail(election, now)
-            if detail:
-                raise serializers.ValidationError({"detail": detail})
-        yield {election.pk: election for election in elections}
-
 
 class UserViewSet(viewsets.ModelViewSet):
     """
@@ -97,7 +79,7 @@ class ElectionViewSet(viewsets.ReadOnlyModelViewSet):
     """
     queryset = Election.objects.all()
     serializer_class = ElectionSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsManagementUser]
 
     def get_queryset(self):
         queryset = scope_queryset(Election.objects.all(), self.request.user, "id")
@@ -123,7 +105,7 @@ class StudentViewSet(viewsets.ModelViewSet):
     """
     queryset = Student.objects.all()
     serializer_class = StudentSerializer
-    permission_classes = [IsStaffOrSuperUserOrReadOnlyActivator]
+    permission_classes = [CanAccessStudents]
 
     def get_queryset(self):
         queryset = scope_queryset(Student.objects.all(), self.request.user)
@@ -301,18 +283,18 @@ class PositionViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         election = serializer.validated_data["election"]
         get_scoped_election_or_404(self.request.user, election.pk)
-        with ballot_change_transaction(election.pk):
+        with lock_elections_for_ballot_change(election.pk):
             serializer.save()
 
     def perform_update(self, serializer):
         position = serializer.instance
         target = serializer.validated_data.get("election", position.election)
         get_scoped_election_or_404(self.request.user, target.pk)
-        with ballot_change_transaction(position.election_id, target.pk):
+        with lock_elections_for_ballot_change(position.election_id, target.pk):
             serializer.save()
 
     def perform_destroy(self, instance):
-        with ballot_change_transaction(instance.election_id):
+        with lock_elections_for_ballot_change(instance.election_id):
             instance.delete()
 
 
@@ -341,7 +323,7 @@ class PositionCreateView(APIView):
             get_scoped_election_or_404(request.user, serializer.validated_data["election"].pk)
         except Election.DoesNotExist:
             raise ParseError("Election not found.")
-        with ballot_change_transaction(serializer.validated_data["election"].pk):
+        with lock_elections_for_ballot_change(serializer.validated_data["election"].pk):
             position = serializer.save()
         return Response(PositionSerializer(position).data, status=status.HTTP_201_CREATED)
 
@@ -361,7 +343,7 @@ class PositionCreateView(APIView):
             except Election.DoesNotExist:
                 raise ParseError("Election not found.")
         target = serializer.validated_data.get("election", position.election)
-        with ballot_change_transaction(position.election_id, target.pk):
+        with lock_elections_for_ballot_change(position.election_id, target.pk):
             position = serializer.save()
         return Response(
             PositionSerializer(position).data,
@@ -376,7 +358,7 @@ class PositionCreateView(APIView):
             scope_queryset(Position.objects.all(), request.user), pk=pk
         )
         try:
-            with ballot_change_transaction(position.election_id):
+            with lock_elections_for_ballot_change(position.election_id):
                 position.delete()
         except ProtectedError:
             return Response(
@@ -441,7 +423,7 @@ class CandidateCreateView(APIView):
         except Election.DoesNotExist:
             raise ParseError("Election not found.")
         election_id = serializer.validated_data["position"].election_id
-        with ballot_change_transaction(election_id):
+        with lock_elections_for_ballot_change(election_id):
             candidate = serializer.save()
         return Response(CandidateSerializer(candidate).data, status=status.HTTP_201_CREATED)
 
@@ -462,7 +444,7 @@ class CandidateCreateView(APIView):
             get_scoped_election_or_404(request.user, effective_position.election_id)
         except Election.DoesNotExist:
             raise ParseError("Election not found.")
-        with ballot_change_transaction(
+        with lock_elections_for_ballot_change(
             candidate.position.election_id, effective_position.election_id
         ):
             candidate = serializer.save()
@@ -481,7 +463,7 @@ class CandidateCreateView(APIView):
             pk=pk,
         )
         try:
-            with ballot_change_transaction(candidate.position.election_id):
+            with lock_elections_for_ballot_change(candidate.position.election_id):
                 candidate.delete()
         except ProtectedError:
             return Response(
@@ -1285,8 +1267,8 @@ class StudentVoterLoginView(APIView):
                 detail = "Voting has ended."
             return Response({"detail": detail}, status=status.HTTP_403_FORBIDDEN)
 
-        # Generate HMAC token (include election_id to scope the token)
-        token = generate_voter_hmac(f"{student.student_id}_{active_election.id}")
+        # Create an election-scoped voter token
+        token = create_voter_token(f"{student.student_id}_{active_election.id}")
         
         # Log successful login
         self.security_logger.info(
@@ -1313,394 +1295,3 @@ class StudentVoterLoginView(APIView):
                 **election_lifecycle_data,
             }
         }, status=status.HTTP_200_OK)
-
-
-class ElectionStatsView(APIView):
-    """Get basic election statistics"""
-    permission_classes = [IsStaffOrSuperUser]
-
-    def get(self, request, election_id):
-        try:
-            election = get_scoped_election_or_404(request.user, election_id)
-        except Election.DoesNotExist:
-            return Response(
-                {"detail": "Election not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        total_voters = Student.objects.filter(election=election).count()
-        voters_voted = Student.objects.filter(election=election, has_voted=True).count()
-
-        return Response({
-            "election_id": election.id,
-            "election_name": election.name,
-            "voting_enabled": election.voting_enabled,
-            **election_lifecycle(election),
-            "total_voters": total_voters,
-            "voters_voted": voters_voted,
-            "turnout_percentage": round((voters_voted / total_voters * 100), 2) if total_voters > 0 else 0.0
-        })
-
-
-class PositionStatsView(APIView):
-    """Get statistics for a specific position including skipped votes"""
-    permission_classes = [IsStaffOrSuperUser]
-
-    def get(self, request):
-        position_id = request.query_params.get("position_id")
-        if not position_id:
-            return Response(
-                {"detail": "position_id is required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            position = get_object_or_404(
-                scope_queryset(Position.objects.all(), request.user), pk=position_id
-            )
-        except Position.DoesNotExist:
-            return Response(
-                {"detail": "Position not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        election = position.election
-
-        # Each submitted ballot has one row per position, including skips.
-        unique_voters = Vote.objects.filter(election=election).values('voter_hash').distinct().count()
-
-        # Valid choices exclude explicit skips.
-        position_votes = Vote.objects.filter(
-            election=election,
-            position=position
-        ).exclude(choice="skip").count()
-
-        skipped = Vote.objects.filter(
-            election=election,
-            position=position,
-            choice="skip",
-        ).count()
-        voting_mode = position_voting_mode(position)
-        # Legacy candidate-only votes on a single-candidate position represent approval.
-        yes_votes = Vote.objects.filter(
-            election=election,
-            position=position,
-            choice__in=["yes", "candidate"] if voting_mode == VOTING_MODE_YES_NO else ["yes"],
-        ).count()
-        no_votes = Vote.objects.filter(
-            election=election, position=position, choice="no"
-        ).count()
-
-        return Response({
-            "position_id": position.id,
-            "position_name": position.name,
-            "election": election.name,
-            "voting_mode": voting_mode,
-            "voting_enabled": election.voting_enabled,
-            **election_lifecycle(election),
-            "unique_voters_in_election": unique_voters,
-            "votes_for_this_position": position_votes,
-            "skipped_votes": skipped,
-            "skip_percentage": round((skipped / unique_voters * 100), 2) if unique_voters > 0 else 0.0,
-            "yes_votes": yes_votes,
-            "no_votes": no_votes,
-            "approved": (
-                yes_votes > no_votes
-                if voting_mode == "yes_no" and yes_votes + no_votes > 0
-                else None
-            ),
-        })
-
-
-class ElectionResultsView(APIView):
-    """Get comprehensive results for an entire election"""
-    permission_classes = [IsStaffOrSuperUser]
-
-    def get(self, request, election_id):
-        try:
-            election = get_scoped_election_or_404(request.user, election_id)
-        except Election.DoesNotExist:
-            return Response(
-                {"detail": "Election not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        # All positions in display order
-        positions = Position.objects.filter(election=election).order_by('display_order')
-
-        # Each submitted ballot has one row per position, including skips.
-        unique_voters = Vote.objects.filter(election=election).values('voter_hash').distinct().count()
-        unique_voters_who_cast_at_least_one_vote = Vote.objects.filter(
-            election=election
-        ).exclude(choice="skip").values('voter_hash').distinct().count()
-
-        results = []
-
-        for position in positions:
-            candidates = Candidate.objects.filter(position=position).order_by('ballot_number')
-
-            candidate_results = []
-            voting_mode = position_voting_mode(position)
-            yes_votes = 0
-            no_votes = 0
-
-            if voting_mode == "yes_no":
-                candidate = candidates.first()
-                # Historical rows predate Vote.choice and default to candidate.
-                yes_votes = Vote.objects.filter(
-                    election=election,
-                    position=position,
-                    choice__in=["yes", "candidate"],
-                ).count()
-                no_votes = Vote.objects.filter(
-                    election=election,
-                    position=position,
-                    choice="no",
-                ).count()
-                if candidate:
-                    candidate_results.append({
-                        "id": candidate.id,
-                        "student_id": candidate.student.student_id,
-                        "candidate_name": candidate.student.full_name,
-                        "photo_url": candidate.photo_url or "",
-                        "ballot_number": candidate.ballot_number,
-                        "vote_count": yes_votes,
-                        "yes_votes": yes_votes,
-                        "no_votes": no_votes,
-                    })
-            else:
-                for candidate in candidates:
-                    vote_count = Vote.objects.filter(
-                        election=election,
-                        candidate=candidate,
-                        position=position,
-                        choice="candidate",
-                    ).count()
-
-                    candidate_results.append({
-                        "id": candidate.id,
-                        "student_id": candidate.student.student_id,
-                        "candidate_name": candidate.student.full_name,
-                        "photo_url": candidate.photo_url or "",
-                        "ballot_number": candidate.ballot_number,
-                        "vote_count": vote_count,
-                    })
-
-            total_valid_votes_this_position = yes_votes + no_votes
-            if voting_mode == "candidate":
-                total_valid_votes_this_position = sum(
-                    candidate["vote_count"] for candidate in candidate_results
-                )
-
-            skipped = Vote.objects.filter(
-                election=election,
-                position=position,
-                choice="skip",
-            ).count()
-
-            # Candidate and skipped percentages share the full ballot total.
-            for cand in candidate_results:
-                cand["percentage"] = (
-                    round((cand["vote_count"] / unique_voters * 100), 2)
-                    if unique_voters > 0 else 0.0
-                )
-
-            # Sort candidates by votes descending
-            candidate_results.sort(key=lambda x: x["vote_count"], reverse=True)
-
-            results.append({
-                "position_id": position.id,
-                "position_name": position.name,
-                "display_order": position.display_order,
-                "voting_mode": voting_mode,
-                "total_valid_votes": total_valid_votes_this_position,
-                "skipped_votes": skipped,
-                "skip_percentage": round((skipped / unique_voters * 100), 2) if unique_voters > 0 else 0.0,
-                "yes_votes": yes_votes,
-                "no_votes": no_votes,
-                "approved": (
-                    yes_votes > no_votes
-                    if voting_mode == "yes_no" and total_valid_votes_this_position > 0
-                    else None
-                ),
-                "candidates": candidate_results,
-            })
-
-        # Overall election stats
-        total_students = Student.objects.filter(election=election).count()
-        students_who_voted = Student.objects.filter(election=election, has_voted=True).count()
-
-        return Response({
-            "election_id": election.id,
-            "election_name": election.name,
-            "year": election.year,
-            "voting_enabled": election.voting_enabled,
-            **election_lifecycle(election),
-            "total_students": total_students,
-            "students_who_voted": students_who_voted,
-            "voter_turnout_percentage": round((students_who_voted / total_students * 100),
-                                              2) if total_students > 0 else 0.0,
-            "unique_voters_who_cast_at_least_one_vote": unique_voters_who_cast_at_least_one_vote,
-            "positions": results,
-        })
-
-
-class CandidatesForPositionView(APIView):
-    permission_classes = [IsStaffOrSuperUser]
-
-    def get(self, request):
-        position_id = request.query_params.get("position_id")
-        print(position_id)
-
-        if not position_id:
-            return Response(
-                {"detail": "position_id is required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            position = get_object_or_404(
-                scope_queryset(Position.objects.all(), request.user), pk=position_id
-            )
-            candidates = Candidate.objects.filter(position_id=position_id).select_related('student').order_by('ballot_number')
-        except (ValueError, Position.DoesNotExist):
-            return Response(
-                {"detail": "Position not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        result = []
-        voting_mode = position_voting_mode(position)
-
-        for candidate in candidates:
-            vote_count = Vote.objects.filter(
-                election=position.election,
-                candidate_id=candidate.id,
-                position_id=position_id,
-                choice__in=(
-                    ["yes", "candidate"]
-                    if voting_mode == VOTING_MODE_YES_NO
-                    else ["candidate"]
-                ),
-            ).count()
-
-            candidate_data = {
-                "candidate_id": candidate.id,
-                "candidate_name": candidate.student.full_name,
-                "student_id": candidate.student.student_id,
-                "positionid": int(position_id),  # Add position_id to response
-                "vote_count": vote_count,
-                "voting_mode": voting_mode,
-            }
-
-            result.append(candidate_data)
-
-        return Response(result, status=status.HTTP_200_OK)
-
-
-class ImageUploadView(APIView):
-    """
-    Upload candidate photos.
-    - In production (Cloudinary configured): uploads to Cloudinary
-    - In development (no Cloudinary): saves to local media folder
-    """
-    permission_classes = [IsStaffOrSuperUser]
-    parser_classes = [MultiPartParser, FormParser]
-
-    def post(self, request):
-        from django.conf import settings
-        import uuid
-        import os
-
-        file = request.FILES.get('image')
-        if not file:
-            return Response(
-                {"detail": "No image file provided."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Validate file type
-        allowed_types = ['image/jpeg', 'image/png', 'image/webp']
-        if file.content_type not in allowed_types:
-            return Response(
-                {"detail": "Invalid file type. Allowed: JPEG, PNG, WebP."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Validate file size (max 5MB)
-        max_size = 5 * 1024 * 1024
-        if file.size > max_size:
-            return Response(
-                {"detail": "File too large. Maximum size is 5MB."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Check if Cloudinary is configured (production)
-        cloud_name = settings.CLOUDINARY_CLOUD_NAME
-        api_key = settings.CLOUDINARY_API_KEY
-        api_secret = settings.CLOUDINARY_API_SECRET
-
-        if cloud_name and api_key and api_secret:
-            # Production: Upload to Cloudinary
-            try:
-                import cloudinary
-                import cloudinary.uploader
-
-                cloudinary.config(
-                    cloud_name=cloud_name,
-                    api_key=api_key,
-                    api_secret=api_secret
-                )
-
-                result = cloudinary.uploader.upload(
-                    file,
-                    folder="evoting/candidates",
-                    transformation=[
-                        {"width": 400, "height": 400, "crop": "fill", "gravity": "face"}
-                    ]
-                )
-
-                return Response({
-                    "url": result["secure_url"],
-                    "public_id": result["public_id"],
-                    "storage": "cloudinary"
-                }, status=status.HTTP_201_CREATED)
-
-            except Exception as e:
-                return Response(
-                    {"detail": f"Cloudinary upload failed: {str(e)}"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
-        else:
-            # Development: Save to local media folder
-            try:
-                # Ensure media directory exists
-                media_path = os.path.join(settings.MEDIA_ROOT, 'candidates')
-                os.makedirs(media_path, exist_ok=True)
-
-                # Generate unique filename
-                ext = file.name.split('.')[-1] if '.' in file.name else 'jpg'
-                filename = f"{uuid.uuid4().hex}.{ext}"
-                filepath = os.path.join(media_path, filename)
-
-                # Save file
-                with open(filepath, 'wb+') as destination:
-                    for chunk in file.chunks():
-                        destination.write(chunk)
-
-                # Return full URL (include host for frontend to access)
-                # Build absolute URL from request
-                relative_url = f"{settings.MEDIA_URL}candidates/{filename}"
-                url = request.build_absolute_uri(relative_url)
-
-                return Response({
-                    "url": url,
-                    "filename": filename,
-                    "storage": "local"
-                }, status=status.HTTP_201_CREATED)
-
-            except Exception as e:
-                return Response(
-                    {"detail": f"Local upload failed: {str(e)}"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )

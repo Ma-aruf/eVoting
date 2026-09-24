@@ -19,6 +19,7 @@ import Modal from '../../components/ui/Modal';
 import TextArea from '../../components/ui/TextArea';
 import TextInput from '../../components/ui/TextInput';
 import {electionStatusPresentation} from '../../utils/electionLifecycle';
+import {formatElectionDateTime, getElectionMutationMessage, toDateTimeLocalValue} from '../../utils/electionForm';
 
 import {useConfirmModal} from '../../hooks/useConfirmModal';
 import {
@@ -27,41 +28,6 @@ import {
     useExtendElection,
     type Election,
 } from '../../queries/useManageElections';
-
-type ApiError = {
-    response?: {
-        data?: {
-            detail?: string;
-            end_time?: string | string[];
-            reason?: string | string[];
-        };
-    };
-};
-
-function formatDateTime(value: string) {
-    return new Date(value).toLocaleString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-    });
-}
-
-function toDateTimeLocal(value: string) {
-    const date = new Date(value);
-    return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
-        .toISOString()
-        .slice(0, 16);
-}
-
-function mutationMessage(error: unknown, fallback: string) {
-    const data = (error as ApiError).response?.data;
-    if (data?.detail) return data.detail;
-    const fieldError = [data?.end_time, data?.reason]
-        .flatMap(value => Array.isArray(value) ? value : value ? [value] : [])[0];
-    return fieldError || fallback;
-}
 
 export default function ManageElectionsPage() {
     const electionsQuery = useManageElections({refetchInterval: 30_000});
@@ -120,7 +86,7 @@ export default function ManageElectionsPage() {
 
     const openExtension = (election: Election) => {
         setExtensionElection(election);
-        setExtensionEndTime(toDateTimeLocal(election.end_time));
+        setExtensionEndTime(toDateTimeLocalValue(election.end_time));
         setExtensionReason('');
         setExtensionFormError('');
         extendElection.reset();
@@ -181,13 +147,12 @@ export default function ManageElectionsPage() {
                     variant="error"
                     title="Election status was not changed"
                 >
-                    {(toggleElection.error as ApiError).response?.data?.detail ||
-                        'Please try again.'}
+                    {getElectionMutationMessage(toggleElection.error, 'Please try again.')}
                 </Alert>
             )}
             {extendElection.isError && (
                 <Alert variant="error" title="Closing time was not extended">
-                    {mutationMessage(extendElection.error, 'Please try again.')}
+                    {getElectionMutationMessage(extendElection.error, 'Please try again.')}
                 </Alert>
             )}
 
@@ -300,11 +265,11 @@ export default function ManageElectionsPage() {
                                     </td>
 
                                     <td data-label="Window">
-                                        {formatDateTime(
+                                        {formatElectionDateTime(
                                             election.start_time
                                         )}
                                         {' – '}
-                                        {formatDateTime(
+                                        {formatElectionDateTime(
                                             election.end_time
                                         )}
                                     </td>
@@ -390,7 +355,7 @@ export default function ManageElectionsPage() {
                 onClose={closeExtension}
                 title="Extend closing time"
                 description={currentExtensionElection
-                    ? `Current closing time: ${formatDateTime(currentExtensionElection.end_time)}. Voting will remain ${currentExtensionElection.voting_enabled ? 'open' : 'paused'}.`
+                    ? `Current closing time: ${formatElectionDateTime(currentExtensionElection.end_time)}. Voting will remain ${currentExtensionElection.voting_enabled ? 'open' : 'paused'}.`
                     : undefined}
                 className="election-create-modal"
             >

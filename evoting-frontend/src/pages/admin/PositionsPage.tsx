@@ -16,7 +16,9 @@ import SelectField from '../../components/ui/SelectField';
 import TextInput from '../../components/ui/TextInput';
 
 import {useConfirmModal} from '../../hooks/useConfirmModal';
+import {getElectionMutationMessage} from '../../utils/electionForm';
 import {useAuth} from '../../hooks/useAuth';
+import {usePositionFormState} from '../../hooks/usePositionFormState';
 import {type Election, useElections} from '../../queries/useElections';
 import {
     type Position,
@@ -26,19 +28,7 @@ import {
     useUpdatePosition,
 } from '../../queries/usePositions';
 
-type ApiError = {
-    response?: {
-        data?: {
-            detail?: string;
-        };
-    };
-};
-
 const EMPTY_ELECTIONS: Election[] = [];
-
-function mutationMessage(error: unknown, fallback: string) {
-    return (error as ApiError).response?.data?.detail || fallback;
-}
 
 export default function PositionsPage() {
     const {user} = useAuth();
@@ -48,14 +38,24 @@ export default function PositionsPage() {
     const selectedElectionId = isScopedRole ? user?.assignedElection?.id ?? null : chosenElectionId;
 
     const [showCreateForm, setShowCreateForm] = useState(false);
-    const [positionName, setPositionName] = useState('');
-    const [displayOrder, setDisplayOrder] = useState('');
+    const {
+        name: positionName,
+        setName: setPositionName,
+        displayOrder,
+        setDisplayOrder,
+        reset: resetCreateFields,
+    } = usePositionFormState();
 
     const [editingPosition, setEditingPosition] =
         useState<Position | null>(null);
 
-    const [editPositionName, setEditPositionName] = useState('');
-    const [editDisplayOrder, setEditDisplayOrder] = useState('');
+    const {
+        name: editPositionName,
+        setName: setEditPositionName,
+        displayOrder: editDisplayOrder,
+        setDisplayOrder: setEditDisplayOrder,
+        reset: resetEditFields,
+    } = usePositionFormState();
     const [searchTerm, setSearchTerm] = useState('');
 
     const electionsQuery = useElections({refetchInterval: 45_000});
@@ -114,8 +114,7 @@ export default function PositionsPage() {
     // Create position
 
     const resetCreateForm = () => {
-        setPositionName('');
-        setDisplayOrder('');
+        resetCreateFields();
         setShowCreateForm(false);
     };
 
@@ -160,7 +159,7 @@ export default function PositionsPage() {
                 onSuccess: () => {
                     setEditingPosition(null);
                     setEditPositionName('');
-                    setEditDisplayOrder('');
+                    resetEditFields();
                 },
             }
         );
@@ -231,7 +230,7 @@ export default function PositionsPage() {
                     variant="error"
                     title="Position change was not saved"
                 >
-                    {mutationMessage(
+                    {getElectionMutationMessage(
                         mutationError,
                         mutationErrorMessage
                     )}

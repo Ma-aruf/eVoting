@@ -1,7 +1,7 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import api from '../apiConfig';
-import { queryKeys } from './queryKeys';
-import { showSuccess } from '../utils/toast';
+import {useMutation, useQueryClient} from '@tanstack/react-query';
+import api from '../apiClient';
+import {queryKeys} from './queryKeys';
+import {showSuccess} from '../utils/toast';
 
 export interface Student {
     id: number;
@@ -21,60 +21,55 @@ export const useActivateStudent = () => {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({ student_id, election_id }: { student_id: string; election_id: number }) => {
-            const res = await api.post('api/students/activate/', { 
-                student_id, 
+        mutationFn: async ({student_id, election_id}: {student_id: string; election_id: number}) => {
+            const response = await api.post('api/students/activate/', {
+                student_id,
                 election_id,
-                is_active: true 
+                is_active: true,
             });
-            return res.data;
+            return response.data;
         },
 
-        // 1 Optimistic update
-        onMutate: async ({ student_id, election_id }) => {
+        onMutate: async ({student_id, election_id}) => {
             await queryClient.cancelQueries({
                 queryKey: queryKeys.students(election_id),
             });
 
             const previousStudents = queryClient.getQueryData<Student[]>(
-                queryKeys.students(election_id)
+                queryKeys.students(election_id),
             );
 
             queryClient.setQueryData<Student[]>(
                 queryKeys.students(election_id),
-                (old) => {
-                    if (!old) return old;
+                oldStudents => {
+                    if (!oldStudents) return oldStudents;
 
-                    return old.map((student) =>
+                    return oldStudents.map(student =>
                         student.student_id === student_id
-                            ? { ...student, is_active: true }
-                            : student
+                            ? {...student, is_active: true}
+                            : student,
                     );
-                }
+                },
             );
 
-            return { previousStudents };
+            return {previousStudents};
         },
 
-        // 2️ Rollback on error
-        onError: (_err: any, { election_id }, context) => {
+        onError: (_error: unknown, {election_id}, context) => {
             queryClient.setQueryData(
                 queryKeys.students(election_id),
-                context?.previousStudents
+                context?.previousStudents,
             );
-            // Error is handled in the component with showError
         },
 
-        // 3️ Confirm + background sync
-        onSuccess: (_, { election_id }) => {
-        showSuccess('Voter activated successfully');
+        onSuccess: (_, {election_id}) => {
+            showSuccess('Voter activated successfully');
 
             queryClient.invalidateQueries({
                 queryKey: queryKeys.students(election_id),
                 refetchType: 'inactive',
             });
 
-            // Also invalidate activations to update counts
             queryClient.invalidateQueries({
                 queryKey: queryKeys.activations(election_id),
                 refetchType: 'inactive',

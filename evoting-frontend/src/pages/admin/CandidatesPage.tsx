@@ -17,6 +17,7 @@ import {queryKeys} from '../../queries/queryKeys';
 
 import {showError} from '../../utils/toast';
 import {useConfirmModal} from '../../hooks/useConfirmModal';
+import {useCandidateFormState} from '../../hooks/useCandidateFormState';
 
 import ConfirmModal from '../../components/ConfirmModal';
 import ImageUpload from '../../components/ImageUpload';
@@ -42,7 +43,7 @@ type ApiError = {
     };
 };
 
-const errorDetail = (error: unknown) => {
+const errorDetail = (error: unknown): string => {
     const detail = (error as ApiError)?.response?.data;
 
     if (typeof detail === 'string') {
@@ -58,7 +59,7 @@ const errorDetail = (error: unknown) => {
             )
             .filter(value => typeof value === 'string');
 
-        return values[0] || 'The candidate request could not be completed.';
+        return typeof values[0] === 'string' ? values[0] : 'The candidate request could not be completed.';
     }
 
     return 'The candidate request could not be completed.';
@@ -256,10 +257,17 @@ export default function CandidatesPage() {
     const [showCreateForm, setShowCreateForm] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
-    const [studentId, setStudentId] = useState<number | null>(null);
-    const [studentQuery, setStudentQuery] = useState('');
-    const [photoUrl, setPhotoUrl] = useState('');
-    const [ballotNumber, setBallotNumber] = useState(0);
+    const {
+        studentId,
+        setStudentId,
+        studentQuery,
+        setStudentQuery,
+        photoUrl,
+        setPhotoUrl,
+        ballotNumber,
+        setBallotNumber,
+        reset: resetCreate,
+    } = useCandidateFormState();
 
     // Edit state
 
@@ -272,11 +280,14 @@ export default function CandidatesPage() {
     const [editPositionId, setEditPositionId] =
         useState<number | null>(null);
 
-    const [editStudentId, setEditStudentId] =
-        useState<number | null>(null);
-
-    const [editStudentQuery, setEditStudentQuery] = useState('');
-    const [editPhotoUrl, setEditPhotoUrl] = useState('');
+    const {
+        studentId: editStudentId,
+        setStudentId: setEditStudentId,
+        studentQuery: editStudentQuery,
+        setStudentQuery: setEditStudentQuery,
+        photoUrl: editPhotoUrl,
+        setPhotoUrl: setEditPhotoUrl,
+    } = useCandidateFormState();
 
     // Queries and mutations
 
@@ -454,13 +465,6 @@ export default function CandidatesPage() {
             : null;
 
     // Create candidate
-
-    const resetCreate = () => {
-        setStudentId(null);
-        setStudentQuery('');
-        setPhotoUrl('');
-        setBallotNumber(0);
-    };
 
     const handleCreate = (event: FormEvent) => {
         event.preventDefault();
@@ -756,14 +760,14 @@ export default function CandidatesPage() {
             </div>
             {/* Query and mutation errors */}
 
-            {queryError && (
+            {Boolean(queryError) && (
                 <ErrorState
                     title="Unable to load candidates"
                     message={errorDetail(queryError)}
                 />
             )}
 
-            {mutationError && (
+            {Boolean(mutationError) && (
                 <Alert
                     variant="error"
                     title="Candidate update failed"

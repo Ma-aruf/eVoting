@@ -1,6 +1,6 @@
 import {useEffect, useRef, useState, type ChangeEvent} from 'react';
 import {FiImage, FiPlus, FiTrash2} from 'react-icons/fi';
-import api from '../apiConfig';
+import api from '../apiClient';
 import IconButton from './ui/IconButton';
 
 interface ImageUploadProps { onUploadSuccess: (url: string) => void; currentImageUrl?: string; className?: string; disabled?: boolean; }

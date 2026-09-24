@@ -30,6 +30,7 @@ import Modal from '../../components/ui/Modal';
 
 import {useElections} from '../../queries/useElections';
 import {useAuth} from '../../hooks/useAuth';
+import {type ActiveFilter, type VotedFilter, useStudentFilters} from '../../hooks/useStudentFilters';
 import {
     type Student,
     getStudentElectionId,
@@ -40,28 +41,18 @@ import {
     useUpdateStudent,
 } from '../../queries/useStudents';
 
+import {getApiErrorDetail} from '../../utils/apiErrors';
 import {showError} from '../../utils/toast';
 
 const CLASS_OPTIONS = ['Form 1', 'Form 2', 'Form 3'];
-
-type ActiveFilter = 'all' | 'active' | 'inactive';
-type VotedFilter = 'all' | 'voted' | 'not-voted';
-
-type ApiError = {
-    response?: {
-        data?: {
-            detail?: string;
-        };
-    };
-};
 
 type UploadResult = {
     detail?: string;
     errors?: unknown;
 };
 
-const message = (error: unknown, fallback: string) =>
-    (error as ApiError)?.response?.data?.detail || fallback;
+const message = (error: unknown, fallback: string): string =>
+    getApiErrorDetail(error) ?? fallback;
 
 function StudentForm({
                          studentId,
@@ -153,12 +144,7 @@ export default function StudentsPage() {
     const [editing, setEditing] = useState<Student | null>(null);
     const [deleting, setDeleting] = useState<Student | null>(null);
 
-    const [search, setSearch] = useState('');
-    const [activeFilter, setActiveFilter] = useState<ActiveFilter>('all');
-    const [votedFilter, setVotedFilter] = useState<VotedFilter>('all');
-    const [classFilter, setClassFilter] = useState('');
-    const [currentPage, setCurrentPage] = useState(1);
-    const pageSize = 10;
+
 
     // Queries and mutations
 
@@ -186,61 +172,24 @@ export default function StudentsPage() {
     const selected =
         elections.find(election => election.id === effectiveElectionId) ?? null;
 
-    // Filter options and records
-
-    const classes = useMemo(
-        () =>
-            Array.from(
-                new Set(students.map(student => student.class_name))
-            ).sort(),
-        [students]
-    );
-
-    const filtered = useMemo(
-        () =>
-            students.filter(student => {
-                const query = search.toLowerCase().trim();
-
-                return (
-                    (
-                        !query ||
-                        student.full_name.toLowerCase().includes(query) ||
-                        student.student_id.toLowerCase().includes(query)
-                    ) &&
-                    (
-                        activeFilter === 'all' ||
-                        (activeFilter === 'active'
-                            ? student.is_active
-                            : !student.is_active)
-                    ) &&
-                    (
-                        votedFilter === 'all' ||
-                        (votedFilter === 'voted'
-                            ? student.has_voted
-                            : !student.has_voted)
-                    ) &&
-                    (
-                        !classFilter ||
-                        student.class_name === classFilter
-                    )
-                );
-            }),
-        [students, search, activeFilter, votedFilter, classFilter]
-    );
-
-    const hasFilters = Boolean(
-        search ||
-        activeFilter !== 'all' ||
-        votedFilter !== 'all' ||
-        classFilter
-    );
-    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-    const visiblePage = Math.min(currentPage, totalPages);
-    const paginatedStudents = filtered.slice(
-        (visiblePage - 1) * pageSize,
-        visiblePage * pageSize
-    );
-
+    const {
+        search,
+        setSearch,
+        activeFilter,
+        setActiveFilter,
+        votedFilter,
+        setVotedFilter,
+        classFilter,
+        setClassFilter,
+        setCurrentPage,
+        classes,
+        filtered,
+        hasFilters,
+        totalPages,
+        visiblePage,
+        paginatedStudents,
+        clearFilters,
+    } = useStudentFilters(students);
     const queryError = electionsQuery.error || studentsQuery.error;
     const loading = electionsQuery.isLoading || studentsQuery.isLoading;
     const uploadResult = upload.data as UploadResult | undefined;
@@ -304,14 +253,6 @@ export default function StudentsPage() {
                 onSettled: () => setDeleting(null),
             });
         }
-    };
-
-    const clearFilters = () => {
-        setSearch('');
-        setActiveFilter('all');
-        setVotedFilter('all');
-        setClassFilter('');
-        setCurrentPage(1);
     };
 
     return (
@@ -811,7 +752,7 @@ export default function StudentsPage() {
                         </div>
                     </FormField>
 
-                    {upload.error && (
+                    {Boolean(upload.error) && (
                         <Alert
                             variant="error"
                             title="Import failed"
@@ -832,14 +773,14 @@ export default function StudentsPage() {
                         </Alert>
                     )}
 
-                    {uploadResult?.errors && (
+                    {Boolean(uploadResult?.errors) && (
                         <Alert
                             variant="warning"
                             title="Some rows need attention"
                         >
                             <pre className="students-upload-errors">
                                 {JSON.stringify(
-                                    uploadResult.errors,
+                                    uploadResult?.errors,
                                     null,
                                     2
                                 )}

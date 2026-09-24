@@ -15,6 +15,7 @@ import {useElections} from '../../queries/useElections';
 import {useAuth} from '../../hooks/useAuth';
 import {useResults} from '../../queries/useResults';
 import {showError} from '../../utils/toast';
+import {downloadElectionResultsCsv} from '../../utils/exportElectionResults';
 import {useNavigate} from 'react-router-dom';
 
 export default function ResultsPage() {
@@ -41,66 +42,6 @@ export default function ResultsPage() {
             showError(resultsError.message || 'Failed to load election results.');
         }
     }, [resultsError]);
-
-    // Function to export results as CSV
-    const exportToCSV = () => {
-        if (!results) return;
-
-        const csvRows = [];
-
-        // Header row
-        csvRows.push(['Election', 'Position', 'Voting mode', 'Candidate', 'Voter ID', 'Votes', 'Percentage', 'Yes', 'No', 'Outcome'].join(','));
-
-        // Data rows
-        results.positions.forEach(position => {
-            position.candidates.forEach(candidate => {
-                csvRows.push([
-                    `"${results.election_name}"`,
-                    `"${position.position_name}"`,
-                    position.voting_mode,
-                    `"${candidate.candidate_name}"`,
-                    `"${candidate.student_id}"`,
-                    candidate.vote_count,
-                    candidate.percentage.toFixed(2),
-                    position.voting_mode === 'yes_no' ? position.yes_votes : '',
-                    position.voting_mode === 'yes_no' ? position.no_votes : '',
-                    position.voting_mode === 'yes_no'
-                        ? position.approved === true ? 'Approved' : position.approved === false ? 'Rejected' : 'No decision yet'
-                        : '',
-                ].join(','));
-            });
-
-            // Add a row for skipped votes
-            csvRows.push([
-                `"${results.election_name}"`,
-                `"${position.position_name}"`,
-                position.voting_mode,
-                '"SKIPPED"',
-                '""',
-                0,
-                0,
-                '',
-                '',
-                '',
-            ].join(','));
-        });
-
-        // Add summary statistics
-        csvRows.push([]);
-        csvRows.push(['Summary Statistics']);
-        csvRows.push(['Total Voters', results.total_voters]);
-        csvRows.push(['Voters Voted', results.voters_voted]);
-        csvRows.push(['Voter Turnout (%)', results.voter_turnout.toFixed(2)]);
-
-        const csvContent = csvRows.join('\n');
-        const blob = new Blob([csvContent], {type: 'text/csv'});
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `election-results-${results.election_name.replace(/\s+/g, '-')}-${results.year}.csv`;
-        a.click();
-        window.URL.revokeObjectURL(url);
-    };
 
     if (loading && !results) {
         return (
@@ -155,7 +96,7 @@ export default function ResultsPage() {
                         </button>
                     )}
                     <button
-                        onClick={exportToCSV}
+                        onClick={() => results && downloadElectionResultsCsv(results)}
                         className="ui-button ui-button--success"
                     >
                         <FiDownload className="w-4 h-4 mr-2" aria-hidden="true"/>

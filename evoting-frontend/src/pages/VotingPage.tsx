@@ -13,7 +13,10 @@ import {
 } from 'react-icons/fi';
 import {clearVoterSession, getVoterSession, markVoterSessionUnableToVote, voterApi} from '../api/voterApi';
 import {type Candidate, useVotingData} from '../hooks/useVotingData';
-import {voterLifecycleMessage, voterLifecycleMessageFromDetail} from '../utils/electionLifecycle';
+import {
+    voterLifecycleMessage,
+    voterLifecycleMessageFromDetail
+} from '../utils/electionLifecycle';
 
 type BallotChoice = 'candidate' | 'yes' | 'no' | 'skip';
 
@@ -36,8 +39,8 @@ function getCandidateCardSizing(candidateCount: number): CandidateCardSizing {
     switch (Math.min(Math.max(candidateCount, 1), 5)) {
         case 1:
             return {
-                card: 'w-[280px] h-[380px] sm:w-[320px] sm:h-[420px] lg:w-[360px] lg:h-[460px]',
-                photo: 'w-50 h-50 mt-2 mb-6 sm:w-60 sm:h-60 sm:mt-3 sm:mb-7 lg:w-70 lg:h-70',
+                card: 'w-[280px] h-[380px] sm:w-[320px] sm:h-[420px] lg:w-[360px] lg:h-[430px]',
+                photo: 'w-50 h-50 mt-2 mb-6 sm:w-60 sm:h-60 sm:mt-3 sm:mb-7 lg:w-60 lg:h-60',
                 name: 'mb-3 min-h-12 text-xl',
             };
         case 2:

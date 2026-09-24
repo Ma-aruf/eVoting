@@ -15,7 +15,7 @@ from rest_framework.test import APIClient
 from .election_lifecycle import election_lifecycle, election_status, student_can_vote_now
 from .models import Candidate, Election, Position, Student, Vote
 from .serializers import ElectionSerializer
-from .utils import generate_voter_hmac
+from .utils import create_voter_token
 
 
 User = get_user_model()
@@ -740,7 +740,7 @@ class ElectionActivationReadinessTests(TestCase):
         self.student.save(update_fields=["is_active"])
         self.election.voting_enabled = False
         self.election.save(update_fields=["voting_enabled"])
-        token = generate_voter_hmac(f"{self.student.student_id}_{self.election.pk}")
+        token = create_voter_token(f"{self.student.student_id}_{self.election.pk}")
         voter_client = APIClient()
         response = voter_client.get(
             "/api/positions/",

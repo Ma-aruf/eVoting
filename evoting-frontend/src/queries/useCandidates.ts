@@ -1,173 +1,153 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import api from '../apiConfig';
-import { queryKeys } from './queryKeys';
-import { showError, showSuccess } from '../utils/toast';
+import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import api from '../apiClient';
+import {queryKeys} from './queryKeys';
+import {getApiErrorData, getFirstFieldError, isRecord} from '../utils/apiErrors';
+import {showError, showSuccess} from '../utils/toast';
 
 export interface Candidate {
-  id: number;
-  student: number;
-  student_name: string;
-  position: number;
-  photo_url: string;
-  ballot_number: number;
+    id: number;
+    student: number;
+    student_name: string;
+    position: number;
+    photo_url: string;
+    ballot_number: number;
 }
 
-export const useCandidates = (positionId: number | null, electionId: number | null = null) => {
-  return useQuery({
-    queryKey: queryKeys.candidates(positionId, electionId),
-    queryFn: async (): Promise<Candidate[]> => {
-      if (!positionId) return [];
-      const res = await api.get('api/candidates/', {
-        params: { position_id: positionId },
-      });
-      const data = res.data;
-      if (Array.isArray(data)) {
-        return data;
-      } else if (Array.isArray(data.results)) {
-        return data.results;
-      }
-      return [];
-    },
-    enabled: !!positionId,
-    staleTime: 30 * 1000, // 30 seconds
-    // Remove placeholderData to prevent stale data issues
-  });
-};
+function showCandidateError(error: unknown, fallback: string) {
+    const data = getApiErrorData(error);
+
+    if (typeof data === 'string') {
+        if (data.includes('ballot number')) {
+            showError(`Ballot number conflict: ${data}`);
+        } else if (data.includes('already') || data.includes('candidate')) {
+            showError(`Candidate conflict: ${data}`);
+        } else {
+            showError(data);
+        }
+        return;
+    }
+
+    if (isRecord(data)) {
+        const message = getFirstFieldError(data);
+
+        if (data.ballot_number) {
+            showError(`Ballot number conflict: ${message ?? 'This ballot number is already in use.'}`);
+        } else if (data.student) {
+            showError(`Candidate conflict: ${message ?? 'This student is already a candidate.'}`);
+        } else {
+            showError(message ?? 'Validation failed. Please check your input.');
+        }
+        return;
+    }
+
+    showError(fallback);
+}
+
+export const useCandidates = (positionId: number | null, electionId: number | null = null) =>
+    useQuery({
+        queryKey: queryKeys.candidates(positionId, electionId),
+        queryFn: async (): Promise<Candidate[]> => {
+            if (!positionId) return [];
+
+            const response = await api.get('api/candidates/', {
+                params: {position_id: positionId},
+            });
+            const data = response.data;
+
+            if (Array.isArray(data)) {
+                return data;
+            }
+
+            return Array.isArray(data.results) ? data.results : [];
+        },
+        enabled: positionId !== null,
+        staleTime: 30 * 1000,
+    });
 
 export const useCreateCandidate = () => {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: async (data: {
-      student: number;
-      position: number;
-      photo_url?: string;
-      ballot_number?: number;
-      election_id?: number;
-    }) => {
-      const res = await api.post('api/candidates/create/', data);
-      return res.data;
-    },
-    onSuccess: (_, variables) => {
-      showSuccess('Candidate created successfully.');
-      queryClient.invalidateQueries({ queryKey: queryKeys.candidates(variables.position, variables.election_id ?? null) });
-    },
-    onError: (err: any) => {
-      const detail = err.response?.data;
-      
-      // Handle DRF validation errors format (field-specific errors)
-      if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
-        if (detail.ballot_number) {
-          showError('Ballot number conflict: ' + detail.ballot_number[0]);
-        } else if (detail.student) {
-          showError('Candidate conflict: ' + detail.student[0]);
-        } else if (detail.non_field_errors) {
-          showError(detail.non_field_errors[0]);
-        } else {
-          // Fallback: show first available error
-          const firstField = Object.keys(detail)[0];
-          if (firstField && detail[firstField]) {
-            showError(detail[firstField][0]);
-          } else {
-            showError('Validation failed. Please check your input.');
-          }
-        }
-      } 
-      // Handle string error messages
-      else if (typeof detail === 'string') {
-        if (detail.includes('ballot number')) {
-          showError('Ballot number conflict: ' + detail);
-        } else if (detail.includes('already') || detail.includes('candidate')) {
-          showError('Candidate conflict: ' + detail);
-        } else {
-          showError(detail);
-        }
-      } 
-      // Fallback error
-      else {
-        showError(detail || 'Failed to create candidate.');
-      }
-    },
-  });
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async (data: {
+            student: number;
+            position: number;
+            photo_url?: string;
+            ballot_number?: number;
+            election_id?: number;
+        }) => {
+            const response = await api.post('api/candidates/create/', data);
+            return response.data;
+        },
+        onSuccess: (_, variables) => {
+            showSuccess('Candidate created successfully.');
+            queryClient.invalidateQueries({
+                queryKey: queryKeys.candidates(
+                    variables.position,
+                    variables.election_id ?? null,
+                ),
+            });
+        },
+        onError: (error: unknown) => {
+            showCandidateError(error, 'Failed to create candidate.');
+        },
+    });
 };
 
 export const useUpdateCandidate = () => {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: async (input: {
-      id: number;
-      student: number;
-      position: number;
-      photo_url?: string;
-      ballot_number?: number;
-      election_id?: number;
-    }) => {
-      const {id, election_id, ...data} = input;
-      void election_id;
-      const res = await api.put(`api/candidates/${id}/`, data);
-      return res.data;
-    },
-    onSuccess: (_, variables) => {
-      showSuccess('Candidate updated successfully.');
-      queryClient.invalidateQueries({ queryKey: queryKeys.candidates(variables.position, variables.election_id ?? null) });
-      // Also invalidate the old position in case position changed
-      queryClient.invalidateQueries({ queryKey: queryKeys.candidates(null) });
-    },
-    onError: (err: any) => {
-      const detail = err.response?.data;
-      
-      // Handle DRF validation errors format (field-specific errors)
-      if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
-        if (detail.ballot_number) {
-          showError('Ballot number conflict: ' + detail.ballot_number[0]);
-        } else if (detail.student) {
-          showError('Candidate conflict: ' + detail.student[0]);
-        } else if (detail.non_field_errors) {
-          showError(detail.non_field_errors[0]);
-        } else {
-          // Fallback: show first available error
-          const firstField = Object.keys(detail)[0];
-          if (firstField && detail[firstField]) {
-            showError(detail[firstField][0]);
-          } else {
-            showError('Validation failed. Please check your input.');
-          }
-        }
-      } 
-      // Handle string error messages
-      else if (typeof detail === 'string') {
-        if (detail.includes('ballot number')) {
-          showError('Ballot number conflict: ' + detail);
-        } else if (detail.includes('already') || detail.includes('candidate')) {
-          showError('Candidate conflict: ' + detail);
-        } else {
-          showError(detail);
-        }
-      } 
-      // Fallback error
-      else {
-        showError(detail || 'Failed to update candidate.');
-      }
-    },
-  });
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async (input: {
+            id: number;
+            student: number;
+            position: number;
+            photo_url?: string;
+            ballot_number?: number;
+            election_id?: number;
+        }) => {
+            const {id, ...data} = input;
+            delete data.election_id;
+            const response = await api.put(`api/candidates/${id}/`, data);
+            return response.data;
+        },
+        onSuccess: (_, variables) => {
+            showSuccess('Candidate updated successfully.');
+            queryClient.invalidateQueries({
+                queryKey: queryKeys.candidates(
+                    variables.position,
+                    variables.election_id ?? null,
+                ),
+            });
+            queryClient.invalidateQueries({queryKey: queryKeys.candidates(null)});
+        },
+        onError: (error: unknown) => {
+            showCandidateError(error, 'Failed to update candidate.');
+        },
+    });
 };
 
 export const useDeleteCandidate = () => {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: async (candidate: Candidate & {election_id?: number}) => {
-      await api.delete(`api/candidates/${candidate.id}/`);
-      return candidate;
-    },
-    onSuccess: (_, variables) => {
-      showSuccess('Candidate deleted successfully.');
-      queryClient.invalidateQueries({ queryKey: queryKeys.candidates(variables.position, variables.election_id ?? null) });
-    },
-    onError: (err: any) => {
-      const detail = err.response?.data?.detail;
-      showError(detail || 'Failed to delete candidate.');
-    },
-  });
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async (candidate: Candidate & {election_id?: number}) => {
+            await api.delete(`api/candidates/${candidate.id}/`);
+            return candidate;
+        },
+        onSuccess: (_, variables) => {
+            showSuccess('Candidate deleted successfully.');
+            queryClient.invalidateQueries({
+                queryKey: queryKeys.candidates(
+                    variables.position,
+                    variables.election_id ?? null,
+                ),
+            });
+        },
+        onError: (error: unknown) => {
+            showError(
+                (getApiErrorData(error) as {detail?: string} | null)?.detail ??
+                    'Failed to delete candidate.',
+            );
+        },
+    });
 };

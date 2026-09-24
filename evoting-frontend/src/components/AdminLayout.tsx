@@ -26,7 +26,12 @@ const navItems: NavigationItem[] = [
     {to: '/admin/manage-elections', label: 'Manage Elections', icon: FiPlayCircle, roles: ['superuser', 'staff']},
     {to: '/admin/positions', label: 'Positions', icon: FiList, roles: ['superuser', 'staff']},
     {to: '/admin/candidates', label: 'Candidates', icon: FiUser, roles: ['superuser', 'staff']},
-    {to: '/admin/activations', label: 'Activate Voters', icon: FiCheckCircle, roles: ['activator', 'superuser', 'staff']},
+    {
+        to: '/admin/activations',
+        label: 'Activate Voters',
+        icon: FiCheckCircle,
+        roles: ['activator', 'superuser', 'staff']
+    },
     {to: '/admin/results', label: 'Election Results', icon: FiBarChart2, roles: ['superuser', 'staff']},
     {to: '/admin/users', label: 'Manage Users', icon: FiUsers, roles: ['superuser']},
 ];
@@ -91,8 +96,9 @@ function Drawer({open, items, onClose, onLogout}: {
         <aside ref={drawerRef} id="admin-mobile-drawer" className="admin-drawer" role="dialog" aria-modal="true"
                aria-label="Admin navigation">
             <div className="admin-drawer-header">
-                <div className="admin-brand"><span className="admin-brand-mark">eVoting</span><span
-                    className="admin-brand-subtitle">Admin Panel</span></div>
+                <div className="admin-brand">
+                    <span
+                        className="admin-brand-subtitle">Admin Panel</span></div>
                 <button type="button" className="admin-icon-button" onClick={onClose}
                         aria-label="Close navigation menu"><FiX aria-hidden="true"/></button>
             </div>

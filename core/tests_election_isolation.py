@@ -6,7 +6,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APIClient
 
 from .models import Candidate, Election, Position, Student, User
-from .utils import generate_voter_hmac
+from .utils import create_voter_token
 
 
 class ElectionIsolationApiTests(TestCase):
@@ -181,7 +181,7 @@ class ElectionIsolationApiTests(TestCase):
         headers = {
             "HTTP_X_STUDENT_ID": self.student_one.student_id,
             "HTTP_X_ELECTION_ID": str(self.election_one.id),
-            "HTTP_X_VOTER_TOKEN": generate_voter_hmac(
+            "HTTP_X_VOTER_TOKEN": create_voter_token(
                 f"{self.student_one.student_id}_{self.election_one.id}"
             ),
         }

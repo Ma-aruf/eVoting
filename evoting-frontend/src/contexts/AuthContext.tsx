@@ -1,7 +1,7 @@
 import {createContext, type ReactNode, useEffect, useState} from 'react';
 import {useQueryClient} from '@tanstack/react-query';
 import {useLocation, useNavigate} from 'react-router-dom';
-import api from "../apiConfig.ts";
+import api from "../apiClient.ts";
 import { jwtDecode } from 'jwt-decode';
 import type { AssignedElectionLifecycle } from '../types/election';
 

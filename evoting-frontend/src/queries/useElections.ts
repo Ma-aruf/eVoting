@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import type {AxiosResponse} from 'axios';
-import api from '../apiConfig';
+import api from '../apiClient';
 import { useAuth } from '../hooks/useAuth';
 import type { Election } from '../types/election';
 import { queryKeys } from './queryKeys';

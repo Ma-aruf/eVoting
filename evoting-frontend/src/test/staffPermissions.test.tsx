@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import type {AuthUser, UserRole} from '../contexts/AuthContext';
 import App from '../App';
-import api from '../apiConfig';
+import api from '../apiClient';
 import {getVoterSession, saveVoterSession} from '../api/voterApi';
 import type {Election} from '../types/election';
 

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from django.utils import timezone
 from .models import Election, Position, Candidate, Vote, Student, User
+from .serializer_helpers import normalize_legacy_election_flag
 from .utils import election_has_votes
 from .election_lifecycle import (
     election_ballot_ready,
@@ -8,33 +9,6 @@ from .election_lifecycle import (
     position_voting_mode,
     START_TIME_LOCKED_DETAIL,
 )
-
-
-def _normalize_legacy_election_flag(data):
-    """Map the temporary election `is_active` API alias to voting_enabled."""
-    normalized = data.copy()
-    if "is_active" not in normalized:
-        return normalized
-
-    boolean = serializers.BooleanField()
-    legacy_raw_value = normalized.get("is_active")
-    normalized.pop("is_active", None)
-    try:
-        legacy_value = boolean.run_validation(legacy_raw_value)
-    except serializers.ValidationError as exc:
-        raise serializers.ValidationError({"is_active": exc.detail}) from exc
-    if "voting_enabled" in normalized:
-        try:
-            new_value = boolean.run_validation(normalized["voting_enabled"])
-        except serializers.ValidationError as exc:
-            raise serializers.ValidationError({"voting_enabled": exc.detail}) from exc
-        if legacy_value != new_value:
-            raise serializers.ValidationError({
-                "voting_enabled": "Conflicts with the deprecated is_active field."
-            })
-    else:
-        normalized["voting_enabled"] = legacy_value
-    return normalized
 
 
 class AssignedElectionSerializer(serializers.ModelSerializer):
@@ -189,7 +163,7 @@ class ElectionSerializer(serializers.ModelSerializer):
         ]
 
     def to_internal_value(self, data):
-        return super().to_internal_value(_normalize_legacy_election_flag(data))
+        return super().to_internal_value(normalize_legacy_election_flag(data))
 
     def to_representation(self, instance):
         # Keep the status and availability fields on the same timezone-aware snapshot.
@@ -266,7 +240,7 @@ class ElectionToggleSerializer(serializers.Serializer):
     voting_enabled = serializers.BooleanField(required=False)
 
     def to_internal_value(self, data):
-        normalized = _normalize_legacy_election_flag(data)
+        normalized = normalize_legacy_election_flag(data)
         if "voting_enabled" not in normalized:
             raise serializers.ValidationError({
                 "voting_enabled": "This field is required."

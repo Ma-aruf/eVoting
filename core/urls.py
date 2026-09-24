@@ -17,12 +17,15 @@ from .views import (
     ElectionScheduleUpdateView,
     ElectionEndTimeExtensionView,
     StudentVoterLoginView,
-    ElectionStatsView,
-    PositionStatsView,
-    ElectionResultsView,
-    CandidatesForPositionView,
     UserViewSet,
     ImageUploadView,
+)
+
+from .result_views import (
+    CandidatesForPositionView,
+    ElectionResultsView,
+    ElectionStatsView,
+    PositionStatsView,
 )
 
 router = DefaultRouter()

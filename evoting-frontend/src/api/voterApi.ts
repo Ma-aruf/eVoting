@@ -1,4 +1,4 @@
-import api from '../apiConfig';
+import api from '../apiClient';
 import type {VoterElection, VoterLoginResponse} from '../types/election';
 
 export interface VoterSession {

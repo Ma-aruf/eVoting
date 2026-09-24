@@ -1,6 +1,6 @@
 import {type FormEvent, useEffect, useState} from 'react';
 import {FiEdit2, FiLock, FiPlus, FiSearch, FiTrash2} from 'react-icons/fi';
-import api from '../../apiConfig';
+import api from '../../apiClient';
 import ConfirmModal from '../../components/ConfirmModal';
 import PageContainer from '../../components/PageContainer';
 import Alert from '../../components/ui/Alert';

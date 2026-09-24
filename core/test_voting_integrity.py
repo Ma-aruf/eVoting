@@ -10,7 +10,7 @@ from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 
 from .models import Candidate, Election, Position, Student, User, Vote
 from .serializers import ElectionSerializer, PositionSerializer
-from .utils import generate_voter_hmac
+from .utils import create_voter_token
 from .views import (
     CandidatesForPositionView,
     ElectionResultsView,
@@ -83,7 +83,7 @@ class VotingIntegrityTests(TestCase):
         return {
             "HTTP_X_STUDENT_ID": student.student_id,
             "HTTP_X_ELECTION_ID": str(election.id),
-            "HTTP_X_VOTER_TOKEN": token or generate_voter_hmac(
+            "HTTP_X_VOTER_TOKEN": token or create_voter_token(
                 f"{student.student_id}_{election.id}"
             ),
         }
@@ -694,7 +694,7 @@ class ConcurrentVoteTests(TransactionTestCase):
         headers = {
             "HTTP_X_STUDENT_ID": student.student_id,
             "HTTP_X_ELECTION_ID": str(election.id),
-            "HTTP_X_VOTER_TOKEN": generate_voter_hmac(f"{student.student_id}_{election.id}"),
+            "HTTP_X_VOTER_TOKEN": create_voter_token(f"{student.student_id}_{election.id}"),
         }
         barrier = threading.Barrier(2)
 

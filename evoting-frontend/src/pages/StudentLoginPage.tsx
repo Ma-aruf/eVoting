@@ -2,7 +2,7 @@ import {type FormEvent, useState} from 'react';
 import {useQueryClient} from '@tanstack/react-query';
 import {FiArrowRight, FiUser} from 'react-icons/fi';
 import {useLocation, useNavigate} from 'react-router-dom';
-import api from '../apiConfig.ts';
+import api from '../apiClient.ts';
 import AuthLayout from '../components/AuthLayout';
 import Alert from '../components/ui/Alert';
 import Button from '../components/ui/Button';
