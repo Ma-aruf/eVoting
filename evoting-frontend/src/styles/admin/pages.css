@@ -1341,8 +1341,25 @@
     }
 }
 
+@keyframes activation-pin-banner-in {
+    from {
+        opacity: 0;
+        transform: translateY(1rem) scale(.98);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.activation-pin-banner {
+    animation: activation-pin-banner-in 240ms ease-out both;
+    transform-origin: bottom center;
+}
+
 @media (prefers-reduced-motion: reduce) {
-    .statistic-card, .dashboard-action, .statistic-card-skeleton {
+    .statistic-card, .dashboard-action, .statistic-card-skeleton, .activation-pin-banner {
         animation: none;
         transition: none;
         transform: none;

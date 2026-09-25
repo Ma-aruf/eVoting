@@ -1,7 +1,6 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
 import api from '../apiClient';
 import {queryKeys} from './queryKeys';
-import {showSuccess} from '../utils/toast';
 
 export interface ActivationResponse {
     detail: string;
@@ -67,8 +66,6 @@ export const useActivateStudent = () => {
         },
 
         onSuccess: (_data, {election_id}) => {
-            showSuccess('Voter activated successfully');
-
             queryClient.invalidateQueries({
                 queryKey: queryKeys.students(election_id),
                 refetchType: 'inactive',

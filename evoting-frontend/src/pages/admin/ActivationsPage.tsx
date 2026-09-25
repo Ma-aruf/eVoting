@@ -207,7 +207,9 @@ export default function ActivationsPage() {
     const handleActivate = (event: FormEvent) => {
         event.preventDefault();
 
-        if (!canActivateVoters || !effectiveElectionId || !selectedElection || !selectedStudent || selectedStudent.is_active || selectedStudent.has_voted) {
+        if (
+            !canActivateVoters || !effectiveElectionId || !selectedElection ||
+            !selectedStudent || selectedStudent.is_active || selectedStudent.has_voted) {
             return;
         }
 
@@ -341,7 +343,11 @@ export default function ActivationsPage() {
                     )}
 
                     {generatedPin && (
-                        <div className="border border-emerald-200 bg-emerald-50 p-2" role="status">
+                        <div
+                            key={generatedPin}
+                            className="activation-pin-banner border border-emerald-200 bg-emerald-100 p-2"
+                            role="status"
+                        >
                             <div className="flex items-start justify-between gap-2">
                                 <div>
                                     <h3 className="font-semibold text-emerald-900">
@@ -358,7 +364,7 @@ export default function ActivationsPage() {
                                 <button
                                     type="button"
                                     aria-label="Dismiss generated PIN"
-                                    className="text-emerald-800 cursor-pointer hover:bg-emerald-100 p-2 rounded-full transition-all"
+                                    className="text-emerald-800 cursor-pointer hover:bg-emerald-200 p-2 rounded-full transition-all"
                                     onClick={() => {
                                         setGeneratedPin(null);
                                         setGeneratedPinStudent('');
