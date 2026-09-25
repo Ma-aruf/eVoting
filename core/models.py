@@ -158,6 +158,10 @@ class Student(models.Model):
     class_name = models.CharField(max_length=50)
     has_voted = models.BooleanField(default=False)
     is_active = models.BooleanField(default=False)
+    voting_pin_hash = models.CharField(max_length=128, blank=True, default="")
+    voting_pin_created_at = models.DateTimeField(null=True, blank=True)
+    voting_pin_attempts = models.PositiveSmallIntegerField(default=0)
+    voter_session_expires_at = models.DateTimeField(null=True, blank=True)
     election = models.ForeignKey(Election, on_delete=models.CASCADE)
 
     class Meta:

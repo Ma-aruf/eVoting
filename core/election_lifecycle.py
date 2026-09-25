@@ -4,7 +4,7 @@ from django.utils import timezone
 from django.db.models import Exists, OuterRef
 
 from .models import Candidate, Position
-from .utils import election_has_votes
+from .utils import election_has_votes, student_has_current_voter_access
 
 
 BALLOT_LOCKED_AFTER_START = (
@@ -90,6 +90,5 @@ def student_can_vote_now(student, election, now=None):
         and election_lifecycle(
             election, now, include_candidate_lock=False
         )["voting_open"]
-        and student.is_active
-        and not student.has_voted
+        and student_has_current_voter_access(student, now)
     )

@@ -1,5 +1,4 @@
 import type {ReactNode} from 'react';
-import logo from '../../public/logo.png';
 import {FiShield} from 'react-icons/fi';
 
 type AuthLayoutProps = {
@@ -12,7 +11,7 @@ type AuthLayoutProps = {
 export default function AuthLayout({title, children, securityMessage}: AuthLayoutProps) {
     return <main className="auth-layout">
         <section className="auth-presentation" aria-label="eVoting information">
-            <img className="absolute top-1 left-1 w-50" src={logo} alt="logo"/>
+            <img className="absolute top-1 left-1 w-50" src="/logo.png" alt="logo"/>
             <div className="auth-brand-lockup"></div>
         </section>
         <section className="auth-content" aria-labelledby="auth-page-title">

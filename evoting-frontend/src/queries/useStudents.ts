@@ -21,7 +21,10 @@ export interface Student {
 export const getStudentElectionId = (student: Student) =>
     typeof student.election === 'number' ? student.election : student.election?.id;
 
-export const useStudents = (electionId: number | null) =>
+export const useStudents = (
+    electionId: number | null,
+    options: {refetchInterval?: number | false} = {},
+) =>
     useQuery({
         queryKey: queryKeys.students(electionId),
         queryFn: async (): Promise<Student[]> => {
@@ -38,6 +41,7 @@ export const useStudents = (electionId: number | null) =>
         },
         enabled: electionId !== null,
         staleTime: 30 * 1000,
+        refetchInterval: options.refetchInterval,
     });
 
 export const useCreateStudent = () => {

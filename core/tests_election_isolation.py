@@ -46,6 +46,8 @@ class ElectionIsolationApiTests(TestCase):
             student_id="S-ONE",
             full_name="Student One",
             class_name="A",
+            is_active=True,
+            voter_session_expires_at=now + timedelta(minutes=20),
             election=self.election_one,
         )
         self.student_two = Student.objects.create(

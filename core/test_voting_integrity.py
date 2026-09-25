@@ -10,7 +10,7 @@ from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 
 from .models import Candidate, Election, Position, Student, User, Vote
 from .serializers import ElectionSerializer, PositionSerializer
-from .utils import create_voter_token
+from .utils import create_voter_token, hash_voter_pin, hash_voter_pin
 from .views import (
     CandidatesForPositionView,
     ElectionResultsView,
@@ -75,6 +75,11 @@ class VotingIntegrityTests(TestCase):
             class_name="A",
             election=election or self.election,
             is_active=active,
+            voting_pin_hash=hash_voter_pin("12345678") if active else "",
+            voting_pin_created_at=timezone.now() if active else None,
+            voter_session_expires_at=(
+                timezone.now() + timedelta(minutes=20) if active else None
+            ),
         )
 
     def headers(self, election=None, student=None, token=None):
@@ -429,7 +434,7 @@ class VotingIntegrityTests(TestCase):
     def test_same_student_id_is_scoped_to_election(self):
         same_id = self.make_student("SAME", election=self.election, active=True)
         other = self.make_student("SAME", election=self.other_election, active=False)
-        response = self.client.post("/api/voter/login/", {"student_id": "SAME"}, format="json")
+        response = self.client.post("/api/voter/login/", {"student_id": "SAME", "pin": "12345678"}, format="json")
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.data["election"]["id"], self.election.id)
         self.assertTrue(response.data["can_vote_now"])
@@ -454,7 +459,7 @@ class VotingIntegrityTests(TestCase):
 
     def test_deactivation_after_login_blocks_submission_without_marking_voted(self):
         response = self.client.post(
-            "/api/voter/login/", {"student_id": self.student.student_id}, format="json"
+            "/api/voter/login/", {"student_id": self.student.student_id, "pin": "12345678"}, format="json"
         )
         self.assertEqual(response.status_code, 200)
         self.student.is_active = False
@@ -681,7 +686,9 @@ class ConcurrentVoteTests(TransactionTestCase):
         position = Position.objects.create(name="President", election=election, display_order=1)
         student = Student.objects.create(
             student_id="CONCURRENT", full_name="Concurrent", class_name="A",
-            election=election, is_active=True
+            election=election,
+            is_active=True,
+            voter_session_expires_at=timezone.now() + timedelta(minutes=20),
         )
         candidate_student = Student.objects.create(
             student_id="CONCURRENT-C", full_name="Candidate", class_name="A",

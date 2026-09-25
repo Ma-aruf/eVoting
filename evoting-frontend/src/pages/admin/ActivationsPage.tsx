@@ -1,6 +1,6 @@
 import {type FormEvent, type KeyboardEvent, useEffect, useMemo, useState,} from 'react';
 
-import {FiCheckCircle, FiUserPlus, FiUsers, FiUserX,} from 'react-icons/fi';
+import {FiCheckCircle, FiUserPlus, FiUsers, FiUserX, FiX,} from 'react-icons/fi';
 
 import {useElections} from '../../queries/useElections';
 import {electionStatusPresentation} from '../../utils/electionLifecycle';
@@ -50,6 +50,8 @@ export default function ActivationsPage() {
     const [selectedStudentId, setSelectedStudentId] = useState('');
     const [isOpen, setIsOpen] = useState(false);
     const [activeOption, setActiveOption] = useState(0);
+    const [generatedPin, setGeneratedPin] = useState<string | null>(null);
+    const [generatedPinStudent, setGeneratedPinStudent] = useState('');
 
     const listboxId = 'activation-student-options';
 
@@ -59,7 +61,7 @@ export default function ActivationsPage() {
     const effectiveElectionId = isScopedRole
         ? user?.assignedElection?.id ?? null
         : selectedElectionId;
-    const studentsQuery = useStudents(effectiveElectionId);
+    const studentsQuery = useStudents(effectiveElectionId, {refetchInterval: 10_000});
     const activateStudent = useActivateStudent();
 
     // Query data
@@ -215,7 +217,11 @@ export default function ActivationsPage() {
                 election_id: effectiveElectionId,
             },
             {
-                onSuccess: () => {
+                onSuccess: data => {
+                    if (data.voting_pin) {
+                        setGeneratedPin(data.voting_pin);
+                        setGeneratedPinStudent(selectedStudent.full_name);
+                    }
                     setSelectedStudentId('');
                     setStudentQuery('');
                     setIsOpen(false);
@@ -332,6 +338,36 @@ export default function ActivationsPage() {
                         <Alert variant="warning" title="Activation unavailable">
                             {activationBlockMessage}
                         </Alert>
+                    )}
+
+                    {generatedPin && (
+                        <div className="border border-emerald-200 bg-emerald-50 p-2" role="status">
+                            <div className="flex items-start justify-between gap-2">
+                                <div>
+                                    <h3 className="font-semibold text-emerald-900">
+                                        Voter PIN generated
+                                    </h3>
+                                    <p className="mt-1 text-xs text-emerald-800">
+                                        Give this one-time PIN to {generatedPinStudent}.
+                                        It will not be shown again after this panel is closed.
+                                    </p>
+                                    <p className="mt-1 font-mono text-2xl font-semibold tracking-[0.35em] text-blue-700">
+                                        {generatedPin}
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    aria-label="Dismiss generated PIN"
+                                    className="text-emerald-800 cursor-pointer hover:bg-emerald-100 p-2 rounded-full transition-all"
+                                    onClick={() => {
+                                        setGeneratedPin(null);
+                                        setGeneratedPinStudent('');
+                                    }}
+                                >
+                                    <FiX size={18} aria-hidden="true"/>
+                                </button>
+                            </div>
+                        </div>
                     )}
 
                     <section className="ui-section">

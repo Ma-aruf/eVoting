@@ -524,6 +524,7 @@ describe('voter lifecycle contract', () => {
         }});
         openPage('/');
         await user.type(screen.getByLabelText(/Voter ID/), 'V1');
+        await user.type(screen.getByLabelText(/8-digit voter PIN/), '12345678');
         await user.click(screen.getByRole('button', {name: 'Enter voting portal'}));
         expect(await screen.findByText('Voting has not started yet.')).toBeInTheDocument();
         expect(sessionStorage.getItem('voter_token')).toBeNull();
@@ -539,6 +540,7 @@ describe('voter lifecycle contract', () => {
         }});
         openPage('/');
         await user.type(screen.getByLabelText(/Voter ID/), 'V1');
+        await user.type(screen.getByLabelText(/8-digit voter PIN/), '12345678');
         await user.click(screen.getByRole('button', {name: 'Enter voting portal'}));
         expect(await screen.findByText('Voting Open')).toBeInTheDocument();
         const positionsRequest = vi.mocked(api.get).mock.calls.find(([url]) => url === '/api/positions/');
@@ -553,8 +555,9 @@ describe('voter lifecycle contract', () => {
         vi.mocked(api.post).mockRejectedValueOnce({response: {status: 409, data: {detail: 'internal message'}}});
         openPage('/');
         await user.type(screen.getByLabelText(/Voter ID/), 'V1');
+        await user.type(screen.getByLabelText(/8-digit voter PIN/), '12345678');
         await user.click(screen.getByRole('button', {name: 'Enter voting portal'}));
-        expect(await screen.findByText('Your student ID is active in more than one election. Please select an election or contact an administrator.')).toBeInTheDocument();
+        expect(await screen.findByText('Your voter ID is active in more than one election. Please contact an election official.')).toBeInTheDocument();
         expect(sessionStorage.getItem('voter_token')).toBeNull();
         expect(screen.queryByText('internal message')).not.toBeInTheDocument();
     });
@@ -569,6 +572,7 @@ describe('voter lifecycle contract', () => {
         vi.mocked(api.post).mockRejectedValueOnce({response: {status: 403, data: {detail}}});
         openPage('/');
         await user.type(screen.getByLabelText(/Voter ID/), 'V1');
+        await user.type(screen.getByLabelText(/8-digit voter PIN/), '12345678');
         await user.click(screen.getByRole('button', {name: 'Enter voting portal'}));
         expect(await screen.findByText(message)).toBeInTheDocument();
         expect(screen.queryByText('Failed to login. Please check your voter ID and try again.')).not.toBeInTheDocument();
@@ -618,18 +622,35 @@ describe('voter lifecycle contract', () => {
     }, 10_000);
 
     it.each([
-        ['Student is not activated to vote.', 'You have not been activated for this election.'],
+        ['Student is not activated to vote.', 'You have not been activated for this election. Please ask an election official for access.'],
         ['Student has already voted.', 'You have already voted in this election.'],
     ])('translates voter eligibility errors safely', async (detail, message) => {
         const user = userEvent.setup();
         vi.mocked(api.post).mockRejectedValueOnce({response: {status: 403, data: {detail}}});
         openPage('/');
         await user.type(screen.getByLabelText(/Voter ID/), 'V1');
+        await user.type(screen.getByLabelText(/8-digit voter PIN/), '12345678');
         await user.click(screen.getByRole('button', {name: 'Enter voting portal'}));
         expect(await screen.findByText(message)).toBeInTheDocument();
         expect(screen.queryByText(detail)).not.toBeInTheDocument();
     });
 
+    it.each([
+        ['Student not found.', 'We could not find that voter ID. Check the ID and try again.'],
+        ['Invalid voter PIN.', 'Your PIN is incorrect. Check it and try again.'],
+        ['Too many invalid PIN attempts. Please ask an election official to activate you again.', 'Too many incorrect PIN attempts. Please ask an election official to reactivate you.'],
+        ['This voter PIN has expired. Please ask an election official to activate you again.', 'Your voter PIN has expired. Please ask an election official to reactivate you.'],
+        ['This voter does not have a valid PIN. Please ask an election official to activate you again.', 'You do not have an active voter PIN. Please ask an election official to activate you.'],
+    ])('shows a clear voter access message for %s', async (detail, message) => {
+        const user = userEvent.setup();
+        vi.mocked(api.post).mockRejectedValueOnce({response: {status: 403, data: {detail}}});
+        openPage('/');
+        await user.type(screen.getByLabelText(/Voter ID/), 'V1');
+        await user.type(screen.getByLabelText(/8-digit voter PIN/), '12345678');
+        await user.click(screen.getByRole('button', {name: 'Enter voting portal'}));
+        expect(await screen.findByText(message)).toBeInTheDocument();
+        expect(screen.queryByText(detail)).not.toBeInTheDocument();
+    });
     it('does not treat an old token-only browser session as voter eligibility', async () => {
         sessionStorage.setItem('student_id', 'V1');
         sessionStorage.setItem('election_id', '1');

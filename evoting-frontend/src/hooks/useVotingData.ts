@@ -70,7 +70,7 @@ const fetchVotingData = async (): Promise<VotingData> => {
         } catch (err) {
             if ((err as {response?: {status?: number}}).response?.status === 401 ||
                 (err as {response?: {status?: number}}).response?.status === 403) {
-                throw new Error('Your voter session is no longer valid. Please sign in again.');
+                throw err;
             }
             candidatesMap[position.id] = [];
         }

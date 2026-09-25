@@ -39,6 +39,13 @@ if [ $? -eq 0 ]; then
     echo "Collecting static files..."
     python manage.py collectstatic --noinput
 
+    echo "Starting voter PIN expiry worker..."
+    (
+        while true; do
+            python manage.py expire_voter_pins
+            sleep 10
+        done
+    ) &
     # Extra sleep to ensure everything is settled
     sleep 2
 

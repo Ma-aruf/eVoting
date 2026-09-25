@@ -31,14 +31,24 @@ class MultiVoteViewTests(TestCase):
         )
         # Create students with election_id for composite constraint
         self.student = Student.objects.create(
-            student_id="S001", full_name="Alice", class_name="A1", is_active=True, election=self.election
+            student_id="S001",
+            full_name="Alice",
+            class_name="A1",
+            is_active=True,
+            voter_session_expires_at=now + timedelta(minutes=20),
+            election=self.election,
         )
         self.candidate1 = Candidate.objects.create(
             student=self.student, position=self.position1
         )
         # Separate student for second candidate to avoid OneToOne conflict
         self.student_b = Student.objects.create(
-            student_id="S002", full_name="Bob", class_name="A1", is_active=True, election=self.election
+            student_id="S002",
+            full_name="Bob",
+            class_name="A1",
+            is_active=True,
+            voter_session_expires_at=now + timedelta(minutes=20),
+            election=self.election,
         )
         self.candidate2 = Candidate.objects.create(
             student=self.student_b, position=self.position2

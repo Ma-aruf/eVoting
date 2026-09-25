@@ -9,6 +9,7 @@ from .election_lifecycle import (
     position_voting_mode,
     START_TIME_LOCKED_DETAIL,
 )
+from .utils import student_has_current_voter_access
 
 
 class AssignedElectionSerializer(serializers.ModelSerializer):
@@ -114,11 +115,15 @@ class UserSerializer(serializers.ModelSerializer):
 
 class StudentSerializer(serializers.ModelSerializer):
     election_id = serializers.IntegerField(write_only=True)
+    is_active = serializers.SerializerMethodField()
 
     class Meta:
         model = Student
         fields = ["id", "student_id", "full_name", "class_name", "has_voted", "is_active", "election", "election_id"]
         read_only_fields = ["has_voted", "election"]
+
+    def get_is_active(self, obj):
+        return student_has_current_voter_access(obj)
 
     def validate_election_id(self, value):
         """Ensure election exists and is valid."""

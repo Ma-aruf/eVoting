@@ -1,6 +1,8 @@
 from io import BytesIO
 import logging
 
+from django.conf import settings
+
 from django.contrib.admin.models import CHANGE, LogEntry
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
@@ -57,9 +59,22 @@ from .serializers import (
     StudentSerializer,
     UserSerializer,
 )
-from .utils import create_voter_token, election_has_votes
+from .utils import (
+    VOTER_PIN_MAX_ATTEMPTS,
+    create_voter_token,
+    deactivate_expired_voter,
+    deactivate_expired_voters,
+    election_has_votes,
+    generate_voter_pin,
+    hash_voter_pin,
+    verify_voter_pin,
+    voter_access_expired,
+    voter_session_expiry,
+    student_has_current_voter_access,
+)
 
 User = get_user_model()
+
 
 class UserViewSet(viewsets.ModelViewSet):
     """
@@ -108,6 +123,8 @@ class StudentViewSet(viewsets.ModelViewSet):
     permission_classes = [CanAccessStudents]
 
     def get_queryset(self):
+        # Keep stored activation status current when staff load voter lists.
+        deactivate_expired_voters()
         queryset = scope_queryset(Student.objects.all(), self.request.user)
         election_id = self.request.query_params.get("election_id")
         if election_id:
@@ -119,12 +136,12 @@ class StudentViewSet(viewsets.ModelViewSet):
         election_id = self.request.data.get('election_id')
         if not election_id:
             raise ParseError("election_id is required for student creation.")
-        
+
         try:
             election = get_scoped_election_or_404(self.request.user, election_id)
         except Election.DoesNotExist:
             raise ParseError("Invalid election_id provided.")
-        
+
         serializer.save(election=election)
 
     def destroy(self, request, *args, **kwargs):
@@ -445,7 +462,7 @@ class CandidateCreateView(APIView):
         except Election.DoesNotExist:
             raise ParseError("Election not found.")
         with lock_elections_for_ballot_change(
-            candidate.position.election_id, effective_position.election_id
+                candidate.position.election_id, effective_position.election_id
         ):
             candidate = serializer.save()
         return Response(
@@ -482,7 +499,7 @@ class ElectionManageView(APIView):
     """
 
     permission_classes = [IsStaffOrSuperUser]
-    
+
     security_logger = logging.getLogger('security')
 
     def get(self, request):
@@ -502,7 +519,7 @@ class ElectionManageView(APIView):
         toggle_serializer.is_valid(raise_exception=True)
         election_id = toggle_serializer.validated_data["election_id"]
         voting_enabled = toggle_serializer.validated_data["voting_enabled"]
-        
+
         # Get client IP and user for logging
         client_ip = request.META.get('REMOTE_ADDR')
         user = request.user
@@ -535,7 +552,7 @@ class ElectionManageView(APIView):
                 )
             election.voting_enabled = voting_enabled
             election.save(update_fields=["voting_enabled"])
-            
+
             action = "ENABLED" if voting_enabled else "PAUSED"
             self.security_logger.info(
                 f"ELECTION_VOTING_{action}: election_id={election_id}, election_name={election.name}, "
@@ -678,23 +695,24 @@ class MultiVoteView(APIView):
     """
     authentication_classes = [VoterAuthentication]
     permission_classes = [IsAuthenticated]
-    
+
     security_logger = logging.getLogger('security')
-    
+
     def post(self, request):
         # Apply rate limiting only in production
         from django.conf import settings
         if getattr(settings, 'RATE_LIMITING_ENABLED', False):
             from django_ratelimit.decorators import ratelimit
             from django.utils.decorators import method_decorator
-            
+
             @method_decorator(ratelimit(key='ip', rate='10/m', method='POST'))
             def rate_limited_post(self, request):
                 return self._actual_post(request)
+
             return rate_limited_post(self, request)
         else:
             return self._actual_post(request)
-    
+
     def _actual_post(self, request):
         serializer = MultiVoteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -708,7 +726,7 @@ class MultiVoteView(APIView):
 
         # Get client IP for logging
         client_ip = request.META.get('REMOTE_ADDR')
-        
+
         # Log vote attempt
         self.security_logger.info(
             f"VOTE_ATTEMPT: student_id={student_user.student_id if student_user else 'unknown'}, "
@@ -756,8 +774,8 @@ class MultiVoteView(APIView):
                 )
                 submitted_position_ids = [vote["position"] for vote in data["votes"]]
                 if (
-                    len(submitted_position_ids) != len(election_position_ids)
-                    or set(submitted_position_ids) != election_position_ids
+                        len(submitted_position_ids) != len(election_position_ids)
+                        or set(submitted_position_ids) != election_position_ids
                 ):
                     return Response(
                         {
@@ -818,8 +836,8 @@ class MultiVoteView(APIView):
                     choice = vote_data.get("choice", "candidate")
 
                     if (
-                        str(election_id) != str(authenticated_election_id)
-                        or election_id != student.election_id
+                            str(election_id) != str(authenticated_election_id)
+                            or election_id != student.election_id
                     ):
                         return Response(
                             {"detail": "Every vote must belong to the authenticated election."},
@@ -934,11 +952,24 @@ class MultiVoteView(APIView):
 
                 Vote.objects.bulk_create(votes_to_create)
 
-                # Mark student as voted and deactivate
+                # Mark student as voted and end the session.
                 student.has_voted = True
                 student.is_active = False
-                student.save(update_fields=["has_voted", "is_active"])
-                
+                student.voting_pin_hash = ""
+                student.voting_pin_created_at = None
+                student.voting_pin_attempts = 0
+                student.voter_session_expires_at = None
+                student.save(
+                    update_fields=[
+                        "has_voted",
+                        "is_active",
+                        "voting_pin_hash",
+                        "voting_pin_created_at",
+                        "voting_pin_attempts",
+                        "voter_session_expires_at",
+                    ]
+                )
+
                 # Log successful vote
                 self.security_logger.info(
                     f"VOTE_SUCCESS: student_id={student.student_id}, ip={client_ip}, "
@@ -990,65 +1021,54 @@ class MeView(APIView):
 
 
 class StudentActivationView(APIView):
-    """
-    Toggle `is_active` on a Student within the staff/activator's election scope.
-    Accepts JSON: { "student_id": "S12345", "election_id": 1, "is_active": true }
-    """
+    """Activate or deactivate a voter within the user's election scope."""
+
     permission_classes = [CanActivateVoters]
-    
-    security_logger = logging.getLogger('security')
-    
+    security_logger = logging.getLogger("security")
+
     def post(self, request):
-        # Apply rate limiting only in production
-        from django.conf import settings
-        if getattr(settings, 'RATE_LIMITING_ENABLED', False):
+        if getattr(settings, "RATE_LIMITING_ENABLED", False):
             from django_ratelimit.decorators import ratelimit
             from django.utils.decorators import method_decorator
-            
-            @method_decorator(ratelimit(key='ip', rate='11/m', method='POST'))
-            def rate_limited_post(self, request):
-                return self._actual_post(request)
+
+            @method_decorator(ratelimit(key="ip", rate="11/m", method="POST"))
+            def rate_limited_post(view, current_request):
+                return view._actual_post(current_request)
+
             return rate_limited_post(self, request)
-        else:
-            return self._actual_post(request)
-    
+
+        return self._actual_post(request)
+
     def _actual_post(self, request):
-        print("INSIDE ACTIVATION VIEW - POST CALLED")  # ← add this
-        print(request.path, request.method)
-        
-        # Get client IP and user for logging
-        client_ip = request.META.get('REMOTE_ADDR')
+        client_ip = request.META.get("REMOTE_ADDR")
         user = request.user
-        
         student_id = request.data.get("student_id")
         election_id = request.data.get("election_id")
-        
-        # Log activation attempt
+        is_active = request.data.get("is_active")
+
         self.security_logger.info(
-            f"ACTIVATION_ATTEMPT: student_id={student_id}, election_id={election_id}, "
-            f"user={user.username if user else 'unknown'}, ip={client_ip}"
+            "ACTIVATION_ATTEMPT: student_id=%s, election_id=%s, user=%s, ip=%s",
+            student_id,
+            election_id,
+            getattr(user, "username", "unknown"),
+            client_ip,
         )
-        
+
         if not student_id:
             return Response(
                 {"detail": "student_id required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-            
         if not election_id:
             return Response(
                 {"detail": "election_id required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-        is_active = request.data.get("is_active")
         if is_active is None:
             return Response(
                 {"detail": "is_active required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
-
 
         try:
             election = get_scoped_election_or_404(request.user, election_id)
@@ -1061,8 +1081,10 @@ class StudentActivationView(APIView):
         is_active = serializers.BooleanField().run_validation(is_active)
 
         try:
-            # Find student by both student_id and election_id
-            student = Student.objects.get(student_id=student_id, election_id=election_id)
+            student = Student.objects.get(
+                student_id=student_id,
+                election_id=election_id,
+            )
         except Student.DoesNotExist:
             return Response(
                 {"detail": "Student not found in this election."},
@@ -1097,42 +1119,64 @@ class StudentActivationView(APIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-        # Check if student has already voted (cannot be activated if voted)
         if student.has_voted:
             self.security_logger.warning(
-                f"ACTIVATION_DENIED_VOTED: student_id={student_id}, election_id={election_id}, "
-                f"user={user.username if user else 'unknown'}, ip={client_ip}"
+                "ACTIVATION_DENIED_VOTED: student_id=%s, election_id=%s, user=%s, ip=%s",
+                student_id,
+                election_id,
+                getattr(user, "username", "unknown"),
+                client_ip,
             )
             return Response(
                 {"detail": "Student has already voted and cannot be re-activated."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Check current status for better message
-        current_status = student.is_active
-        new_status = is_active
-
-        if current_status == new_status:
-            status_text = "active" if current_status else "inactive"
+        if student_has_current_voter_access(student) == is_active:
+            status_text = "active" if is_active else "inactive"
             return Response(
-                {"detail": f"Student is already {status_text}."},
+                {"detail": f"Student is already {status_text}.", "voting_pin": None},
                 status=status.HTTP_200_OK,
             )
 
-        # Only toggle the is_active flag
-        student.is_active = new_status
-        student.save(update_fields=["is_active"])
-        
-        # Log successful activation/deactivation
-        action = "ACTIVATED" if new_status else "DEACTIVATED"
-        self.security_logger.info(
-            f"STUDENT_{action}: student_id={student_id}, election_id={election_id}, "
-            f"user={user.username if user else 'unknown'}, ip={client_ip}"
+        pin = None
+        if is_active:
+            pin = generate_voter_pin()
+            student.is_active = True
+            student.voting_pin_hash = hash_voter_pin(pin)
+            student.voting_pin_created_at = timezone.now()
+            student.voting_pin_attempts = 0
+            student.voter_session_expires_at = None
+        else:
+            student.is_active = False
+            student.voting_pin_hash = ""
+            student.voting_pin_created_at = None
+            student.voting_pin_attempts = 0
+            student.voter_session_expires_at = None
+
+        student.save(
+            update_fields=[
+                "is_active",
+                "voting_pin_hash",
+                "voting_pin_created_at",
+                "voting_pin_attempts",
+                "voter_session_expires_at",
+            ]
         )
 
-        status_text = "activated" if new_status else "deactivated"
+        action = "ACTIVATED" if is_active else "DEACTIVATED"
+        self.security_logger.info(
+            "STUDENT_%s: student_id=%s, election_id=%s, user=%s, ip=%s",
+            action,
+            student_id,
+            election_id,
+            getattr(user, "username", "unknown"),
+            client_ip,
+        )
+
+        status_text = "activated" if is_active else "deactivated"
         return Response(
-            {"detail": f"Student {status_text} successfully."},
+            {"detail": f"Student {status_text} successfully.", "voting_pin": pin},
             status=status.HTTP_200_OK,
         )
 
@@ -1152,38 +1196,27 @@ class ElectionCreateView(APIView):
 
 
 class StudentVoterLoginView(APIView):
-    """
-    Generate HMAC token for active students who haven't voted yet.
-    """
+    """Authenticate an activated voter with their one-time PIN."""
+
     permission_classes = [AllowAny]
-    
-    security_logger = logging.getLogger('security')
-    
+    security_logger = logging.getLogger("security")
+
     def post(self, request):
-        # Apply rate limiting only in production
-        from django.conf import settings
-        
-        if getattr(settings, 'RATE_LIMITING_ENABLED', False):
+        if getattr(settings, "RATE_LIMITING_ENABLED", False):
             from django_ratelimit.decorators import ratelimit
             from django.utils.decorators import method_decorator
-            
-            @method_decorator(ratelimit(key='ip', rate='5/m', method='POST'))
-            def rate_limited_post(self, request):
-                return self._actual_post(request)
+
+            @method_decorator(ratelimit(key="ip", rate="5/m", method="POST"))
+            def rate_limited_post(view, current_request):
+                return view._actual_post(current_request)
+
             return rate_limited_post(self, request)
-        else:
-            return self._actual_post(request)
-    
+
+        return self._actual_post(request)
+
     def _actual_post(self, request):
         student_id = request.data.get("student_id")
-        
-        # Get client IP for logging
-        client_ip = request.META.get('REMOTE_ADDR')
-        
-        # Log login attempt
-        self.security_logger.info(
-            f"LOGIN_ATTEMPT: student_id={student_id}, ip={client_ip}"
-        )
+        pin = request.data.get("pin")
 
         if not student_id:
             return Response(
@@ -1191,13 +1224,22 @@ class StudentVoterLoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        client_ip = request.META.get("REMOTE_ADDR")
+        self.security_logger.info(
+            "LOGIN_ATTEMPT: student_id=%s, ip=%s",
+            student_id,
+            client_ip,
+        )
+
         now = timezone.now()
         matching_students = list(
             Student.objects.filter(student_id=student_id).select_related("election")
         )
         if not matching_students:
             self.security_logger.warning(
-                f"LOGIN_NOT_FOUND: student_id={student_id}, ip={client_ip}"
+                "LOGIN_NOT_FOUND: student_id=%s, ip=%s",
+                student_id,
+                client_ip,
             )
             return Response(
                 {"detail": "Student not found."},
@@ -1209,20 +1251,28 @@ class StudentVoterLoginView(APIView):
             for student in matching_students
         }
         open_students = [
-            student for student in matching_students
+            student
+            for student in matching_students
             if status_by_election[student.election_id] == "open"
         ]
         eligible_students = [
-            student for student in open_students
+            student
+            for student in open_students
             if election_ballot_ready(student.election)
             and student_can_vote_now(student, student.election, now)
         ]
+
         if len(eligible_students) == 1:
             student = eligible_students[0]
             active_election = student.election
         elif len(eligible_students) > 1:
             return Response(
-                {"detail": "Student is eligible to vote in multiple elections. Please contact an administrator."},
+                {
+                    "detail": (
+                        "Student is eligible to vote in multiple elections. "
+                        "Please contact an administrator."
+                    )
+                },
                 status=status.HTTP_409_CONFLICT,
             )
         elif open_students:
@@ -1231,6 +1281,7 @@ class StudentVoterLoginView(APIView):
                     {"detail": "Student ID is associated with more than one open election."},
                     status=status.HTTP_409_CONFLICT,
                 )
+
             open_student = open_students[0]
             if not election_ballot_ready(open_student.election):
                 return Response(
@@ -1244,14 +1295,43 @@ class StudentVoterLoginView(APIView):
                 )
             if open_student.has_voted:
                 self.security_logger.warning(
-                    f"LOGIN_DENIED_VOTED: student_id={student_id}, ip={client_ip}"
+                    "LOGIN_DENIED_VOTED: student_id=%s, ip=%s",
+                    student_id,
+                    client_ip,
                 )
                 return Response(
                     {"detail": "Student has already voted."},
                     status=status.HTTP_409_CONFLICT,
                 )
+
+            if not open_student.voting_pin_hash or not open_student.voting_pin_created_at:
+                deactivate_expired_voter(open_student)
+                return Response(
+                    {
+                        "detail": (
+                            "This voter does not have a valid PIN. "
+                            "Please ask an election official to activate you again."
+                        )
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            if voter_access_expired(open_student.voting_pin_created_at, now):
+                deactivate_expired_voter(open_student)
+                return Response(
+                    {
+                        "detail": (
+                            "This voter PIN has expired. "
+                            "Please ask an election official to activate you again."
+                        )
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
             self.security_logger.warning(
-                f"LOGIN_DENIED_INACTIVE: student_id={student_id}, ip={client_ip}"
+                "LOGIN_DENIED_INACTIVE: student_id=%s, ip=%s",
+                student_id,
+                client_ip,
             )
             return Response(
                 {"detail": "Student is not activated to vote."},
@@ -1267,31 +1347,144 @@ class StudentVoterLoginView(APIView):
                 detail = "Voting has ended."
             return Response({"detail": detail}, status=status.HTTP_403_FORBIDDEN)
 
-        # Create an election-scoped voter token
+        if not isinstance(pin, str) or len(pin) != 8 or not pin.isdigit():
+            return Response(
+                {"detail": "An 8-digit voter PIN is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            student = (
+                Student.objects.select_for_update()
+                .select_related("election")
+                .get(pk=student.pk)
+            )
+            active_election = student.election
+
+            if not student_can_vote_now(student, active_election, now):
+                return Response(
+                    {"detail": "Student is no longer activated to vote."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            if not student.voting_pin_hash or not student.voting_pin_created_at:
+                deactivate_expired_voter(student)
+                return Response(
+                    {
+                        "detail": (
+                            "This voter does not have a valid PIN. "
+                            "Please ask an election official to activate you again."
+                        )
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            if voter_access_expired(student.voting_pin_created_at, now):
+                deactivate_expired_voter(student)
+                return Response(
+                    {
+                        "detail": (
+                            "This voter PIN has expired. "
+                            "Please ask an election official to activate you again."
+                        )
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            if student.voting_pin_attempts >= VOTER_PIN_MAX_ATTEMPTS:
+                deactivate_expired_voter(student)
+                return Response(
+                    {
+                        "detail": (
+                            "Too many invalid PIN attempts. "
+                            "Please ask an election official to activate you again."
+                        )
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            if not verify_voter_pin(pin, student.voting_pin_hash):
+                student.voting_pin_attempts += 1
+                attempts_exhausted = (
+                    student.voting_pin_attempts >= VOTER_PIN_MAX_ATTEMPTS
+                )
+                if attempts_exhausted:
+                    student.is_active = False
+                    student.voting_pin_hash = ""
+                    student.voting_pin_created_at = None
+                    student.voting_pin_attempts = 0
+                    student.voter_session_expires_at = None
+                    detail = (
+                        "Too many invalid PIN attempts. "
+                        "Please ask an election official to activate you again."
+                    )
+                else:
+                    detail = "Invalid voter PIN."
+
+                student.save(
+                    update_fields=[
+                        "is_active",
+                        "voting_pin_hash",
+                        "voting_pin_created_at",
+                        "voting_pin_attempts",
+                        "voter_session_expires_at",
+                    ]
+                )
+                self.security_logger.warning(
+                    "LOGIN_DENIED_PIN: student_id=%s, election_id=%s, ip=%s",
+                    student_id,
+                    active_election.id,
+                    client_ip,
+                )
+                return Response({"detail": detail}, status=status.HTTP_403_FORBIDDEN)
+
+            student.voting_pin_hash = ""
+            student.voting_pin_created_at = None
+            student.voting_pin_attempts = 0
+            student.voter_session_expires_at = voter_session_expiry(
+                active_election, timezone.now()
+            )
+            student.save(
+                update_fields=[
+                    "voting_pin_hash",
+                    "voting_pin_created_at",
+                    "voting_pin_attempts",
+                    "voter_session_expires_at",
+                ]
+            )
+
         token = create_voter_token(f"{student.student_id}_{active_election.id}")
-        
-        # Log successful login
         self.security_logger.info(
-            f"LOGIN_SUCCESS: student_id={student.student_id}, election_id={active_election.id}, ip={client_ip}"
+            "LOGIN_SUCCESS: student_id=%s, election_id=%s, ip=%s",
+            student.student_id,
+            active_election.id,
+            client_ip,
         )
 
         election_lifecycle_data = election_lifecycle(
-            active_election, now, include_candidate_lock=False
+            active_election,
+            timezone.now(),
+            include_candidate_lock=False,
         )
-        return Response({
-            "token": token,
-            "can_vote_now": student_can_vote_now(student, active_election, now),
-            "student": {
-                "id": student.id,
-                "student_id": student.student_id,
-                "full_name": student.full_name,
-                "class_name": student.class_name,
+        return Response(
+            {
+                "token": token,
+                "can_vote_now": student_can_vote_now(
+                    student, active_election, timezone.now()
+                ),
+                "student": {
+                    "id": student.id,
+                    "student_id": student.student_id,
+                    "full_name": student.full_name,
+                    "class_name": student.class_name,
+                },
+                "election": {
+                    "id": active_election.id,
+                    "name": active_election.name,
+                    "year": active_election.year,
+                    "voting_enabled": active_election.voting_enabled,
+                    **election_lifecycle_data,
+                },
             },
-            "election": {
-                "id": active_election.id,
-                "name": active_election.name,
-                "year": active_election.year,
-                "voting_enabled": active_election.voting_enabled,
-                **election_lifecycle_data,
-            }
-        }, status=status.HTTP_200_OK)
+            status=status.HTTP_200_OK,
+        )

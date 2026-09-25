@@ -52,7 +52,9 @@ class ElectionLifecycleModelTests(TestCase):
     def test_student_eligibility_is_separate_from_election_availability(self):
         student = Student.objects.create(
             student_id="ELIGIBLE", full_name="Eligible", class_name="A",
-            election=self.election, is_active=True,
+            election=self.election,
+            is_active=True,
+            voting_pin_created_at=self.now,
         )
         self.assertTrue(student_can_vote_now(student, self.election, self.now))
         student.is_active = False
@@ -676,6 +678,97 @@ class ElectionActivationReadinessTests(TestCase):
         self.assertEqual(ready.status_code, 200, ready.data)
         self.student.refresh_from_db()
         self.assertTrue(self.student.is_active)
+
+    def test_activation_returns_a_one_time_pin_that_login_consumes(self):
+        position = Position.objects.create(
+            name="President", election=self.election, display_order=1,
+        )
+        candidate_student = Student.objects.create(
+            student_id="PIN-CANDIDATE", full_name="Candidate", class_name="A",
+            election=self.election,
+        )
+        Candidate.objects.create(
+            student=candidate_student, position=position, ballot_number=1,
+        )
+
+        activation = self.activate_student()
+        self.assertEqual(activation.status_code, 200, activation.data)
+        pin = activation.data["voting_pin"]
+        self.assertRegex(pin, r"^\d{8}$")
+
+        self.student.refresh_from_db()
+        self.assertTrue(self.student.is_active)
+        self.assertNotEqual(self.student.voting_pin_hash, pin)
+        self.assertTrue(self.student.voting_pin_created_at)
+
+        voter_client = APIClient()
+        login = voter_client.post(
+            "/api/voter/login/",
+            {"student_id": self.student.student_id, "pin": pin},
+            format="json",
+        )
+        self.assertEqual(login.status_code, 200, login.data)
+
+        self.student.refresh_from_db()
+        self.assertEqual(self.student.voting_pin_hash, "")
+        self.assertIsNone(self.student.voting_pin_created_at)
+        self.assertIsNotNone(self.student.voter_session_expires_at)
+
+        self.student.voter_session_expires_at = timezone.now() - timedelta(minutes=1)
+        self.student.save(update_fields=["voter_session_expires_at"])
+        expired_access = voter_client.get(
+            "/api/positions/",
+            {"election_id": self.election.pk},
+            HTTP_X_STUDENT_ID=self.student.student_id,
+            HTTP_X_ELECTION_ID=str(self.election.pk),
+            HTTP_X_VOTER_TOKEN=login.data["token"],
+        )
+        self.assertIn(expired_access.status_code, (401, 403))
+        self.student.refresh_from_db()
+        self.assertFalse(self.student.is_active)
+        self.assertIsNone(self.student.voting_pin_created_at)
+        self.assertIsNone(self.student.voter_session_expires_at)
+
+        second_login = voter_client.post(
+            "/api/voter/login/",
+            {"student_id": self.student.student_id, "pin": pin},
+            format="json",
+        )
+        self.assertEqual(second_login.status_code, 403)
+    def test_expired_voter_appears_inactive_and_can_be_reactivated(self):
+        position = Position.objects.create(
+            name="President", election=self.election, display_order=1,
+        )
+        candidate_student = Student.objects.create(
+            student_id="REACTIVATION-CANDIDATE", full_name="Candidate", class_name="A",
+            election=self.election,
+        )
+        Candidate.objects.create(
+            student=candidate_student, position=position, ballot_number=1,
+        )
+
+        activation = self.activate_student()
+        self.assertEqual(activation.status_code, 200, activation.data)
+        self.student.voting_pin_created_at = timezone.now() - timedelta(minutes=11)
+        self.student.save(update_fields=["voting_pin_created_at"])
+
+        listing = self.client.get(
+            "/api/students/",
+            {"election_id": self.election.pk},
+        )
+        self.assertEqual(listing.status_code, 200, listing.data)
+        listed_students = listing.data["results"] if isinstance(listing.data, dict) else listing.data
+        listed_student = next(item for item in listed_students if item["student_id"] == self.student.student_id)
+        self.assertFalse(listed_student["is_active"])
+        self.student.refresh_from_db()
+        self.assertFalse(self.student.is_active)
+
+        reactivation = self.activate_student()
+        self.assertEqual(reactivation.status_code, 200, reactivation.data)
+        self.assertRegex(reactivation.data["voting_pin"], r"^\d{8}$")
+        self.student.refresh_from_db()
+        self.assertTrue(self.student.is_active)
+        self.assertGreater(self.student.voting_pin_created_at, timezone.now() - timedelta(minutes=1))
 
     def test_django_admin_cannot_enable_an_unready_ballot(self):
         request = RequestFactory().post("/admin/core/election/")

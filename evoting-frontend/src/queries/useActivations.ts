@@ -3,6 +3,10 @@ import api from '../apiClient';
 import {queryKeys} from './queryKeys';
 import {showSuccess} from '../utils/toast';
 
+export interface ActivationResponse {
+    detail: string;
+    voting_pin?: string | null;
+}
 export interface Student {
     id: number;
     student_id: string;
@@ -27,7 +31,7 @@ export const useActivateStudent = () => {
                 election_id,
                 is_active: true,
             });
-            return response.data;
+            return response.data as ActivationResponse;
         },
 
         onMutate: async ({student_id, election_id}) => {
@@ -62,7 +66,7 @@ export const useActivateStudent = () => {
             );
         },
 
-        onSuccess: (_, {election_id}) => {
+        onSuccess: (_data, {election_id}) => {
             showSuccess('Voter activated successfully');
 
             queryClient.invalidateQueries({

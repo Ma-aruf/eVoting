@@ -36,5 +36,7 @@ export function voterLifecycleMessageFromDetail(detail: unknown): string | null 
     if (normalized.includes('not started yet')) return voterLifecycleMessage('scheduled');
     if (normalized.includes('paused')) return voterLifecycleMessage('paused');
     if (normalized.includes('voting has ended')) return voterLifecycleMessage('ended');
+    if (normalized.includes('voting session has expired')) return 'Your voting session has expired. Please ask an election official to reactivate you.';
+    if (normalized.includes('voter access has expired')) return 'Your voter access expired. Please ask an election official to activate you again.';
     return null;
 }
