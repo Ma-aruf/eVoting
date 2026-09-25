@@ -4,7 +4,7 @@ from core.utils import deactivate_expired_voters
 
 
 class Command(BaseCommand):
-    help = 'Deactivate voters whose PIN or voting session has expired.'
+    help = 'Deactivate voters whose PIN, activation, or voting session has expired.'
 
     def handle(self, *args, **options):
         expired_count = deactivate_expired_voters()

@@ -1,4 +1,6 @@
 export type ElectionStatus = 'scheduled' | 'open' | 'paused' | 'ended';
+export type VoterLoginMode = 'activator_id' | 'activator_pin';
+
 
 export interface ElectionLifecycleFields {
     voting_enabled: boolean;
@@ -14,6 +16,7 @@ export interface Election extends ElectionLifecycleFields {
     start_time: string;
     end_time: string;
     ballot_ready: boolean;
+    voter_login_mode?: VoterLoginMode;
 }
 
 export interface AssignedElectionLifecycle {
@@ -33,6 +36,7 @@ export interface VoterElection {
     voting_enabled: boolean;
     status: ElectionStatus;
     voting_open: boolean;
+    voter_login_mode?: VoterLoginMode;
 }
 
 export interface ElectionCreatePayload {
@@ -41,6 +45,7 @@ export interface ElectionCreatePayload {
     start_time: string;
     end_time: string;
     voting_enabled: boolean;
+    voter_login_mode: VoterLoginMode;
 }
 
 export interface ElectionManagementResponse extends Election {

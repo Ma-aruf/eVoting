@@ -81,11 +81,26 @@ class User(AbstractUser):
 
 
 class Election(models.Model):
+    VOTER_LOGIN_MODE_ID = "activator_id"
+    VOTER_LOGIN_MODE_PIN = "activator_pin"
+    VOTER_LOGIN_MODE_CHOICES = (
+        (VOTER_LOGIN_MODE_ID, "Activator and student ID"),
+        (VOTER_LOGIN_MODE_PIN, "Activator and PIN"),
+    )
+
     name = models.CharField(max_length=100)
     year = models.PositiveIntegerField()
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
     voting_enabled = models.BooleanField(default=False)
+    # Existing elections already use the PIN flow. Keep that as the model
+    # default for backwards compatibility; new UI-created elections choose
+    # the legacy ID flow explicitly unless the PIN toggle is enabled.
+    voter_login_mode = models.CharField(
+        max_length=20,
+        choices=VOTER_LOGIN_MODE_CHOICES,
+        default=VOTER_LOGIN_MODE_PIN,
+    )
 
     class Meta:
         constraints = [
@@ -162,6 +177,7 @@ class Student(models.Model):
     voting_pin_created_at = models.DateTimeField(null=True, blank=True)
     voting_pin_attempts = models.PositiveSmallIntegerField(default=0)
     voter_session_expires_at = models.DateTimeField(null=True, blank=True)
+    voter_activation_expires_at = models.DateTimeField(null=True, blank=True)
     election = models.ForeignKey(Election, on_delete=models.CASCADE)
 
     class Meta:

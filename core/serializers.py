@@ -19,7 +19,7 @@ class AssignedElectionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Election
-        fields = ["id", "name", "year", "voting_enabled", "status", "voting_open"]
+        fields = ["id", "name", "year", "voting_enabled", "voter_login_mode", "status", "voting_open"]
 
     def to_representation(self, instance):
         self._lifecycle_snapshot = election_lifecycle(
@@ -163,6 +163,7 @@ class ElectionSerializer(serializers.ModelSerializer):
         model = Election
         fields = [
             "id", "name", "year", "start_time", "end_time", "voting_enabled",
+            "voter_login_mode",
             "status", "voting_open", "candidate_changes_locked", "ballot_ready",
             "is_active",
         ]

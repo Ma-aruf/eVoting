@@ -106,13 +106,13 @@ export default function StudentLoginPage() {
                            onChange={(event) => setStudentId(event.target.value.toUpperCase())}
                            placeholder="e.g. STU-001" required autoFocus/>
             </FormField>
-            <FormField id="voter-pin" label="8-digit voter PIN" required>
+            <FormField id="voter-pin" label="8-digit voter PIN (if required)">
                 <TextInput autoComplete="one-time-code" inputMode="numeric" maxLength={8}
                            value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, 8))}
-                           placeholder="Enter your PIN" required/>
+                           placeholder="Leave blank if your election uses student-ID login"/>
             </FormField>
             <Button type="submit" className="auth-submit" loading={loading}
-                    disabled={!studentId.trim() || pin.length !== 8}
+                    disabled={!studentId.trim()}
                     leadingIcon={<FiUser aria-hidden="true"/>}
                     trailingIcon={<FiArrowRight className="text-orange-300 h-4 w-5" varia-hidden="true"/>}>
                 Enter voting portal

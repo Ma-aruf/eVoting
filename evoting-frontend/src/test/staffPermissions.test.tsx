@@ -496,6 +496,7 @@ describe('lifecycle lock and schedule controls', () => {
             name: 'Lifecycle test', year: 2027,
             start_time: new Date(start).toISOString(), end_time: new Date(end).toISOString(),
             voting_enabled: false,
+            voter_login_mode: 'activator_id',
         }));
     });
 });

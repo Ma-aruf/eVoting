@@ -30,6 +30,7 @@ export default function ElectionsPage() {
     const [year, setYear] = useState('');
     const [startTime, setStartTime] = useState('');
     const [endTime, setEndTime] = useState('');
+    const [usePinLogin, setUsePinLogin] = useState(false);
     const [scheduleError, setScheduleError] = useState('');
     const [scheduleElectionId, setScheduleElectionId] = useState<number | null>(null);
     const [editedStartTime, setEditedStartTime] = useState('');
@@ -51,6 +52,7 @@ export default function ElectionsPage() {
         setYear('');
         setStartTime('');
         setEndTime('');
+        setUsePinLogin(false);
         setScheduleError('');
     };
 
@@ -87,6 +89,7 @@ export default function ElectionsPage() {
                 start_time: new Date(startTime).toISOString(),
                 end_time: new Date(endTime).toISOString(),
                 voting_enabled: false,
+                voter_login_mode: usePinLogin ? 'activator_pin' : 'activator_id',
             },
             {
                 onSuccess: () => {
@@ -381,6 +384,27 @@ export default function ElectionsPage() {
                                 />
                             </FormField>
                         </div>
+                    </section>
+                    <section className="election-form-section">
+                        <label className="flex items-start gap-3 text-sm text-gray-700">
+                            <input
+                                id="voter-login-pin"
+                                type="checkbox"
+                                checked={usePinLogin}
+                                onChange={event => setUsePinLogin(event.target.checked)}
+                                className="mt-1 h-4 w-4"
+                            />
+                            <span>
+                                <span className="block font-medium text-gray-900">
+                                    Let voters log in with PIN codes
+                                </span>
+                                <span className="mt-1 block text-xs text-gray-600">
+                                    {usePinLogin
+                                        ? 'Activators will generate a one-time PIN when they activate each voter.'
+                                        : 'Activators will authorize voters to sign in with their student ID.'}
+                                </span>
+                            </span>
+                        </label>
                     </section>
 
                     <p className="text-xs text-gray-600">

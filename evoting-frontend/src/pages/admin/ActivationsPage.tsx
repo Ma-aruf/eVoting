@@ -52,6 +52,7 @@ export default function ActivationsPage() {
     const [activeOption, setActiveOption] = useState(0);
     const [generatedPin, setGeneratedPin] = useState<string | null>(null);
     const [generatedPinStudent, setGeneratedPinStudent] = useState('');
+    const [activationSuccessStudent, setActivationSuccessStudent] = useState('');
 
     const listboxId = 'activation-student-options';
 
@@ -223,6 +224,11 @@ export default function ActivationsPage() {
                     if (data.voting_pin) {
                         setGeneratedPin(data.voting_pin);
                         setGeneratedPinStudent(selectedStudent.full_name);
+                        setActivationSuccessStudent('');
+                    } else {
+                        setGeneratedPin(null);
+                        setGeneratedPinStudent('');
+                        setActivationSuccessStudent(selectedStudent.full_name);
                     }
                     setSelectedStudentId('');
                     setStudentQuery('');
@@ -368,6 +374,35 @@ export default function ActivationsPage() {
                                     onClick={() => {
                                         setGeneratedPin(null);
                                         setGeneratedPinStudent('');
+                                    }}
+                                >
+                                    <FiX size={18} aria-hidden="true"/>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {activationSuccessStudent && (
+                        <div
+                            key={activationSuccessStudent}
+                            className="activation-pin-banner border border-emerald-200 bg-emerald-100 p-2"
+                            role="status"
+                        >
+                            <div className="flex items-start justify-between gap-2">
+                                <div>
+                                    <h3 className="font-semibold text-emerald-900">
+                                        Voter activated successfully
+                                    </h3>
+                                    <p className="mt-1 text-xs text-emerald-800">
+                                        {activationSuccessStudent} can now log in with their student ID.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    aria-label="Dismiss activation message"
+                                    className="text-emerald-800 cursor-pointer hover:bg-emerald-200 p-2 rounded-full transition-all"
+                                    onClick={() => {
+                                        setActivationSuccessStudent('');
                                     }}
                                 >
                                     <FiX size={18} aria-hidden="true"/>

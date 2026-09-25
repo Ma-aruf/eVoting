@@ -10,7 +10,8 @@ from django.utils import timezone
 VOTER_PIN_LENGTH = 8
 VOTER_PIN_MAX_ATTEMPTS = 5
 VOTER_PIN_TTL = timedelta(minutes=10)
-VOTER_SESSION_TTL = timedelta(minutes=20)
+VOTER_ACTIVATION_TTL = timedelta(minutes=10)
+VOTER_SESSION_TTL = timedelta(minutes=10)
 VOTER_PIN_HASH_VERSION = "v1"
 VOTER_PIN_HASH_SEPARATOR = ":"
 
@@ -55,6 +56,17 @@ def voter_access_expired(created_at, now=None) -> bool:
     return current_time >= created_at + VOTER_PIN_TTL
 
 
+def voter_activation_expiry(now=None):
+    """Return the deadline for an activated voter to begin login."""
+    current_time = now or timezone.now()
+    return current_time + VOTER_ACTIVATION_TTL
+
+
+def voter_activation_expired(expires_at, now=None) -> bool:
+    """Return whether an activated voter has missed the login window."""
+    return voter_session_expired(expires_at, now)
+
+
 def voter_session_expired(expires_at, now=None) -> bool:
     """Return whether an authenticated voter session has ended."""
     if expires_at is None:
@@ -76,6 +88,13 @@ def student_has_current_voter_access(student, now=None) -> bool:
 
     if student.voter_session_expires_at is not None:
         return not voter_session_expired(student.voter_session_expires_at, now)
+    if student.voter_activation_expires_at is not None:
+        return not voter_activation_expired(student.voter_activation_expires_at, now)
+
+    # In the legacy flow, activation itself is the login grant. A session is
+    # created after the student logs in and then controls the remaining access.
+    if getattr(getattr(student, "election", None), "voter_login_mode", None) == "activator_id":
+        return False
 
     return bool(
         student.voting_pin_created_at
@@ -90,6 +109,7 @@ def deactivate_expired_voter(student) -> None:
     student.voting_pin_created_at = None
     student.voting_pin_attempts = 0
     student.voter_session_expires_at = None
+    student.voter_activation_expires_at = None
     student.save(
         update_fields=[
             "is_active",
@@ -97,6 +117,7 @@ def deactivate_expired_voter(student) -> None:
             "voting_pin_created_at",
             "voting_pin_attempts",
             "voter_session_expires_at",
+            "voter_activation_expires_at",
         ]
     )
 
@@ -107,8 +128,8 @@ def deactivate_expired_voter_session(student) -> None:
 
 
 def deactivate_expired_voters(now=None) -> int:
-    """Deactivate voters whose PIN or authenticated session has ended."""
-    from .models import Student
+    """Deactivate voters whose activation, PIN, or session access has ended."""
+    from .models import Election, Student
 
     current_time = now or timezone.now()
     pin_expired = Q(
@@ -119,15 +140,24 @@ def deactivate_expired_voters(now=None) -> int:
         voter_session_expires_at__isnull=False,
         voter_session_expires_at__lte=current_time,
     )
+    activation_expired = Q(
+        voter_activation_expires_at__isnull=False,
+        voter_activation_expires_at__lte=current_time,
+    )
+    legacy_id_activation = Q(
+        election__voter_login_mode=Election.VOTER_LOGIN_MODE_ID,
+        voter_activation_expires_at__isnull=True,
+    )
     return Student.objects.filter(
         is_active=True,
         has_voted=False,
-    ).filter(pin_expired | session_expired).update(
+    ).filter(pin_expired | session_expired | activation_expired | legacy_id_activation).update(
         is_active=False,
         voting_pin_hash="",
         voting_pin_created_at=None,
         voting_pin_attempts=0,
         voter_session_expires_at=None,
+        voter_activation_expires_at=None,
     )
 
 
