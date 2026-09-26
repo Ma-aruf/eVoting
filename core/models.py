@@ -83,9 +83,11 @@ class User(AbstractUser):
 class Election(models.Model):
     VOTER_LOGIN_MODE_ID = "activator_id"
     VOTER_LOGIN_MODE_PIN = "activator_pin"
+    VOTER_LOGIN_MODE_SMS = "sms_pin"
     VOTER_LOGIN_MODE_CHOICES = (
         (VOTER_LOGIN_MODE_ID, "Activator and student ID"),
         (VOTER_LOGIN_MODE_PIN, "Activator and PIN"),
+        (VOTER_LOGIN_MODE_SMS, "SMS PIN"),
     )
 
     name = models.CharField(max_length=100)
@@ -171,6 +173,7 @@ class Student(models.Model):
     student_id = models.CharField(max_length=30)
     full_name = models.CharField(max_length=100)
     class_name = models.CharField(max_length=50)
+    phone_number = models.CharField(max_length=20, blank=True, default="")
     has_voted = models.BooleanField(default=False)
     is_active = models.BooleanField(default=False)
     voting_pin_hash = models.CharField(max_length=128, blank=True, default="")
@@ -189,6 +192,33 @@ class Student(models.Model):
         return f"{self.full_name} - {self.student_id} ({self.election.name})"
 
 
+class VoterSMSAttempt(models.Model):
+    class Status(models.TextChoices):
+        SENT = "sent", "Sent"
+        FAILED = "failed", "Failed"
+        DISABLED = "disabled", "Disabled"
+        SKIPPED = "skipped", "Skipped"
+        GENERATED = "generated", "Generated"
+
+    student = models.ForeignKey(
+        Student,
+        on_delete=models.CASCADE,
+        related_name="sms_attempts",
+    )
+    election = models.ForeignKey(
+        Election,
+        on_delete=models.CASCADE,
+        related_name="voter_sms_attempts",
+    )
+    provider = models.CharField(max_length=50)
+    status = models.CharField(max_length=20, choices=Status.choices, db_index=True)
+    provider_message_id = models.CharField(max_length=255, blank=True)
+    error_category = models.CharField(max_length=100, blank=True)
+    http_status = models.PositiveSmallIntegerField(blank=True, null=True)
+    attempted_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ("-attempted_at",)
 class Position(models.Model):
     name = models.CharField(max_length=100)
     election = models.ForeignKey(Election, on_delete=models.CASCADE)

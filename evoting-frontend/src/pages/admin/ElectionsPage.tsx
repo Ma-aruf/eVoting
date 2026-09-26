@@ -1,4 +1,4 @@
-import {type FormEvent, useState} from 'react';
+import {type ChangeEvent, type FormEvent, useState} from 'react';
 import {FiCalendar, FiCheckCircle, FiClock, FiEdit2, FiPlus} from 'react-icons/fi';
 import StatisticCard from '../../components/StatisticCard';
 
@@ -13,9 +13,31 @@ import LoadingState from '../../components/ui/LoadingState';
 
 import {useElections} from '../../queries/useElections';
 import {useCreateElection, useUpdateElectionSchedule} from '../../queries/useElectionsMutations';
-import type {Election} from '../../types/election';
+import type {Election, VoterLoginMode} from '../../types/election';
 import {electionStatusPresentation} from '../../utils/electionLifecycle';
 import {formatElectionDateTime, getElectionMutationMessage, toDateTimeLocalValue} from '../../utils/electionForm';
+
+const voterLoginModeOptions: Array<{
+    value: VoterLoginMode;
+    title: string;
+    description: string;
+}> = [
+    {
+        value: 'activator_id',
+        title: 'Student ID access',
+        description: 'An election official activates the voter, who then signs in with only their student ID.',
+    },
+    {
+        value: 'activator_pin',
+        title: 'PIN access',
+        description: 'An election official activates the voter and shares a temporary PIN for sign-in.',
+    },
+    {
+        value: 'sms_pin',
+        title: 'Text message PIN',
+        description: 'The admin sends a temporary PIN by SMS while voting is open. Every voter needs a phone number.',
+    },
+];
 
 export default function ElectionsPage() {
     const electionsQuery = useElections({refetchInterval: 45_000});
@@ -30,13 +52,16 @@ export default function ElectionsPage() {
     const [year, setYear] = useState('');
     const [startTime, setStartTime] = useState('');
     const [endTime, setEndTime] = useState('');
-    const [usePinLogin, setUsePinLogin] = useState(false);
+    const [voterLoginMode, setVoterLoginMode] = useState<VoterLoginMode>('activator_pin');
     const [scheduleError, setScheduleError] = useState('');
     const [scheduleElectionId, setScheduleElectionId] = useState<number | null>(null);
     const [editedStartTime, setEditedStartTime] = useState('');
     const [editedEndTime, setEditedEndTime] = useState('');
     const [scheduleEditError, setScheduleEditError] = useState('');
     const editingElection = elections.find(election => election.id === scheduleElectionId) ?? null;
+    const selectedVoterLoginMode = voterLoginModeOptions.find(
+        option => option.value === voterLoginMode
+    ) ?? voterLoginModeOptions[1];
 
     const statusCounts = {
         scheduled: elections.filter(election => election.status === 'scheduled').length,
@@ -52,8 +77,12 @@ export default function ElectionsPage() {
         setYear('');
         setStartTime('');
         setEndTime('');
-        setUsePinLogin(false);
+        setVoterLoginMode('activator_pin');
         setScheduleError('');
+    };
+
+    const handleVoterLoginModeChange = (event: ChangeEvent<HTMLInputElement>) => {
+        setVoterLoginMode(event.target.value as VoterLoginMode);
     };
 
     const openScheduleEditor = (election: Election) => {
@@ -89,7 +118,7 @@ export default function ElectionsPage() {
                 start_time: new Date(startTime).toISOString(),
                 end_time: new Date(endTime).toISOString(),
                 voting_enabled: false,
-                voter_login_mode: usePinLogin ? 'activator_pin' : 'activator_id',
+                voter_login_mode: voterLoginMode,
             },
             {
                 onSuccess: () => {
@@ -386,30 +415,33 @@ export default function ElectionsPage() {
                         </div>
                     </section>
                     <section className="election-form-section">
-                        <label className="flex items-start gap-3 text-sm text-gray-700">
-                            <input
-                                id="voter-login-pin"
-                                type="checkbox"
-                                checked={usePinLogin}
-                                onChange={event => setUsePinLogin(event.target.checked)}
-                                className="mt-1 h-4 w-4"
-                            />
-                            <span>
-                                <span className="block font-medium text-gray-900">
-                                    Let voters log in with PIN codes
-                                </span>
-                                <span className="mt-1 block text-xs text-gray-600">
-                                    {usePinLogin
-                                        ? 'Activators will generate a one-time PIN when they activate each voter.'
-                                        : 'Activators will authorize voters to sign in with their student ID.'}
-                                </span>
-                            </span>
-                        </label>
+                        <fieldset className="election-login-options">
+                            <legend className="election-login-options-label">
+                                Voter login method <span className="ui-required" aria-hidden="true"> *</span>
+                            </legend>
+                            <div className="election-login-options-list" role="radiogroup"
+                                 aria-label="Voter login method">
+                                {voterLoginModeOptions.map(option => (
+                                    <label
+                                        key={option.value}
+                                        className={'election-login-option' + (voterLoginMode === option.value ? ' is-selected' : '')}
+                                    >
+                                        <input
+                                            type="radio"
+                                            name="voter-login-mode"
+                                            value={option.value}
+                                            checked={voterLoginMode === option.value}
+                                            onChange={handleVoterLoginModeChange}
+                                        />
+                                        <strong>{option.title}</strong>
+                                    </label>
+                                ))}
+                            </div>
+                            <p className="election-login-description" aria-live="polite">
+                                {selectedVoterLoginMode.description}
+                            </p>
+                        </fieldset>
                     </section>
-
-                    <p className="text-xs text-gray-600">
-                        Configure at least one position and a candidate for every position before enabling voting.
-                    </p>
 
                     <div className="election-form-footer">
                         <div className="ui-modal-actions">

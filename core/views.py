@@ -59,10 +59,13 @@ from .serializers import (
     StudentSerializer,
     UserSerializer,
 )
+from .sms.mnotify import normalize_ghana_phone_number
 from .utils import (
     VOTER_PIN_MAX_ATTEMPTS,
     create_voter_token,
     deactivate_expired_voter,
+    election_uses_pin_login,
+    voter_pin_ttl_for_election,
     voter_activation_expired,
     voter_activation_expiry,
     voter_session_expired,
@@ -166,7 +169,8 @@ class StudentViewSet(viewsets.ModelViewSet):
 class BulkStudentUploadView(APIView):
     """
     Allow staff/superuser to upload an Excel file to create students in bulk.
-    Expected columns (case-insensitive): student_id, full_name, class_name.
+    Expected columns (case-insensitive): student_id, full_name, class_name,
+    and phone_number for SMS PIN elections.
     """
 
     permission_classes = [IsStaffOrSuperUser]
@@ -205,6 +209,8 @@ class BulkStudentUploadView(APIView):
         header_row = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), [])
         header_map = {str(h or "").strip().lower(): idx for idx, h in enumerate(header_row)}
         required = ["student_id", "full_name", "class_name"]
+        if election.voter_login_mode == Election.VOTER_LOGIN_MODE_SMS:
+            required.append("phone_number")
         missing = [h for h in required if h not in header_map]
         if missing:
             return Response(
@@ -222,9 +228,21 @@ class BulkStudentUploadView(APIView):
             student_id = get_str(header_map["student_id"])
             full_name = get_str(header_map["full_name"])
             class_name = get_str(header_map["class_name"])
+            phone_number = get_str(header_map["phone_number"]) if "phone_number" in header_map else ""
 
-            if not student_id or not full_name or not class_name:
+            if not student_id or not full_name or not class_name or (
+                election.voter_login_mode == Election.VOTER_LOGIN_MODE_SMS and not phone_number
+            ):
                 continue  # skip incomplete rows
+
+            if phone_number:
+                try:
+                    phone_number = normalize_ghana_phone_number(phone_number)
+                except DjangoValidationError as error:
+                    return Response(
+                        {"detail": f"Invalid phone number for voter {student_id}: {error.messages[0]}"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
             if student_id in file_ids:
                 continue  # skip duplicates in the same file
@@ -235,6 +253,7 @@ class BulkStudentUploadView(APIView):
                     student_id=student_id,
                     full_name=full_name,
                     class_name=class_name,
+                    phone_number=phone_number,
                     election=election,
                 )
             )
@@ -1084,6 +1103,16 @@ class StudentActivationView(APIView):
             )
 
         is_active = serializers.BooleanField().run_validation(is_active)
+        if is_active and election.voter_login_mode == Election.VOTER_LOGIN_MODE_SMS:
+            return Response(
+                {
+                    "detail": (
+                        "SMS PIN elections do not use manual activation. "
+                        "Use the send PINs action instead."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         try:
             student = Student.objects.get(
@@ -1147,7 +1176,7 @@ class StudentActivationView(APIView):
         pin = None
         if is_active:
             student.is_active = True
-            if election.voter_login_mode == Election.VOTER_LOGIN_MODE_PIN:
+            if election_uses_pin_login(election):
                 pin = generate_voter_pin()
                 student.voting_pin_hash = hash_voter_pin(pin)
                 student.voting_pin_created_at = timezone.now()
@@ -1332,7 +1361,7 @@ class StudentVoterLoginView(APIView):
                     {"detail": "This voter activation has expired. Please ask an election official to activate you again."},
                     status=status.HTTP_403_FORBIDDEN,
                 )
-            if open_student.election.voter_login_mode == Election.VOTER_LOGIN_MODE_PIN and (not open_student.voting_pin_hash or not open_student.voting_pin_created_at):
+            if election_uses_pin_login(open_student.election) and (not open_student.voting_pin_hash or not open_student.voting_pin_created_at):
                 deactivate_expired_voter(open_student)
                 return Response(
                     {
@@ -1344,7 +1373,7 @@ class StudentVoterLoginView(APIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-            if open_student.election.voter_login_mode == Election.VOTER_LOGIN_MODE_PIN and voter_access_expired(open_student.voting_pin_created_at, now):
+            if election_uses_pin_login(open_student.election) and voter_access_expired(open_student.voting_pin_created_at, now, voter_pin_ttl_for_election(open_student.election)):
                 deactivate_expired_voter(open_student)
                 return Response(
                     {
@@ -1375,7 +1404,7 @@ class StudentVoterLoginView(APIView):
                 detail = "Voting has ended."
             return Response({"detail": detail}, status=status.HTTP_403_FORBIDDEN)
 
-        if active_election.voter_login_mode == Election.VOTER_LOGIN_MODE_PIN and (not isinstance(pin, str) or len(pin) != 8 or not pin.isdigit()):
+        if election_uses_pin_login(active_election) and (not isinstance(pin, str) or len(pin) != 8 or not pin.isdigit()):
             return Response(
                 {"detail": "An 8-digit voter PIN is required."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -1395,7 +1424,7 @@ class StudentVoterLoginView(APIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-            if active_election.voter_login_mode == Election.VOTER_LOGIN_MODE_PIN and (not student.voting_pin_hash or not student.voting_pin_created_at):
+            if election_uses_pin_login(active_election) and (not student.voting_pin_hash or not student.voting_pin_created_at):
                 deactivate_expired_voter(student)
                 return Response(
                     {
@@ -1407,7 +1436,7 @@ class StudentVoterLoginView(APIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-            if active_election.voter_login_mode == Election.VOTER_LOGIN_MODE_PIN and voter_access_expired(student.voting_pin_created_at, now):
+            if election_uses_pin_login(active_election) and voter_access_expired(student.voting_pin_created_at, now, voter_pin_ttl_for_election(active_election)):
                 deactivate_expired_voter(student)
                 return Response(
                     {
@@ -1419,7 +1448,7 @@ class StudentVoterLoginView(APIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-            if active_election.voter_login_mode == Election.VOTER_LOGIN_MODE_PIN and student.voting_pin_attempts >= VOTER_PIN_MAX_ATTEMPTS:
+            if election_uses_pin_login(active_election) and student.voting_pin_attempts >= VOTER_PIN_MAX_ATTEMPTS:
                 deactivate_expired_voter(student)
                 return Response(
                     {
@@ -1431,7 +1460,7 @@ class StudentVoterLoginView(APIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-            if active_election.voter_login_mode == Election.VOTER_LOGIN_MODE_PIN and not verify_voter_pin(pin, student.voting_pin_hash):
+            if election_uses_pin_login(active_election) and not verify_voter_pin(pin, student.voting_pin_hash):
                 student.voting_pin_attempts += 1
                 attempts_exhausted = (
                     student.voting_pin_attempts >= VOTER_PIN_MAX_ATTEMPTS

@@ -9,6 +9,7 @@ export interface Student {
     student_id: string;
     full_name: string;
     class_name: string;
+    phone_number?: string;
     has_voted: boolean;
     is_active: boolean;
     election?: number | {
@@ -52,6 +53,7 @@ export const useCreateStudent = () => {
             student_id: string;
             full_name: string;
             class_name: string;
+            phone_number?: string;
             election_id: number;
         }) => {
             const response = await api.post('api/students/', data);
@@ -80,11 +82,13 @@ export const useUpdateStudent = () => {
             id: number;
             full_name: string;
             class_name: string;
+            phone_number?: string;
             election_id: number;
         }) => {
             const response = await api.patch(`api/students/${id}/`, {
                 full_name: data.full_name,
                 class_name: data.class_name,
+                ...(data.phone_number ? {phone_number: data.phone_number} : {}),
             });
             return response.data;
         },

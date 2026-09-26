@@ -11,8 +11,18 @@ VOTER_PIN_LENGTH = 8
 VOTER_PIN_MAX_ATTEMPTS = 5
 VOTER_PIN_TTL = timedelta(minutes=10)
 VOTER_ACTIVATION_TTL = timedelta(minutes=10)
+VOTER_SMS_PIN_TTL = timedelta(hours=1)
 VOTER_SESSION_TTL = timedelta(minutes=10)
 VOTER_PIN_HASH_VERSION = "v1"
+def election_uses_pin_login(election) -> bool:
+    return getattr(election, "voter_login_mode", None) in {
+        "activator_pin",
+        "sms_pin",
+    }
+
+def voter_pin_ttl_for_election(election):
+    return VOTER_SMS_PIN_TTL if getattr(election, "voter_login_mode", None) == "sms_pin" else VOTER_PIN_TTL
+
 VOTER_PIN_HASH_SEPARATOR = ":"
 
 
@@ -48,12 +58,12 @@ def verify_voter_pin(pin: str, pin_hash: str) -> bool:
     return hmac.compare_digest(_voter_pin_digest(pin, salt), expected_digest)
 
 
-def voter_access_expired(created_at, now=None) -> bool:
+def voter_access_expired(created_at, now=None, ttl=VOTER_PIN_TTL) -> bool:
     """Return whether the one-time PIN window has ended."""
     if created_at is None:
         return False
     current_time = now or timezone.now()
-    return current_time >= created_at + VOTER_PIN_TTL
+    return current_time >= created_at + ttl
 
 
 def voter_activation_expiry(now=None):
@@ -96,9 +106,11 @@ def student_has_current_voter_access(student, now=None) -> bool:
     if getattr(getattr(student, "election", None), "voter_login_mode", None) == "activator_id":
         return False
 
+    login_mode = getattr(getattr(student, "election", None), "voter_login_mode", None)
+    pin_ttl = VOTER_SMS_PIN_TTL if login_mode == "sms_pin" else VOTER_PIN_TTL
     return bool(
         student.voting_pin_created_at
-        and not voter_access_expired(student.voting_pin_created_at, now)
+        and not voter_access_expired(student.voting_pin_created_at, now, pin_ttl)
     )
 
 
@@ -132,9 +144,17 @@ def deactivate_expired_voters(now=None) -> int:
     from .models import Election, Student
 
     current_time = now or timezone.now()
-    pin_expired = Q(
+    sms_pin_expired = Q(
+        election__voter_login_mode=Election.VOTER_LOGIN_MODE_SMS,
         voting_pin_created_at__isnull=False,
-        voting_pin_created_at__lte=current_time - VOTER_PIN_TTL,
+        voting_pin_created_at__lte=current_time - VOTER_SMS_PIN_TTL,
+    )
+    pin_expired = (
+        ~Q(election__voter_login_mode=Election.VOTER_LOGIN_MODE_SMS)
+        & Q(
+            voting_pin_created_at__isnull=False,
+            voting_pin_created_at__lte=current_time - VOTER_PIN_TTL,
+        )
     )
     session_expired = Q(
         voter_session_expires_at__isnull=False,
@@ -151,7 +171,7 @@ def deactivate_expired_voters(now=None) -> int:
     return Student.objects.filter(
         is_active=True,
         has_voted=False,
-    ).filter(pin_expired | session_expired | activation_expired | legacy_id_activation).update(
+    ).filter(pin_expired | sms_pin_expired | session_expired | activation_expired | legacy_id_activation).update(
         is_active=False,
         voting_pin_hash="",
         voting_pin_created_at=None,

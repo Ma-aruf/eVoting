@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from .models import Election, Position, Candidate, Vote, Student, User
 from .serializer_helpers import normalize_legacy_election_flag
@@ -9,6 +10,7 @@ from .election_lifecycle import (
     position_voting_mode,
     START_TIME_LOCKED_DETAIL,
 )
+from .sms.mnotify import normalize_ghana_phone_number
 from .utils import student_has_current_voter_access
 
 
@@ -116,10 +118,11 @@ class UserSerializer(serializers.ModelSerializer):
 class StudentSerializer(serializers.ModelSerializer):
     election_id = serializers.IntegerField(write_only=True)
     is_active = serializers.SerializerMethodField()
+    phone_number = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = Student
-        fields = ["id", "student_id", "full_name", "class_name", "has_voted", "is_active", "election", "election_id"]
+        fields = ["id", "student_id", "full_name", "class_name", "phone_number", "has_voted", "is_active", "election", "election_id"]
         read_only_fields = ["has_voted", "election"]
 
     def get_is_active(self, obj):
@@ -136,6 +139,30 @@ class StudentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 "election_id": "A student's election cannot be changed after creation."
             })
+        election_id = attrs.get(
+            "election_id",
+            self.instance.election_id if self.instance else None,
+        )
+        election = Election.objects.filter(pk=election_id).first()
+        phone_number = attrs.get(
+            "phone_number",
+            self.instance.phone_number if self.instance else "",
+        )
+        if phone_number:
+            try:
+                attrs["phone_number"] = normalize_ghana_phone_number(phone_number)
+            except DjangoValidationError as error:
+                raise serializers.ValidationError(
+                    {"phone_number": error.messages}
+                ) from error
+        if (
+            election
+            and election.voter_login_mode == Election.VOTER_LOGIN_MODE_SMS
+            and not phone_number
+        ):
+            raise serializers.ValidationError(
+                {"phone_number": "A phone number is required for SMS PIN elections."}
+            )
         return attrs
 
     def create(self, validated_data):

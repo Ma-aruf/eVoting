@@ -6,6 +6,7 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
     loading?: boolean;
     leadingIcon?: ReactNode;
     trailingIcon?: ReactNode;
+    style?: React.CSSProperties;
 };
 
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -14,6 +15,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             variant = 'primary',
             size = 'normal',
             loading = false,
+            style = {},
             leadingIcon,
             trailingIcon,
             className = '',
@@ -36,6 +38,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
                 disabled={disabled || loading}
                 aria-busy={loading || undefined}
                 {...props}
+                style={{...style}}
             >
                 {loading && (
                     <span

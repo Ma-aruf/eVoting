@@ -29,4 +29,5 @@ export const queryKeys = {
   
   // Activation status (scoped by election)
   activations: (electionId: number | null) => ['activations', electionId] as const,
+  smsStatus: (electionId: number | null) => ['sms-status', electionId] as const,
 } as const;

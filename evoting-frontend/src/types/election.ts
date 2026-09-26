@@ -1,5 +1,5 @@
 export type ElectionStatus = 'scheduled' | 'open' | 'paused' | 'ended';
-export type VoterLoginMode = 'activator_id' | 'activator_pin';
+export type VoterLoginMode = 'activator_id' | 'activator_pin' | 'sms_pin';
 
 
 export interface ElectionLifecycleFields {

@@ -58,20 +58,26 @@ function StudentForm({
                          studentId,
                          fullName,
                          className,
+                         phoneNumber,
+                         phoneRequired,
                          pending,
                          onStudentIdChange,
                          onFullNameChange,
                          onClassChange,
+                         onPhoneNumberChange,
                          onSubmit,
                          onCancel,
                      }: {
     studentId: string;
     fullName: string;
     className: string;
+    phoneNumber: string;
+    phoneRequired: boolean;
     pending: boolean;
     onStudentIdChange: (value: string) => void;
     onFullNameChange: (value: string) => void;
     onClassChange: (value: string) => void;
+    onPhoneNumberChange: (value: string) => void;
     onSubmit: (event: FormEvent) => void;
     onCancel: () => void;
 }) {
@@ -82,6 +88,16 @@ function StudentForm({
                     value={studentId}
                     onChange={event => onStudentIdChange(event.target.value)}
                     required
+                />
+            </FormField>
+
+            <FormField id="student-phone" label="Phone number" required={phoneRequired}>
+                <TextInput
+                    type="tel"
+                    value={phoneNumber}
+                    onChange={event => onPhoneNumberChange(event.target.value)}
+                    required={phoneRequired}
+                    placeholder="e.g. 024 123 4567"
                 />
             </FormField>
 
@@ -138,6 +154,7 @@ export default function StudentsPage() {
     const [studentId, setStudentId] = useState('');
     const [fullName, setFullName] = useState('');
     const [className, setClassName] = useState('');
+    const [phoneNumber, setPhoneNumber] = useState('');
 
     const [file, setFile] = useState<File | null>(null);
 
@@ -200,6 +217,7 @@ export default function StudentsPage() {
         setStudentId('');
         setFullName('');
         setClassName('');
+        setPhoneNumber('');
     };
 
     const handleCreate = (event: FormEvent) => {
@@ -209,7 +227,8 @@ export default function StudentsPage() {
             !effectiveElectionId ||
             !studentId.trim() ||
             !fullName.trim() ||
-            !className
+            !className ||
+            (selected?.voter_login_mode === 'sms_pin' && !phoneNumber.trim())
         ) {
             showError('Select an election and complete all required fields.');
             return;
@@ -220,6 +239,7 @@ export default function StudentsPage() {
                 student_id: studentId.trim(),
                 full_name: fullName.trim(),
                 class_name: className,
+                ...(phoneNumber.trim() ? {phone_number: phoneNumber.trim()} : {}),
                 election_id: effectiveElectionId,
             },
             {
@@ -682,10 +702,13 @@ export default function StudentsPage() {
                     studentId={studentId}
                     fullName={fullName}
                     className={className}
+                    phoneNumber={phoneNumber}
+                    phoneRequired={selected?.voter_login_mode === 'sms_pin'}
                     pending={create.isPending}
                     onStudentIdChange={setStudentId}
                     onFullNameChange={setFullName}
                     onClassChange={setClassName}
+                    onPhoneNumberChange={setPhoneNumber}
                     onSubmit={handleCreate}
                     onCancel={() => setShowAdd(false)}
                 />
@@ -716,7 +739,16 @@ export default function StudentsPage() {
                                 <code className="ps-6 text-red-400">full_name</code>
                                 <br/>
                                 <code className="ps-6 text-red-400">class_name</code>
+                                {selected?.voter_login_mode === 'sms_pin' && (
+                                    <>
+                                        <br/>
+                                        <code className="ps-6 text-red-400">phone_number</code>
+                                    </>
+                                )}
                             </div>
+                            {selected?.voter_login_mode === 'sms_pin' && (
+                                <p className="text-xs text-gray-600">Phone number is required for every voter in an SMS PIN election.</p>
+                            )}
                             <a
                                 href="/student-import-sample.csv"
                                 download="student-import-sample.csv"
@@ -817,12 +849,13 @@ export default function StudentsPage() {
             <EditStudentModal
                 student={editing}
                 onClose={() => setEditing(null)}
-                onSave={(student, name, classValue) =>
+                onSave={(student, name, classValue, phoneValue) =>
                     update.mutate(
                         {
                             id: student.id,
                             full_name: name,
                             class_name: classValue,
+                            ...(phoneValue ? {phone_number: phoneValue} : {}),
                             election_id: getStudentElectionId(student) ?? effectiveElectionId!,
                         },
                         {
@@ -830,6 +863,7 @@ export default function StudentsPage() {
                         }
                     )
                 }
+                phoneRequired={selected?.voter_login_mode === 'sms_pin'}
                 loading={update.isPending}
             />
 

@@ -1,12 +1,20 @@
 import {type FormEvent, type KeyboardEvent, useEffect, useMemo, useState,} from 'react';
 
-import {FiCheckCircle, FiUserPlus, FiUsers, FiUserX, FiX,} from 'react-icons/fi';
+import {FiCheckCircle, FiSend, FiUserPlus, FiUsers, FiUserX, FiX,} from 'react-icons/fi';
 
 import {useElections} from '../../queries/useElections';
 import {electionStatusPresentation} from '../../utils/electionLifecycle';
 import {useAuth} from '../../hooks/useAuth';
 import {type Student, useStudents} from '../../queries/useStudents';
 import {useActivateStudent} from '../../queries/useActivations';
+import {
+    type SmsPinSendResponse,
+    type SmsVoterStatusRow,
+    useGenerateSmsPin,
+    useResendSmsPin,
+    useSendSmsPins,
+    useSmsVoterStatus,
+} from '../../queries/useSmsPins';
 
 import {showError} from '../../utils/toast';
 
@@ -22,6 +30,7 @@ import Badge from '../../components/ui/Badge';
 import LoadingState from '../../components/ui/LoadingState';
 import EmptyState from '../../components/ui/EmptyState';
 import ErrorState from '../../components/ui/ErrorState';
+import {BsFillGearFill, BsSend, BsSendFill} from "react-icons/bs";
 
 type ApiError = {
     response?: {
@@ -36,6 +45,46 @@ function errorMessage(error: unknown) {
         (error as ApiError)?.response?.data?.detail ||
         'Activation failed. Please try again.'
     );
+}
+
+const smsStatusLabels: Record<SmsVoterStatusRow['status'], string> = {
+    not_sent: 'Not sent',
+    sent: 'PIN active',
+    generated: 'Generated manually',
+    expired: 'PIN expired',
+    failed: 'Failed',
+    missing_phone: 'Missing phone',
+    voted: 'Voted',
+};
+
+const smsStatusVariants: Record<SmsVoterStatusRow['status'], 'neutral' | 'success' | 'warning' | 'error' | 'primary'> = {
+    not_sent: 'neutral',
+    sent: 'success',
+    generated: 'warning',
+    expired: 'warning',
+    failed: 'error',
+    missing_phone: 'warning',
+    voted: 'primary',
+};
+
+function formatSmsDate(value: string | null) {
+    if (!value) return '—';
+    return new Intl.DateTimeFormat('en-UK', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+    }).format(new Date(value));
+}
+
+function canSendSmsToVoter(row: SmsVoterStatusRow) {
+    return row.can_resend || row.status === 'not_sent' || row.status === 'expired' || row.status === 'failed';
+}
+
+function smsVoterActionLabel(row: SmsVoterStatusRow) {
+    return row.status === 'not_sent' ? 'Send PIN' : 'Resend';
+}
+
+function canGenerateSmsPinForVoter(row: SmsVoterStatusRow) {
+    return row.status === 'not_sent' || row.status === 'expired' || row.status === 'failed' || row.status === 'missing_phone';
 }
 
 export default function ActivationsPage() {
@@ -53,6 +102,10 @@ export default function ActivationsPage() {
     const [generatedPin, setGeneratedPin] = useState<string | null>(null);
     const [generatedPinStudent, setGeneratedPinStudent] = useState('');
     const [activationSuccessStudent, setActivationSuccessStudent] = useState('');
+    const [smsSendResult, setSmsSendResult] = useState<SmsPinSendResponse | null>(null);
+    const [smsStatusSearch, setSmsStatusSearch] = useState('');
+    const [resendingStudentId, setResendingStudentId] = useState<number | null>(null);
+    const [generatingStudentId, setGeneratingStudentId] = useState<number | null>(null);
 
     const listboxId = 'activation-student-options';
 
@@ -64,6 +117,9 @@ export default function ActivationsPage() {
         : selectedElectionId;
     const studentsQuery = useStudents(effectiveElectionId, {refetchInterval: 10_000});
     const activateStudent = useActivateStudent();
+    const sendSmsPins = useSendSmsPins();
+    const resendSmsPin = useResendSmsPin();
+    const generateSmsPin = useGenerateSmsPin();
 
     // Query data
 
@@ -83,7 +139,8 @@ export default function ActivationsPage() {
     const canActivateVoters = Boolean(
         selectedElection?.status === 'open' &&
         selectedElection.voting_open &&
-        selectedElection.ballot_ready
+        selectedElection.ballot_ready &&
+        selectedElection.voter_login_mode !== 'sms_pin'
     );
     const activationBlockMessage = !selectedElection
         ? ''
@@ -93,9 +150,11 @@ export default function ActivationsPage() {
                 ? 'Voter activation is unavailable while voting is currently paused.'
                 : selectedElection.status === 'ended'
                     ? 'Voter activation is unavailable because voting has ended.'
-                    : !selectedElection.ballot_ready
-                        ? 'Add at least one position and at least one candidate to every position before activating voters.'
-                        : '';
+                    : selectedElection.voter_login_mode === 'sms_pin'
+                        ? 'This election uses SMS PINs. Use the Send PINs button to deliver voter access.'
+                        : !selectedElection.ballot_ready
+                            ? 'Add at least one position and at least one candidate to every position before activating voters.'
+                            : '';
 
     const availableStudents = useMemo(
         () =>
@@ -130,6 +189,29 @@ export default function ActivationsPage() {
     const isLoading =
         electionsQuery.isLoading ||
         studentsQuery.isLoading;
+
+    const canSendSmsPins = Boolean(
+        (user?.role === 'staff' || user?.role === 'superuser') &&
+        selectedElection?.voter_login_mode === 'sms_pin' &&
+        selectedElection.status === 'open' &&
+        selectedElection.voting_open &&
+        selectedElection.ballot_ready
+    );
+    const canViewSmsStatus = user?.role === 'staff' || user?.role === 'superuser';
+    const smsStatusQuery = useSmsVoterStatus(
+        effectiveElectionId,
+        canViewSmsStatus && selectedElection?.voter_login_mode === 'sms_pin'
+    );
+    const filteredSmsVoters = useMemo(() => {
+        const query = smsStatusSearch.trim().toLowerCase();
+        const rows = smsStatusQuery.data ?? [];
+        if (!query) return rows;
+        return rows.filter(row =>
+            row.student_id.toLowerCase().includes(query) ||
+            row.full_name.toLowerCase().includes(query) ||
+            row.phone_number.toLowerCase().includes(query)
+        );
+    }, [smsStatusQuery.data, smsStatusSearch]);
 
     // Select the election automatically
 
@@ -327,6 +409,8 @@ export default function ActivationsPage() {
                                         setSelectedStudentId('');
                                         setStudentQuery('');
                                         setIsOpen(false);
+                                        setSmsSendResult(null);
+                                        setSmsStatusSearch('');
                                     }}
                                 >
                                     {electionChoices.map(election => (
@@ -342,10 +426,52 @@ export default function ActivationsPage() {
                     </div>
                     {/* Voter activation form */}
 
-                    {!canActivateVoters && activationBlockMessage && (
+                    {selectedElection?.voter_login_mode !== 'sms_pin' && !canActivateVoters && activationBlockMessage && (
                         <Alert variant="warning" title="Activation unavailable">
                             {activationBlockMessage}
                         </Alert>
+                    )}
+
+                    {smsSendResult && (
+                        <div
+                            className="activation-pin-banner border border-emerald-200 bg-emerald-100 p-2"
+                            role="status"
+                        >
+                            <div className="flex items-start justify-between gap-2">
+                                <div>
+                                    <h3 className="font-semibold text-emerald-900">
+                                        {smsSendResult.sent > 0
+                                            ? 'SMS PIN delivery completed'
+                                            : smsSendResult.skipped_valid_pin > 0
+                                                ? 'No new PINs were sent'
+                                                : smsSendResult.total === 0 || smsSendResult.already_voted === smsSendResult.total
+                                                    ? 'No eligible voters require a PIN'
+                                                    : 'No PINs were sent'}
+                                    </h3>
+                                    <p className="mt-1 text-xs text-emerald-800">
+                                        {smsSendResult.sent > 0
+                                            ? `Sent ${smsSendResult.sent} of ${smsSendResult.eligible} eligible voter PINs.`
+                                            : smsSendResult.skipped_valid_pin > 0
+                                                ? `${smsSendResult.skipped_valid_pin} voter${smsSendResult.skipped_valid_pin === 1 ? '' : 's'} already have a valid PIN. No new messages were sent to them.`
+                                                : smsSendResult.total === 0
+                                                    ? 'There are no voters in this election yet.'
+                                                    : smsSendResult.already_voted === smsSendResult.total
+                                                        ? 'All voters in this election have already voted.'
+                                                        : 'No voter PINs were delivered.'}
+                                        {smsSendResult.sent > 0 && smsSendResult.skipped_valid_pin > 0 ? ` ${smsSendResult.skipped_valid_pin} already had a valid PIN.` : ''}
+                                        {smsSendResult.failed ? ` ${smsSendResult.failed} failed, including ${smsSendResult.missing_phone} without a phone number.` : ''}
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    aria-label="Dismiss SMS PIN message"
+                                    className="text-emerald-800 cursor-pointer hover:bg-emerald-200 p-2 rounded-full transition-all"
+                                    onClick={() => setSmsSendResult(null)}
+                                >
+                                    <FiX size={18} aria-hidden="true"/>
+                                </button>
+                            </div>
+                        </div>
                     )}
 
                     {generatedPin && (
@@ -412,203 +538,393 @@ export default function ActivationsPage() {
                     )}
 
                     <section className="ui-section">
-                        <div className="ui-section-heading">
-                            <div>
-                                <h2>Activate a voter</h2>
-
-                                <p>
-                                    Search by voter ID or name, select a
-                                    result, and confirm activation.
-                                </p>
-                            </div>
-
-                        </div>
-
-                        <form
-                            onSubmit={handleActivate}
-                            className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end"
-                        >
-                            <FormField
-                                id="activation-student"
-                                label="Voter"
-                            >
-                                <div className="relative">
-                                    <div className="relative">
-
-                                        <TextInput
-                                            className="pl-9"
-                                            value={studentQuery}
-                                            onChange={event => {
-                                                setStudentQuery(
-                                                    event.target.value
-                                                );
-                                                setSelectedStudentId('');
-                                                setIsOpen(true);
-                                                setActiveOption(0);
+                        {selectedElection?.voter_login_mode === 'sms_pin' ? (
+                            <>
+                                <div className="ui-section-heading">
+                                    <div className="mb-4">
+                                        <h2>Send voter PINs by SMS</h2>
+                                        <p>
+                                            Send a fresh one-hour PIN to every eligible voter with a registered phone
+                                            number.
+                                            Voters will use their student ID and the PIN from the message to sign in.
+                                        </p>
+                                    </div>
+                                    {canViewSmsStatus && effectiveElectionId ? (
+                                        <Button
+                                            type="button"
+                                            leadingIcon={<FiSend aria-hidden="true"/>}
+                                            loading={sendSmsPins.isPending}
+                                            disabled={!canSendSmsPins}
+                                            title={!canSendSmsPins ? (activationBlockMessage || 'SMS PIN delivery is not available for this election yet.') : undefined}
+                                            onClick={() => {
+                                                if (!window.confirm('Send fresh voter PINs by SMS to all eligible voters in this election?')) return;
+                                                setSmsSendResult(null);
+                                                sendSmsPins.mutate(effectiveElectionId, {
+                                                    onSuccess: data => setSmsSendResult(data),
+                                                });
                                             }}
-                                            onFocus={() => setIsOpen(true)}
-                                            onKeyDown={handleSearchKeyDown}
-                                            placeholder="Search name or voter ID"
-                                            role="combobox"
-                                            aria-expanded={isOpen}
-                                            aria-controls={listboxId}
-                                            aria-autocomplete="list"
-                                            aria-activedescendant={
-                                                isOpen && options[activeOption]
-                                                    ? 'activation-option-' +
-                                                    options[activeOption].id
-                                                    : undefined
-                                            }
-                                            disabled={
-                                                !availableStudents.length || !canActivateVoters
-                                            }
-                                        />
+                                        >
+                                            Send PINs by SMS
+                                        </Button>
+                                    ) : (
+                                        <p className="text-sm text-gray-500">
+                                            {activationBlockMessage || 'SMS PIN delivery is not available for this election yet.'}
+                                        </p>
+                                    )}
+                                </div>
+
+                                {canViewSmsStatus && (
+                                    <section className="sms-delivery-status">
+                                        <div className="sms-delivery-toolbar">
+                                            <FormField id="sms-status-search" label="Search voters">
+                                                <div className="relative">
+                                                    <TextInput
+                                                        className="pl-9"
+                                                        value={smsStatusSearch}
+                                                        onChange={event => setSmsStatusSearch(event.target.value)}
+                                                        placeholder="Search by voter ID, name, or phone"
+                                                    />
+                                                </div>
+                                            </FormField>
+                                        </div>
+
+                                        {smsStatusQuery.isLoading ? (
+                                            <LoadingState
+                                                title="Loading SMS status"
+                                                message="Fetching voter delivery records."
+                                            />
+                                        ) : smsStatusQuery.isError ? (
+                                            <Alert variant="error" title="SMS status unavailable">
+                                                We could not load the voter SMS records.
+                                            </Alert>
+                                        ) : filteredSmsVoters.length === 0 ? (
+                                            <EmptyState
+                                                title={smsStatusSearch ? 'No matching voters' : 'No voters to display'}
+                                                message={smsStatusSearch ? 'Try a different search term.' : 'Add voters to this election to track SMS delivery.'}
+                                            />
+                                        ) : (
+                                            <div className="management-table-wrap sms-delivery-table-wrap">
+                                                <table className="management-table sms-delivery-table">
+                                                    <caption className="sr-only">SMS delivery status by voter</caption>
+                                                    <thead>
+                                                    <tr>
+                                                        <th scope="col">Voter</th>
+                                                        <th scope="col">Phone</th>
+                                                        <th scope="col">SMS status</th>
+                                                        <th scope="col">Last attempt</th>
+                                                        <th scope="col">PIN expiry</th>
+                                                        <th scope="col">Actions</th>
+                                                    </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                    {filteredSmsVoters.map(row => (
+                                                        <tr key={row.id}>
+                                                            <td data-label="Voter">
+                                                                <div
+                                                                    className="management-table-cell--primary">{row.full_name}</div>
+                                                                <div
+                                                                    className="text-xs text-gray-500">{row.student_id}</div>
+                                                            </td>
+                                                            <td data-label="Phone">{row.phone_number || '—'}</td>
+                                                            <td data-label='SMS status'>
+                                                                {smsStatusLabels[row.status]}
+
+                                                            </td>
+                                                            <td data-label="Last attempt">{formatSmsDate(row.last_attempt_at)}</td>
+                                                            <td data-label="PIN expiry">
+                                                                {row.status === 'sent' || row.status === 'generated' ? `${formatSmsDate(row.pin_expires_at)}` : row.status === 'expired' ? formatSmsDate(row.pin_expires_at) : '—'}
+                                                            </td>
+                                                            <td data-label='Actions'>
+                                                                <div className='flex flex-wrap justify-end gap-2'>
+                                                                    {canSendSmsToVoter(row) && (
+                                                                        <Button
+                                                                            type='button'
+                                                                            variant='success'
+                                                                            style={{
+                                                                                width: '80px',
+                                                                                minWidth: '60px',
+                                                                                padding: '4px 1px',
+                                                                                flexShrink: 0
+                                                                            }}
+                                                                            size='compact'
+                                                                            loading={resendingStudentId === row.id}
+                                                                            disabled={!canSendSmsPins || resendingStudentId !== null || generatingStudentId !== null}
+                                                                            onClick={() => {
+                                                                                if (!effectiveElectionId || !window.confirm('Send a new PIN by SMS?')) return;
+                                                                                setResendingStudentId(row.id);
+                                                                                resendSmsPin.mutate(
+                                                                                    {
+                                                                                        electionId: effectiveElectionId,
+                                                                                        studentId: row.id
+                                                                                    },
+                                                                                    {onSettled: () => setResendingStudentId(null)},
+                                                                                );
+                                                                            }}
+                                                                        >
+
+                                                                            <div
+                                                                                className="flex flex-row gap-1 items-center">
+                                                                                <BsSendFill size={13}/>
+                                                                                {smsVoterActionLabel(row)}
+                                                                            </div>
+                                                                        </Button>
+                                                                    )}
+                                                                    {canGenerateSmsPinForVoter(row) && (
+                                                                        <Button
+                                                                            type='button'
+                                                                            variant='primary'
+                                                                            style={{
+                                                                                width: '80px',
+                                                                                minWidth: '60px',
+                                                                                padding: '4px 1px',
+                                                                                flexShrink: 0
+                                                                            }}
+                                                                            size='compact'
+                                                                            loading={generatingStudentId === row.id}
+                                                                            disabled={!canSendSmsPins || resendingStudentId !== null || generatingStudentId !== null}
+                                                                            onClick={() => {
+                                                                                if (!effectiveElectionId || !window.confirm('Generate a PIN without sending SMS?')) return;
+                                                                                setGeneratingStudentId(row.id);
+                                                                                generateSmsPin.mutate(
+                                                                                    {
+                                                                                        electionId: effectiveElectionId,
+                                                                                        studentId: row.id
+                                                                                    },
+                                                                                    {
+                                                                                        onSuccess: data => {
+                                                                                            if (data.voting_pin) {
+                                                                                                setGeneratedPin(data.voting_pin);
+                                                                                                setGeneratedPinStudent(row.full_name);
+                                                                                                setActivationSuccessStudent('');
+                                                                                            }
+                                                                                        },
+                                                                                        onSettled: () => setGeneratingStudentId(null),
+                                                                                    },
+                                                                                );
+                                                                            }}
+                                                                        >
+                                                                            <div
+                                                                                className="flex flex-row gap-1 items-center">
+                                                                                <BsFillGearFill size={13}/>
+                                                                                Generate
+                                                                            </div>
+                                                                        </Button>
+                                                                    )}
+                                                                    {!canSendSmsToVoter(row) && !canGenerateSmsPinForVoter(row) && (
+                                                                        <span className='text-xs text-gray-400'>—</span>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </section>
+                                )}
+                            </>
+                        ) : (
+                            <>
+                                <div className="ui-section-heading">
+                                    <div>
+                                        <h2>Activate a voter</h2>
+
+                                        <p>
+                                            Search by voter ID or name, select a
+                                            result, and confirm activation.
+                                        </p>
                                     </div>
 
-                                    {/* Search results */}
+                                </div>
 
-                                    {isOpen && canActivateVoters && (
-                                        <div
-                                            id={listboxId}
-                                            role="listbox"
-                                            className="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 bg-white p-1 shadow-lg"
-                                        >
-                                            {options.length ? (
-                                                options.map(
-                                                    (student, index) => (
-                                                        <button
-                                                            id={
-                                                                'activation-option-' +
-                                                                student.id
-                                                            }
-                                                            key={student.id}
-                                                            type="button"
-                                                            role="option"
-                                                            aria-selected={
-                                                                index ===
-                                                                activeOption
-                                                            }
-                                                            className={
-                                                                'block w-full rounded px-3 py-2 text-left text-sm ' +
-                                                                (
-                                                                    index ===
-                                                                    activeOption
-                                                                        ? 'bg-blue-50 text-blue-900'
-                                                                        : 'text-gray-700 hover:bg-gray-50'
-                                                                )
-                                                            }
-                                                            onMouseDown={event =>
-                                                                event.preventDefault()
-                                                            }
-                                                            onClick={() =>
-                                                                chooseStudent(
-                                                                    student
-                                                                )
-                                                            }
-                                                        >
+                                <form
+                                    onSubmit={handleActivate}
+                                    className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end"
+                                >
+                                    <FormField
+                                        id="activation-student"
+                                        label="Voter"
+                                    >
+                                        <div className="relative">
+                                            <div className="relative">
+
+                                                <TextInput
+                                                    className="pl-9"
+                                                    value={studentQuery}
+                                                    onChange={event => {
+                                                        setStudentQuery(
+                                                            event.target.value
+                                                        );
+                                                        setSelectedStudentId('');
+                                                        setIsOpen(true);
+                                                        setActiveOption(0);
+                                                    }}
+                                                    onFocus={() => setIsOpen(true)}
+                                                    onKeyDown={handleSearchKeyDown}
+                                                    placeholder="Search name or voter ID"
+                                                    role="combobox"
+                                                    aria-expanded={isOpen}
+                                                    aria-controls={listboxId}
+                                                    aria-autocomplete="list"
+                                                    aria-activedescendant={
+                                                        isOpen && options[activeOption]
+                                                            ? 'activation-option-' +
+                                                            options[activeOption].id
+                                                            : undefined
+                                                    }
+                                                    disabled={
+                                                        !availableStudents.length || !canActivateVoters
+                                                    }
+                                                />
+                                            </div>
+
+                                            {/* Search results */}
+
+                                            {isOpen && canActivateVoters && (
+                                                <div
+                                                    id={listboxId}
+                                                    role="listbox"
+                                                    className="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 bg-white p-1 shadow-lg"
+                                                >
+                                                    {options.length ? (
+                                                        options.map(
+                                                            (student, index) => (
+                                                                <button
+                                                                    id={
+                                                                        'activation-option-' +
+                                                                        student.id
+                                                                    }
+                                                                    key={student.id}
+                                                                    type="button"
+                                                                    role="option"
+                                                                    aria-selected={
+                                                                        index ===
+                                                                        activeOption
+                                                                    }
+                                                                    className={
+                                                                        'block w-full rounded px-3 py-2 text-left text-sm ' +
+                                                                        (
+                                                                            index ===
+                                                                            activeOption
+                                                                                ? 'bg-blue-50 text-blue-900'
+                                                                                : 'text-gray-700 hover:bg-gray-50'
+                                                                        )
+                                                                    }
+                                                                    onMouseDown={event =>
+                                                                        event.preventDefault()
+                                                                    }
+                                                                    onClick={() =>
+                                                                        chooseStudent(
+                                                                            student
+                                                                        )
+                                                                    }
+                                                                >
                                                             <span className="font-medium">
                                                                 {
                                                                     student.full_name
                                                                 }
                                                             </span>
 
-                                                            <span className="ml-2 text-xs text-gray-500">
+                                                                    <span className="ml-2 text-xs text-gray-500">
                                                                 {
                                                                     student.student_id
                                                                 }
-                                                                {' - '}
-                                                                {
-                                                                    student.class_name
-                                                                }
+                                                                        {' - '}
+                                                                        {
+                                                                            student.class_name
+                                                                        }
                                                             </span>
-                                                        </button>
-                                                    )
-                                                )
-                                            ) : (
-                                                <p
-                                                    className="px-3 py-2 text-xs text-gray-500"
-                                                    role="status"
-                                                >
-                                                    No matching eligible
-                                                    voters.
-                                                </p>
+                                                                </button>
+                                                            )
+                                                        )
+                                                    ) : (
+                                                        <p
+                                                            className="px-3 py-2 text-xs text-gray-500"
+                                                            role="status"
+                                                        >
+                                                            No matching eligible
+                                                            voters.
+                                                        </p>
+                                                    )}
+                                                </div>
                                             )}
                                         </div>
-                                    )}
-                                </div>
-                            </FormField>
+                                    </FormField>
 
-                            <Button
-                                type="submit"
-                                loading={activateStudent.isPending}
-                                disabled={
-                                    !selectedStudentId ||
-                                    !effectiveElectionId ||
-                                    !canActivateVoters
-                                }
-                                leadingIcon={
-                                    <FiUserPlus aria-hidden="true"/>
-                                }
-                            >
-                                Activate voter
-                            </Button>
-                        </form>
-
-                        {/* Selected voter details */}
-
-                        {selectedStudent && (
-                            <div
-                                className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md bg-gray-50 p-3">
-                                <div>
-                                    <p className="text-sm font-medium">
-                                        {selectedStudent.full_name}
-                                    </p>
-
-                                    <p className="text-xs text-gray-500">
-                                        {selectedStudent.student_id}
-                                        {' - '}
-                                        {selectedStudent.class_name}
-                                    </p>
-                                </div>
-
-                                <div className="flex gap-2">
-                                    <Badge
-                                        variant={
-                                            selectedStudent.is_active
-                                                ? 'success'
-                                                : 'neutral'
+                                    <Button
+                                        type="submit"
+                                        loading={activateStudent.isPending}
+                                        disabled={
+                                            !selectedStudentId ||
+                                            !effectiveElectionId ||
+                                            !canActivateVoters
+                                        }
+                                        leadingIcon={
+                                            <FiUserPlus aria-hidden="true"/>
                                         }
                                     >
-                                        {selectedStudent.is_active
-                                            ? 'Active'
-                                            : 'Inactive'}
-                                    </Badge>
+                                        Activate voter
+                                    </Button>
+                                </form>
 
-                                    <Badge
-                                        variant={
-                                            selectedStudent.has_voted
-                                                ? 'primary'
-                                                : 'neutral'
-                                        }
+                                {/* Selected voter details */}
+
+                                {selectedStudent && (
+                                    <div
+                                        className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md bg-gray-50 p-3">
+                                        <div>
+                                            <p className="text-sm font-medium">
+                                                {selectedStudent.full_name}
+                                            </p>
+
+                                            <p className="text-xs text-gray-500">
+                                                {selectedStudent.student_id}
+                                                {' - '}
+                                                {selectedStudent.class_name}
+                                            </p>
+                                        </div>
+
+                                        <div className="flex gap-2">
+                                            <Badge
+                                                variant={
+                                                    selectedStudent.is_active
+                                                        ? 'success'
+                                                        : 'neutral'
+                                                }
+                                            >
+                                                {selectedStudent.is_active
+                                                    ? 'Active'
+                                                    : 'Inactive'}
+                                            </Badge>
+
+                                            <Badge
+                                                variant={
+                                                    selectedStudent.has_voted
+                                                        ? 'primary'
+                                                        : 'neutral'
+                                                }
+                                            >
+                                                {selectedStudent.has_voted
+                                                    ? 'Voted'
+                                                    : 'Not voted'}
+                                            </Badge>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Activation error */}
+
+                                {mutationError && (
+                                    <Alert
+                                        variant="error"
+                                        title="Activation failed"
+                                        className="mt-4"
                                     >
-                                        {selectedStudent.has_voted
-                                            ? 'Voted'
-                                            : 'Not voted'}
-                                    </Badge>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Activation error */}
-
-                        {mutationError && (
-                            <Alert
-                                variant="error"
-                                title="Activation failed"
-                                className="mt-4"
-                            >
-                                {mutationError}
-                            </Alert>
+                                        {mutationError}
+                                    </Alert>
+                                )}
+                            </>
                         )}
                     </section>
 

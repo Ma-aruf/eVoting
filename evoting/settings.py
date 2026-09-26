@@ -314,6 +314,16 @@ VOTER_HMAC_KEY = get_env('VOTER_HMAC_KEY')
 if not VOTER_HMAC_KEY:
     raise ValueError("No VOTER_HMAC_KEY set for production")
 
+SMS_ENABLED = get_env('SMS_ENABLED', default=False, cast=bool)
+SMS_PROVIDER = get_env('SMS_PROVIDER', default='mnotify').strip().lower()
+MNOTIFY_API_KEY = get_env('MNOTIFY_API_KEY', default='')
+MNOTIFY_SENDER_ID = get_env('MNOTIFY_SENDER_ID', default='EVOTING').strip()
+MNOTIFY_BASE_URL = get_env(
+    'MNOTIFY_BASE_URL',
+    default='https://api.mnotify.com',
+).strip()
+MNOTIFY_TIMEOUT_SECONDS = get_env('MNOTIFY_TIMEOUT_SECONDS', default=10, cast=float)
+
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
