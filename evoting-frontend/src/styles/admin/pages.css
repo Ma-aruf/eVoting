@@ -117,6 +117,7 @@
     width: max-content;
     margin-left: auto;
     margin-bottom: var(--space-4);
+    margin-top: var(--space-4);
 }
 
 .manage-elections-status .management-table-wrap {
@@ -509,7 +510,7 @@
 
 .elections-statistics {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: .75rem;
 }
 
@@ -1558,5 +1559,37 @@
 
     .not-found-actions .ui-button {
         width: 100%;
+    }
+}
+.activation-metrics {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.activation-metrics .statistic-card--split .statistic-card-icon {
+    font-size: 1rem;
+}
+
+.activation-metrics .statistic-card--split .statistic-card-content {
+    padding: .625rem .75rem;
+}
+
+.activation-metrics .statistic-card--split .statistic-card-label {
+    font-size: var(--font-size-xs);
+}
+
+.activation-metrics .statistic-card--split .statistic-card-value {
+    margin-top: .25rem;
+    font-size: 1.35rem;
+}
+
+@media (max-width: 63.99rem) {
+    .activation-metrics {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 47.99rem) {
+    .activation-metrics {
+        grid-template-columns: 1fr;
     }
 }

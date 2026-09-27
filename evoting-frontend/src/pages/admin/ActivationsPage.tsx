@@ -1,6 +1,6 @@
 import {type FormEvent, type KeyboardEvent, useEffect, useMemo, useState,} from 'react';
 
-import {FiCheckCircle, FiSend, FiUserPlus, FiUsers, FiUserX, FiX,} from 'react-icons/fi';
+import {FiBarChart2, FiCheckCircle, FiSend, FiUserPlus, FiUsers, FiUserX, FiX,} from 'react-icons/fi';
 
 import {useElections} from '../../queries/useElections';
 import {electionStatusPresentation} from '../../utils/electionLifecycle';
@@ -200,10 +200,16 @@ export default function ActivationsPage() {
             ),
         [students]
     );
-    const activatedStudentCount = useMemo(
+    const activeStudentCount = useMemo(
         () => students.filter(student => student.is_active).length,
         [students]
     );
+
+    const votedStudentCount = useMemo(
+        () => students.filter(student => student.has_voted).length,
+        [students]
+    );
+    const totalActivatedStudentCount = activeStudentCount + votedStudentCount;
 
     const options = useMemo(() => {
         const query = studentQuery.trim().toLowerCase();
@@ -398,31 +404,53 @@ export default function ActivationsPage() {
 
                     {/* Activation statistics */}
 
-                    <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="activation-metrics grid gap-3">
                         <StatisticCard
                             label="Total voters"
                             value={studentsQuery.isError ? '—' : students.length}
                             icon={<FiUsers aria-hidden="true"/>}
                             status="primary"
                             layout="split"
+                            style={{height: '4.5rem', width: '100%'}}
                             loading={studentsQuery.isLoading}
                         />
 
                         <StatisticCard
-                            label="Activated voters"
-                            value={studentsQuery.isError ? '—' : activatedStudentCount}
+                            label="Active voters"
+                            value={studentsQuery.isError ? '—' : activeStudentCount}
                             icon={<FiCheckCircle aria-hidden="true"/>}
                             status="success"
                             layout="split"
+                            style={{height: '4.5rem', width: '100%'}}
                             loading={studentsQuery.isLoading}
                         />
 
                         <StatisticCard
-                            label="Available to activate"
+                            label="Total activated"
+                            value={studentsQuery.isError ? '—' : totalActivatedStudentCount}
+                            icon={<FiCheckCircle aria-hidden="true"/>}
+                            status="success"
+                            layout="split"
+                            style={{height: '4.5rem', width: '100%'}}
+                            loading={studentsQuery.isLoading}
+                        />
+
+                        <StatisticCard
+                            label="Total voted"
+                            value={studentsQuery.isError ? '—' : votedStudentCount}
+                            icon={<FiBarChart2 aria-hidden="true"/>}
+                            status="strong"
+                            layout="split"
+                            style={{height: '4.5rem', width: '100%'}}
+                            loading={studentsQuery.isLoading}
+                        />
+                        <StatisticCard
+                            label="Yet to Activate"
                             value={studentsQuery.isError ? '—' : availableStudents.length}
                             icon={<FiUserPlus aria-hidden="true"/>}
                             status="info"
                             layout="split"
+                            style={{height: '4.5rem', width: '100%'}}
                             loading={studentsQuery.isLoading}
                         />
                     </div>

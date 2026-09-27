@@ -7,6 +7,7 @@ import StatisticCard from '../../components/StatisticCard';
 import {useDashboardStatsForElections} from '../../queries/useDashboard.ts';
 import {useElections} from '../../queries/useElections';
 import ElectionStatusBadge from '../../components/ElectionStatusBadge';
+import {useAuth} from '../../hooks/useAuth';
 
 function formatDateTime(value: string | undefined) {
     if (!value) return 'Not set';
@@ -22,6 +23,7 @@ function formatDateTime(value: string | undefined) {
 
 
 export default function Dashboard() {
+    const {user} = useAuth();
     const electionsQuery = useElections({refetchInterval: 45_000});
     const elections = electionsQuery.data ?? [];
 
@@ -32,9 +34,30 @@ export default function Dashboard() {
 
     const statsQueries = useDashboardStatsForElections(visibleElectionIds);
     const stats = visibleElections.length
-        ? statsQueries.statsByElectionId.get(visibleElections[0].id)
+        ? user?.role === 'superuser'
+            ? statsQueries.hasError || visibleElectionIds.some(electionId => !statsQueries.statsByElectionId.get(electionId))
+                ? undefined
+                : visibleElectionIds.reduce((totals, electionId) => {
+                    const electionStats = statsQueries.statsByElectionId.get(electionId);
+                    if (!electionStats) return totals;
+                    return {
+                        total_students: totals.total_students + electionStats.total_students,
+                        active_students: totals.active_students + electionStats.active_students,
+                        voted_students: totals.voted_students + electionStats.voted_students,
+                        pending_activations: totals.pending_activations + electionStats.pending_activations,
+                        total_positions: totals.total_positions + electionStats.total_positions,
+                        total_candidates: totals.total_candidates + electionStats.total_candidates,
+                    };
+                }, {
+                    total_students: 0,
+                    active_students: 0,
+                    voted_students: 0,
+                    pending_activations: 0,
+                    total_positions: 0,
+                    total_candidates: 0,
+                })
+            : statsQueries.statsByElectionId.get(visibleElections[0].id)
         : undefined;
-
     const initialLoading =
         electionsQuery.isLoading ||
         (visibleElections.length > 0 && statsQueries.isLoading);
@@ -99,7 +122,7 @@ export default function Dashboard() {
                 <>
                     <section
                         className="dashboard-grid"
-                        aria-label="Election statistics"
+                        aria-label={user?.role === 'superuser' ? 'Combined election statistics' : 'Election statistics'}
                     >
                         <StatisticCard
                             label="Registered voters"

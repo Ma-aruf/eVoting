@@ -14,7 +14,6 @@ import {
 import {clearVoterSession, getVoterSession, markVoterSessionUnableToVote, voterApi} from '../api/voterApi';
 import {type Candidate, useVotingData} from '../hooks/useVotingData';
 import {
-    electionStatusPresentation,
     voterLifecycleMessage,
     voterLifecycleMessageFromDetail
 } from '../utils/electionLifecycle';
@@ -445,7 +444,6 @@ export default function VotingPage() {
                         {election && (
                             <>
                                 <span className="text-white font-medium">{election.name} ({election.year})</span>
-                                <span className="text-white/80">{electionStatusPresentation(election.status).label}</span>
                             </>
                         )}
                     </div>

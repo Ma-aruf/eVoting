@@ -424,6 +424,11 @@ class CandidateViewSet(viewsets.ReadOnlyModelViewSet):
         position_id = self.request.query_params.get("position_id")
         if position_id:
             return queryset.filter(position_id=position_id).order_by('ballot_number')
+        election_id = self.request.query_params.get("election_id")
+        if election_id:
+            return queryset.filter(position__election_id=election_id).order_by(
+                'position__display_order', 'ballot_number'
+            )
         return Candidate.objects.none()
 
 
@@ -1124,6 +1129,25 @@ class StudentActivationView(APIView):
                 {"detail": "Student not found in this election."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+        if is_active:
+            competing_students = Student.objects.filter(
+                student_id=student.student_id,
+            ).exclude(pk=student.pk).select_related("election")
+            has_competing_eligibility = any(
+                election_status(other.election) == "open"
+                and election_ballot_ready(other.election)
+                and student_has_current_voter_access(other)
+                for other in competing_students
+            )
+            if has_competing_eligibility:
+                return Response(
+                    {"detail": (
+                                    "This voter is already eligible to vote in another open election. "
+                                    "Deactivate that access before activating the voter here."
+                    )},
+                    status=status.HTTP_409_CONFLICT,
+                )
 
         if is_active:
             lifecycle_status = election_status(election)

@@ -55,7 +55,8 @@ function getVoterLoginError(error: unknown) {
         return 'Voting is not currently available. Please try again later.';
     }
     if (apiError.response?.status === 409) {
-        return 'Your voter ID is active in more than one election. Please contact an election official.';
+        return apiError.response?.data?.detail
+            || 'We could not continue with this voter ID. Please contact an election official.';
     }
     if (apiError.response?.status === 429) {
         return 'Too many sign-in attempts. Please wait a moment and try again.';

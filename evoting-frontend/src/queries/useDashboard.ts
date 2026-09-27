@@ -32,17 +32,21 @@ function getList<T>(data: ApiListResponse<T>): T[] {
 }
 
 async function fetchDashboardStats(electionId: number): Promise<DashboardStats> {
-    const [studentsResponse, positionsResponse] = await Promise.all([
+    const [studentsResponse, positionsResponse, candidatesResponse] = await Promise.all([
         api.get<ApiListResponse<StudentSummary>>(
             `api/students/?election_id=${electionId}`,
         ),
         api.get<ApiListResponse<unknown>>(
             `api/positions/?election_id=${electionId}`,
         ),
+        api.get<ApiListResponse<unknown>>(
+            `api/candidates/?election_id=${electionId}`,
+        ),
     ]);
 
     const students = getList(studentsResponse.data);
     const positions = getList(positionsResponse.data);
+    const candidates = getList(candidatesResponse.data);
     const activeStudents = students.filter(student => student.is_active).length;
 
     return {
@@ -51,7 +55,7 @@ async function fetchDashboardStats(electionId: number): Promise<DashboardStats> 
         voted_students: students.filter(student => student.has_voted).length,
         pending_activations: students.length - activeStudents,
         total_positions: positions.length,
-        total_candidates: 0,
+        total_candidates: candidates.length,
     };
 }
 

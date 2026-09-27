@@ -162,7 +162,6 @@ export default function StudentsPage() {
     const [deleting, setDeleting] = useState<Student | null>(null);
 
 
-
     // Queries and mutations
 
     const electionsQuery = useElections({refetchInterval: 45_000});
@@ -264,6 +263,7 @@ export default function StudentsPage() {
                     onSuccess: () => setFile(null),
                 }
             );
+            setShowImport(false);
         }
     };
 
@@ -747,7 +747,8 @@ export default function StudentsPage() {
                                 )}
                             </div>
                             {selected?.voter_login_mode === 'sms_pin' && (
-                                <p className="text-xs text-gray-600">Phone number is required for every voter in an SMS PIN election.</p>
+                                <p className="text-xs text-gray-600">Phone number is required for every voter in an SMS
+                                    PIN election.</p>
                             )}
                             <a
                                 href="/student-import-sample.csv"

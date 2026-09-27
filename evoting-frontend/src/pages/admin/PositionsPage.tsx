@@ -211,18 +211,6 @@ export default function PositionsPage() {
 
     return (
         <>
-            <Button
-                className="positions-page-action"
-                leadingIcon={<FiPlus aria-hidden="true"/>}
-                onClick={() =>
-                    setShowCreateForm(value => !value)
-                }
-                disabled={!selectedElectionId || candidateChangesLocked}
-                title={candidateChangesLocked ? ballotLockMessage(selectedElectionId) : undefined}
-            >
-                {showCreateForm ? 'Close form' : 'Add position'}
-            </Button>
-
             {/* Mutation error */}
 
             {mutationError && (
@@ -272,6 +260,17 @@ export default function PositionsPage() {
                     icon={<FiList/>}
                 />
             </section>
+            <Button
+                className="positions-page-action"
+                leadingIcon={<FiPlus aria-hidden="true"/>}
+                onClick={() =>
+                    setShowCreateForm(value => !value)
+                }
+                disabled={!selectedElectionId || candidateChangesLocked}
+                title={candidateChangesLocked ? ballotLockMessage(selectedElectionId) : undefined}
+            >
+                {showCreateForm ? 'Close form' : 'Add position'}
+            </Button>
 
             {/* Position controls */}
 

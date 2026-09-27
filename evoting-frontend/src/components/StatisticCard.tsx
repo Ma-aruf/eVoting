@@ -1,5 +1,4 @@
-
-import type {ReactNode} from 'react';
+import type {CSSProperties, ReactNode} from 'react';
 
 type StatisticCardProps = {
     label: string;
@@ -16,16 +15,18 @@ type StatisticCardProps = {
         | 'accent';
     layout?: 'default' | 'split';
     loading?: boolean;
+    style?: CSSProperties;
 };
 
 export default function StatisticCard({
-    label,
-    value,
-    icon,
-    status = 'neutral',
-    layout = 'default',
-    loading = false,
-}: StatisticCardProps) {
+                                          label,
+                                          value,
+                                          icon,
+                                          status = 'neutral',
+                                          layout = 'default',
+                                          loading = false,
+                                          style,
+                                      }: StatisticCardProps) {
     const content = (
         <div className="statistic-card-content">
             <div className="statistic-card-heading">
@@ -56,6 +57,7 @@ export default function StatisticCard({
                 (layout === 'split' ? ' statistic-card--split' : '')
             }
             aria-busy={loading || undefined}
+            style={style}
         >
             {layout === 'split' ? (
                 <>

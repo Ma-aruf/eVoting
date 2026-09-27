@@ -678,7 +678,7 @@
 
 .statistic-card--split .statistic-card-value {
     margin-top: .5rem;
-    font-size: 1.875rem;
+    font-size: var(--font-size-mlg);
 }
 
 .statistic-card--split.statistic-card--primary {
@@ -736,8 +736,9 @@
 .statistic-card-value {
     display: block;
     margin-top: .625rem;
+    /*color: var(--color-text);*/
     color: var(--color-text);
-    font-size: 1.625rem;
+    font-size: var(--font-size-sm);
     line-height: 1;
     font-variant-numeric: tabular-nums;
 }

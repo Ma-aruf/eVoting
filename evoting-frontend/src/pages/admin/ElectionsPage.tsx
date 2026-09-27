@@ -171,7 +171,7 @@ export default function ElectionsPage() {
                     value={elections.length}
                     icon={<FiCalendar aria-hidden="true"/>}
                     status="primary"
-                    layout="split"
+                    layout="split" style={{height: "4.5rem", width: "100%"}}
                 />
 
                 <StatisticCard
@@ -179,7 +179,7 @@ export default function ElectionsPage() {
                     value={statusCounts.scheduled}
                     icon={<FiCheckCircle aria-hidden="true"/>}
                     status="success"
-                    layout="split"
+                    layout="split" style={{height: "4.5rem", width: "100%"}}
                 />
 
                 <StatisticCard
@@ -187,12 +187,12 @@ export default function ElectionsPage() {
                     value={statusCounts.open}
                     icon={<FiClock aria-hidden="true"/>}
                     status="neutral"
-                    layout="split"
+                    layout="split" style={{height: "4.5rem", width: "100%"}}
                 />
                 <StatisticCard label="Paused" value={statusCounts.paused} icon={<FiClock aria-hidden="true"/>}
-                               status="warning" layout="split"/>
+                               status="warning" layout="split" style={{height: "4.5rem", width: "100%"}}/>
                 <StatisticCard label="Ended" value={statusCounts.ended} icon={<FiCheckCircle aria-hidden="true"/>}
-                               status="neutral" layout="split"/>
+                               status="neutral" layout="split" style={{height: "4.5rem", width: "100%"}}/>
             </section>
             <Button
                 leadingIcon={<FiPlus aria-hidden="true"/>}
