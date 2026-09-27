@@ -8,7 +8,8 @@ from rest_framework.views import APIView
 
 from .election_access import get_scoped_election_or_404
 from .election_lifecycle import election_ballot_ready, election_status
-from .models import Election, Student, VoterSMSAttempt
+from .models import AuditLog, Election, Student, VoterSMSAttempt
+from .audit import record_audit_event
 from .permissions import IsStaffOrSuperUser
 from .sms.services import get_sms_configuration_error, send_sms
 from .utils import (
@@ -248,6 +249,19 @@ class VoterSMSSendView(APIView):
             elif outcome == "already_voted":
                 summary["already_voted"] += 1
 
+        record_audit_event(
+            action="SMS_PIN_BATCH_DELIVERY",
+            outcome=(
+                AuditLog.Outcome.FAILURE
+                if summary["failed"] and not summary["sent"]
+                else AuditLog.Outcome.SUCCESS
+            ),
+            request=request,
+            election=election,
+            actor=request.user,
+            metadata=summary,
+        )
+
         return Response(
             {
                 "detail": "Voter PIN delivery completed.",
@@ -398,6 +412,19 @@ class VoterSMSGenerateView(APIView):
 
         result = _generate_sms_pin_for_student(election, student.id)
         outcome = result['outcome']
+        record_audit_event(
+            action="VOTER_PIN_GENERATED",
+            outcome=(
+                AuditLog.Outcome.SUCCESS
+                if outcome == "generated"
+                else AuditLog.Outcome.DENIED
+            ),
+            request=request,
+            election=election,
+            student=student,
+            actor=request.user,
+            metadata={"result": outcome, "delivery": "not_sent"},
+        )
         if outcome == 'generated':
             return Response(
                 {
@@ -470,6 +497,19 @@ class VoterSMSResendView(APIView):
             )
 
         outcome = _send_sms_pin_for_student(election, student.id)["outcome"]
+        record_audit_event(
+            action="VOTER_PIN_RESENT",
+            outcome=(
+                AuditLog.Outcome.SUCCESS
+                if outcome == "sent"
+                else AuditLog.Outcome.FAILURE
+            ),
+            request=request,
+            election=election,
+            student=student,
+            actor=request.user,
+            metadata={"result": outcome},
+        )
         if outcome == "sent":
             return Response(
                 {"detail": "A fresh voter PIN was sent by SMS.", "status": outcome},

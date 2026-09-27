@@ -21,6 +21,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from .authentication import VoterAuthentication
+from .audit import record_audit_event
 from .ballot_operations import lock_elections_for_ballot_change
 from .result_views import (
     CandidatesForPositionView,
@@ -38,7 +39,7 @@ from .election_lifecycle import (
     student_can_vote_now,
 )
 from .media_views import ImageUploadView
-from .models import Candidate, Election, Position, Student, Vote
+from .models import AuditLog, Candidate, Election, Position, Student, Vote
 from .permissions import (
     CanAccessStudents,
     CanActivateVoters,
@@ -53,6 +54,7 @@ from .serializers import (
     ElectionEndTimeExtensionSerializer,
     ElectionScheduleUpdateSerializer,
     ElectionSerializer,
+    AuditLogSerializer,
     ElectionToggleSerializer,
     MultiVoteSerializer,
     PositionSerializer,
@@ -92,6 +94,60 @@ class UserViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return User.objects.all().order_by('-date_joined')
+
+    def perform_create(self, serializer):
+        user = serializer.save()
+        record_audit_event(
+            action="USER_CREATED",
+            outcome=AuditLog.Outcome.SUCCESS,
+            request=self.request,
+            actor=self.request.user,
+            metadata={"user_id": user.pk, "role": user.role},
+        )
+
+    def perform_update(self, serializer):
+        user = serializer.save()
+        record_audit_event(
+            action="USER_UPDATED",
+            outcome=AuditLog.Outcome.SUCCESS,
+            request=self.request,
+            actor=self.request.user,
+            metadata={"user_id": user.pk, "role": user.role},
+        )
+
+    def perform_destroy(self, instance):
+        metadata = {"user_id": instance.pk, "role": instance.role}
+        instance.delete()
+        record_audit_event(
+            action="USER_DELETED",
+            outcome=AuditLog.Outcome.SUCCESS,
+            request=self.request,
+            actor=self.request.user,
+            metadata=metadata,
+        )
+
+
+class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only, election-scoped audit history for management users."""
+
+    serializer_class = AuditLogSerializer
+    permission_classes = [IsManagementUser]
+
+    def get_queryset(self):
+        queryset = scope_queryset(
+            AuditLog.objects.select_related("election", "actor").all(),
+            self.request.user,
+        )
+        election_id = self.request.query_params.get("election_id")
+        action = self.request.query_params.get("action")
+        outcome = self.request.query_params.get("outcome")
+        if election_id:
+            queryset = queryset.filter(election_id=election_id)
+        if action:
+            queryset = queryset.filter(action=action)
+        if outcome:
+            queryset = queryset.filter(outcome=outcome)
+        return queryset
 
 
 class ElectionViewSet(viewsets.ReadOnlyModelViewSet):
@@ -148,7 +204,26 @@ class StudentViewSet(viewsets.ModelViewSet):
         except Election.DoesNotExist:
             raise ParseError("Invalid election_id provided.")
 
-        serializer.save(election=election)
+        student = serializer.save(election=election)
+        record_audit_event(
+            action="VOTER_CREATED",
+            outcome=AuditLog.Outcome.SUCCESS,
+            request=self.request,
+            election=election,
+            student=student,
+            actor=self.request.user,
+        )
+
+    def perform_update(self, serializer):
+        student = serializer.save()
+        record_audit_event(
+            action="VOTER_UPDATED",
+            outcome=AuditLog.Outcome.SUCCESS,
+            request=self.request,
+            election=student.election,
+            student=student,
+            actor=self.request.user,
+        )
 
     def destroy(self, request, *args, **kwargs):
         student = self.get_object()
@@ -158,7 +233,18 @@ class StudentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         try:
-            return super().destroy(request, *args, **kwargs)
+            election = student.election
+            response = super().destroy(request, *args, **kwargs)
+            if response.status_code < 300:
+                record_audit_event(
+                    action="VOTER_DELETED",
+                    outcome=AuditLog.Outcome.SUCCESS,
+                    request=request,
+                    election=election,
+                    student_id=student.student_id,
+                    actor=request.user,
+                )
+            return response
         except ProtectedError:
             return Response(
                 {"detail": "Student cannot be deleted because votes exist for a related candidate."},
@@ -281,7 +367,18 @@ class BulkStudentUploadView(APIView):
             )
 
         try:
-            Student.objects.bulk_create(rows_to_create, ignore_conflicts=True)
+            created_students = Student.objects.bulk_create(rows_to_create, ignore_conflicts=True)
+            record_audit_event(
+                action="VOTERS_IMPORTED",
+                outcome=AuditLog.Outcome.SUCCESS,
+                request=request,
+                election=election,
+                actor=request.user,
+                metadata={
+                    "created_count": len(created_students),
+                    "skipped_existing": len(existing_ids),
+                },
+            )
             return Response(
                 {
                     "detail": "Students imported successfully.",
@@ -323,18 +420,44 @@ class PositionViewSet(viewsets.ModelViewSet):
         election = serializer.validated_data["election"]
         get_scoped_election_or_404(self.request.user, election.pk)
         with lock_elections_for_ballot_change(election.pk):
-            serializer.save()
+            position = serializer.save()
+        record_audit_event(
+            action="POSITION_CREATED",
+            outcome=AuditLog.Outcome.SUCCESS,
+            request=self.request,
+            election=position.election,
+            actor=self.request.user,
+            metadata={"position_id": position.pk, "name": position.name},
+        )
 
     def perform_update(self, serializer):
         position = serializer.instance
         target = serializer.validated_data.get("election", position.election)
         get_scoped_election_or_404(self.request.user, target.pk)
         with lock_elections_for_ballot_change(position.election_id, target.pk):
-            serializer.save()
+            position = serializer.save()
+        record_audit_event(
+            action="POSITION_UPDATED",
+            outcome=AuditLog.Outcome.SUCCESS,
+            request=self.request,
+            election=position.election,
+            actor=self.request.user,
+            metadata={"position_id": position.pk, "name": position.name},
+        )
 
     def perform_destroy(self, instance):
+        election = instance.election
+        metadata = {"position_id": instance.pk, "name": instance.name}
         with lock_elections_for_ballot_change(instance.election_id):
             instance.delete()
+        record_audit_event(
+            action="POSITION_DELETED",
+            outcome=AuditLog.Outcome.SUCCESS,
+            request=self.request,
+            election=election,
+            actor=self.request.user,
+            metadata=metadata,
+        )
 
 
 class PositionCreateView(APIView):
@@ -364,6 +487,14 @@ class PositionCreateView(APIView):
             raise ParseError("Election not found.")
         with lock_elections_for_ballot_change(serializer.validated_data["election"].pk):
             position = serializer.save()
+        record_audit_event(
+            action="POSITION_CREATED",
+            outcome=AuditLog.Outcome.SUCCESS,
+            request=request,
+            election=position.election,
+            actor=request.user,
+            metadata={"position_id": position.pk, "name": position.name},
+        )
         return Response(PositionSerializer(position).data, status=status.HTTP_201_CREATED)
 
     def put(self, request, pk):
@@ -384,6 +515,14 @@ class PositionCreateView(APIView):
         target = serializer.validated_data.get("election", position.election)
         with lock_elections_for_ballot_change(position.election_id, target.pk):
             position = serializer.save()
+        record_audit_event(
+            action="POSITION_UPDATED",
+            outcome=AuditLog.Outcome.SUCCESS,
+            request=request,
+            election=position.election,
+            actor=request.user,
+            metadata={"position_id": position.pk, "name": position.name},
+        )
         return Response(
             PositionSerializer(position).data,
             status=status.HTTP_200_OK
@@ -396,6 +535,8 @@ class PositionCreateView(APIView):
         position = get_object_or_404(
             scope_queryset(Position.objects.all(), request.user), pk=pk
         )
+        election = position.election
+        metadata = {"position_id": position.pk, "name": position.name}
         try:
             with lock_elections_for_ballot_change(position.election_id):
                 position.delete()
@@ -404,6 +545,14 @@ class PositionCreateView(APIView):
                 {"detail": "Position cannot be deleted because votes exist for it."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        record_audit_event(
+            action="POSITION_DELETED",
+            outcome=AuditLog.Outcome.SUCCESS,
+            request=request,
+            election=election,
+            actor=request.user,
+            metadata=metadata,
+        )
         return Response(
             {"detail": "Position deleted successfully"},
             status=status.HTTP_204_NO_CONTENT
@@ -469,6 +618,15 @@ class CandidateCreateView(APIView):
         election_id = serializer.validated_data["position"].election_id
         with lock_elections_for_ballot_change(election_id):
             candidate = serializer.save()
+        record_audit_event(
+            action="CANDIDATE_CREATED",
+            outcome=AuditLog.Outcome.SUCCESS,
+            request=request,
+            election=candidate.position.election,
+            student=candidate.student,
+            actor=request.user,
+            metadata={"candidate_id": candidate.pk, "position_id": candidate.position_id},
+        )
         return Response(CandidateSerializer(candidate).data, status=status.HTTP_201_CREATED)
 
     # EDIT
@@ -492,6 +650,15 @@ class CandidateCreateView(APIView):
                 candidate.position.election_id, effective_position.election_id
         ):
             candidate = serializer.save()
+        record_audit_event(
+            action="CANDIDATE_UPDATED",
+            outcome=AuditLog.Outcome.SUCCESS,
+            request=request,
+            election=candidate.position.election,
+            student=candidate.student,
+            actor=request.user,
+            metadata={"candidate_id": candidate.pk, "position_id": candidate.position_id},
+        )
         return Response(
             CandidateSerializer(candidate).data,
             status=status.HTTP_200_OK
@@ -506,6 +673,9 @@ class CandidateCreateView(APIView):
             scope_queryset(Candidate.objects.all(), request.user, "position__election_id"),
             pk=pk,
         )
+        election = candidate.position.election
+        student = candidate.student
+        metadata = {"candidate_id": candidate.pk, "position_id": candidate.position_id}
         try:
             with lock_elections_for_ballot_change(candidate.position.election_id):
                 candidate.delete()
@@ -514,6 +684,15 @@ class CandidateCreateView(APIView):
                 {"detail": "Candidate cannot be deleted because votes exist for it."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        record_audit_event(
+            action="CANDIDATE_DELETED",
+            outcome=AuditLog.Outcome.SUCCESS,
+            request=request,
+            election=election,
+            student=student,
+            actor=request.user,
+            metadata=metadata,
+        )
         return Response(
             {"detail": "Candidate deleted successfully"},
             status=status.HTTP_204_NO_CONTENT
@@ -585,6 +764,14 @@ class ElectionManageView(APIView):
                 f"ELECTION_VOTING_{action}: election_id={election_id}, election_name={election.name}, "
                 f"user={user.username if user else 'unknown'}, ip={client_ip}"
             )
+            record_audit_event(
+                action=f"ELECTION_VOTING_{action}",
+                outcome=AuditLog.Outcome.SUCCESS,
+                request=request,
+                election=election,
+                actor=user,
+                metadata={"voting_enabled": voting_enabled},
+            )
 
         payload = ElectionSerializer(election).data
         payload["detail"] = "Voting enabled." if voting_enabled else "Voting paused."
@@ -641,6 +828,19 @@ class ElectionScheduleUpdateView(APIView):
                         f"{old_start_time.isoformat()} – {old_end_time.isoformat()} to "
                         f"{start_time.isoformat()} – {end_time.isoformat()}."
                     ),
+                )
+                record_audit_event(
+                    action="ELECTION_SCHEDULE_UPDATED",
+                    outcome=AuditLog.Outcome.SUCCESS,
+                    request=request,
+                    election=election,
+                    actor=request.user,
+                    metadata={
+                        "old_start_time": old_start_time.isoformat(),
+                        "old_end_time": old_end_time.isoformat(),
+                        "start_time": start_time.isoformat(),
+                        "end_time": end_time.isoformat(),
+                    },
                 )
         except Election.DoesNotExist:
             return Response(
@@ -704,6 +904,18 @@ class ElectionEndTimeExtensionView(APIView):
                         f"Reason: {reason}"
                     ),
                 )
+                record_audit_event(
+                    action="ELECTION_END_TIME_EXTENDED",
+                    outcome=AuditLog.Outcome.SUCCESS,
+                    request=request,
+                    election=election,
+                    actor=request.user,
+                    metadata={
+                        "old_end_time": old_end_time.isoformat(),
+                        "end_time": new_end_time.isoformat(),
+                        "reason": reason,
+                    },
+                )
         except Election.DoesNotExist:
             return Response(
                 {"detail": "Election not found."},
@@ -755,6 +967,14 @@ class MultiVoteView(APIView):
         client_ip = request.META.get('REMOTE_ADDR')
 
         # Log vote attempt
+        record_audit_event(
+            action="VOTE_ATTEMPT",
+            outcome=AuditLog.Outcome.INFO,
+            request=request,
+            election=student_user.election,
+            student=student_user,
+            metadata={"submitted_items": len(data["votes"])},
+        )
         self.security_logger.info(
             f"VOTE_ATTEMPT: student_id={student_user.student_id if student_user else 'unknown'}, "
             f"ip={client_ip}, election_ids={[v['election'] for v in data['votes']]}"
@@ -1004,6 +1224,14 @@ class MultiVoteView(APIView):
                     f"VOTE_SUCCESS: student_id={student.student_id}, ip={client_ip}, "
                     f"votes_count={len(votes_to_create)}, election_ids={[v.election_id for v in votes_to_create]}"
                 )
+                record_audit_event(
+                    action="VOTE_SUBMITTED",
+                    outcome=AuditLog.Outcome.SUCCESS,
+                    request=request,
+                    election=student.election,
+                    student=student,
+                    metadata={"votes_count": len(votes_to_create)},
+                )
 
         except Student.DoesNotExist:
             return Response(
@@ -1130,6 +1358,16 @@ class StudentActivationView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        record_audit_event(
+            action="VOTER_ACTIVATION_ATTEMPT",
+            outcome=AuditLog.Outcome.INFO,
+            request=request,
+            election=election,
+            student=student,
+            actor=user,
+            metadata={"requested_active": is_active},
+        )
+
         if is_active:
             competing_students = Student.objects.filter(
                 student_id=student.student_id,
@@ -1141,6 +1379,15 @@ class StudentActivationView(APIView):
                 for other in competing_students
             )
             if has_competing_eligibility:
+                record_audit_event(
+                    action="VOTER_ACTIVATION_DENIED",
+                    outcome=AuditLog.Outcome.DENIED,
+                    request=request,
+                    election=election,
+                    student=student,
+                    actor=user,
+                    metadata={"reason": "eligible_in_another_open_election"},
+                )
                 return Response(
                     {"detail": (
                                     "This voter is already eligible to vote in another open election. "
@@ -1238,6 +1485,14 @@ class StudentActivationView(APIView):
             getattr(user, "username", "unknown"),
             client_ip,
         )
+        record_audit_event(
+            action="VOTER_ACTIVATED" if is_active else "VOTER_DEACTIVATED",
+            outcome=AuditLog.Outcome.SUCCESS,
+            request=request,
+            election=election,
+            student=student,
+            actor=user,
+        )
 
         status_text = "activated" if is_active else "deactivated"
         return Response(
@@ -1257,6 +1512,17 @@ class ElectionCreateView(APIView):
         serializer = ElectionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         election = serializer.save()
+        record_audit_event(
+            action="ELECTION_CREATED",
+            outcome=AuditLog.Outcome.SUCCESS,
+            request=request,
+            election=election,
+            actor=request.user,
+            metadata={
+                "voter_login_mode": election.voter_login_mode,
+                "year": election.year,
+            },
+        )
         return Response(ElectionSerializer(election).data, status=status.HTTP_201_CREATED)
 
 
@@ -1337,6 +1603,15 @@ class StudentVoterLoginView(APIView):
                     {"detail": "This election login link is not valid."},
                     status=status.HTTP_404_NOT_FOUND,
                 )
+        requested_election = election_filter.get("election")
+        record_audit_event(
+            action="VOTER_LOGIN_ATTEMPT",
+            outcome=AuditLog.Outcome.INFO,
+            request=request,
+            election=requested_election,
+            student_id=student_id,
+            metadata={"entry_code_supplied": bool(election_code)},
+        )
         matching_students = list(
             Student.objects.filter(student_id=student_id, **election_filter)
             .select_related("election")
@@ -1346,6 +1621,14 @@ class StudentVoterLoginView(APIView):
                 "LOGIN_NOT_FOUND: student_id=%s, ip=%s",
                 student_id,
                 client_ip,
+            )
+            record_audit_event(
+                action="VOTER_LOGIN_FAILED",
+                outcome=AuditLog.Outcome.DENIED,
+                request=request,
+                election=requested_election,
+                student_id=student_id,
+                metadata={"reason": "student_not_found"},
             )
             return Response(
                 {"detail": "Student not found."},
@@ -1372,6 +1655,13 @@ class StudentVoterLoginView(APIView):
             student = eligible_students[0]
             active_election = student.election
         elif len(eligible_students) > 1:
+            record_audit_event(
+                action="VOTER_LOGIN_FAILED",
+                outcome=AuditLog.Outcome.DENIED,
+                request=request,
+                student_id=student_id,
+                metadata={"reason": "multiple_eligible_elections"},
+            )
             return Response(
                 {
                     "detail": (
@@ -1383,6 +1673,13 @@ class StudentVoterLoginView(APIView):
             )
         elif open_students:
             if len(open_students) > 1:
+                record_audit_event(
+                    action="VOTER_LOGIN_FAILED",
+                    outcome=AuditLog.Outcome.DENIED,
+                    request=request,
+                    student_id=student_id,
+                    metadata={"reason": "multiple_open_elections"},
+                )
                 return Response(
                     {"detail": "Student ID is associated with more than one open election."},
                     status=status.HTTP_409_CONFLICT,
@@ -1404,6 +1701,15 @@ class StudentVoterLoginView(APIView):
                     "LOGIN_DENIED_VOTED: student_id=%s, ip=%s",
                     student_id,
                     client_ip,
+                )
+                record_audit_event(
+                    action="VOTER_LOGIN_FAILED",
+                    outcome=AuditLog.Outcome.DENIED,
+                    request=request,
+                    election=open_student.election,
+                    student=open_student,
+                    student_id=student_id,
+                    metadata={"reason": "already_voted"},
                 )
                 return Response(
                     {"detail": "Student has already voted."},
@@ -1457,6 +1763,15 @@ class StudentVoterLoginView(APIView):
                 "LOGIN_DENIED_INACTIVE: student_id=%s, ip=%s",
                 student_id,
                 client_ip,
+            )
+            record_audit_event(
+                action="VOTER_LOGIN_FAILED",
+                outcome=AuditLog.Outcome.DENIED,
+                request=request,
+                election=open_student.election,
+                student=open_student,
+                student_id=student_id,
+                metadata={"reason": "not_activated"},
             )
             return Response(
                 {"detail": "Student is not activated to vote."},
@@ -1593,6 +1908,15 @@ class StudentVoterLoginView(APIView):
             active_election.id,
             client_ip,
         )
+        record_audit_event(
+            action="VOTER_LOGIN_SUCCESS",
+            outcome=AuditLog.Outcome.SUCCESS,
+            request=request,
+            election=active_election,
+            student=student,
+            student_id=student_id,
+            metadata={"login_mode": active_election.voter_login_mode},
+        )
 
         election_lifecycle_data = election_lifecycle(
             active_election,
@@ -1615,6 +1939,7 @@ class StudentVoterLoginView(APIView):
                     "id": active_election.id,
                     "name": active_election.name,
                     "year": active_election.year,
+                    "voter_entry_code": active_election.voter_entry_code,
                     "voting_enabled": active_election.voting_enabled,
                     **election_lifecycle_data,
                 },

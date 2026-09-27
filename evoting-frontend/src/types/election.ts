@@ -34,6 +34,7 @@ export interface VoterElection {
     id: number;
     name: string;
     year: number;
+    voter_entry_code?: string;
     voting_enabled: boolean;
     status: ElectionStatus;
     voting_open: boolean;

@@ -114,6 +114,9 @@ export default function StudentLoginPage() {
                 return;
             }
             saveVoterSession(response.data);
+            if (electionCode) {
+                sessionStorage.setItem('voter_entry_code', electionCode.toLowerCase());
+            }
             navigate('/vote');
         } catch (caughtError: unknown) {
             setError(getVoterLoginError(caughtError));

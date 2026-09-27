@@ -314,3 +314,55 @@ class Vote(models.Model):
         if self.choice == "skip":
             return f"Skipped vote for {self.position}"
         return f"Vote for {self.candidate}"
+
+
+class AuditLog(models.Model):
+    class Outcome(models.TextChoices):
+        SUCCESS = "success", "Success"
+        DENIED = "denied", "Denied"
+        FAILURE = "failure", "Failure"
+        INFO = "info", "Info"
+
+    action = models.CharField(max_length=64, db_index=True)
+    outcome = models.CharField(
+        max_length=20,
+        choices=Outcome.choices,
+        default=Outcome.INFO,
+        db_index=True,
+    )
+    election = models.ForeignKey(
+        Election,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audit_events",
+    )
+    student = models.ForeignKey(
+        Student,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audit_events",
+    )
+    actor = models.ForeignKey(
+        "User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audit_events",
+    )
+    student_reference = models.CharField(max_length=30, blank=True)
+    actor_reference = models.CharField(max_length=150, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+        indexes = [
+            models.Index(fields=("election", "-created_at")),
+            models.Index(fields=("action", "-created_at")),
+        ]
+
+    def __str__(self):
+        return f"{self.action} ({self.outcome})"

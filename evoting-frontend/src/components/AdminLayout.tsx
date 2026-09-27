@@ -1,6 +1,7 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {NavLink, Outlet, useLocation} from 'react-router-dom';
 import {
+    FiActivity,
     FiBarChart2,
     FiCalendar,
     FiCheckCircle,
@@ -33,6 +34,7 @@ const navItems: NavigationItem[] = [
         roles: ['activator', 'superuser', 'staff']
     },
     {to: '/admin/results', label: 'Election Results', icon: FiBarChart2, roles: ['superuser', 'staff']},
+    {to: '/admin/audit-logs', label: 'Audit Trail', icon: FiActivity, roles: ['activator', 'superuser', 'staff']},
     {to: '/admin/users', label: 'Manage Users', icon: FiUsers, roles: ['superuser']},
 ];
 

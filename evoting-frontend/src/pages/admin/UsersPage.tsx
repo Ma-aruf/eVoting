@@ -180,12 +180,12 @@ export default function UsersPage() {
                 <Button type="button" variant="quiet" size="compact" onClick={() => setSearchTerm('')}>Clear
                     search</Button>}
 
-            <section className="users-table-section" aria-label="User records">
-                <div className="users-table-wrap">
-                    <table className="users-table">
+            <section className="management-panel users-table-section" aria-label="User records">
+                <div className="management-table-wrap">
+                    <table className="management-table audit-logs-table users-table">
                         <caption className="sr-only">Managed users</caption>
                         <thead>
-                        <tr className="bg-cyan-700">
+                        <tr>
                             <th scope="col">Username</th>
                             <th scope="col">Role</th>
                             <th scope="col">Status</th>

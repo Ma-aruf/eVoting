@@ -7,7 +7,8 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from .models import Election, Student, Position, Candidate, Vote, User
+from .audit import record_audit_event
+from .models import AuditLog, Election, Student, Position, Candidate, Vote, User
 from .election_lifecycle import (
     ballot_change_lock_detail,
     election_ballot_ready,
@@ -75,10 +76,34 @@ class BallotLockedAdminMixin:
     def save_model(self, request, obj, form, change):
         with _locked_ballot_elections(self._election_ids(obj, form.cleaned_data)):
             super().save_model(request, obj, form, change)
+        election = obj.election if isinstance(obj, Position) else obj.position.election
+        record_audit_event(
+            action=("POSITION_UPDATED" if change else "POSITION_CREATED")
+            if isinstance(obj, Position)
+            else ("CANDIDATE_UPDATED" if change else "CANDIDATE_CREATED"),
+            outcome=AuditLog.Outcome.SUCCESS,
+            request=request,
+            election=election,
+            student=obj.student if isinstance(obj, Candidate) else None,
+            actor=request.user,
+            metadata={"object_id": obj.pk, "source": "django_admin"},
+        )
 
     def delete_model(self, request, obj):
+        election = obj.election if isinstance(obj, Position) else obj.position.election
+        student = obj.student if isinstance(obj, Candidate) else None
+        metadata = {"object_id": obj.pk, "source": "django_admin"}
         with _locked_ballot_elections(self._election_ids(obj)):
             super().delete_model(request, obj)
+        record_audit_event(
+            action="POSITION_DELETED" if isinstance(obj, Position) else "CANDIDATE_DELETED",
+            outcome=AuditLog.Outcome.SUCCESS,
+            request=request,
+            election=election,
+            student=student,
+            actor=request.user,
+            metadata=metadata,
+        )
 
     def delete_queryset(self, request, queryset):
         if isinstance(self.model, type) and issubclass(self.model, Position):
@@ -87,7 +112,24 @@ class BallotLockedAdminMixin:
             election_ids = queryset.values_list("position__election_id", flat=True)
         try:
             with _locked_ballot_elections(election_ids):
+                deleted_queryset = (
+                    queryset.select_related("election")
+                    if issubclass(self.model, Position)
+                    else queryset.select_related("position__election", "student")
+                )
+                deleted_objects = list(deleted_queryset)
                 queryset.delete()
+            for obj in deleted_objects:
+                election = obj.election if isinstance(obj, Position) else obj.position.election
+                record_audit_event(
+                    action="POSITION_DELETED" if isinstance(obj, Position) else "CANDIDATE_DELETED",
+                    outcome=AuditLog.Outcome.SUCCESS,
+                    request=request,
+                    election=election,
+                    student=obj.student if isinstance(obj, Candidate) else None,
+                    actor=request.user,
+                    metadata={"object_id": obj.pk, "source": "django_admin_bulk"},
+                )
         except ValidationError as exc:
             self.message_user(request, str(exc), level=messages.ERROR)
 
@@ -133,6 +175,37 @@ class ElectionAdmin(admin.ModelAdmin):
                 })
             obj.full_clean()
             super().save_model(request, obj, form, change)
+            record_audit_event(
+                action="ELECTION_UPDATED" if change else "ELECTION_CREATED",
+                outcome=AuditLog.Outcome.SUCCESS,
+                request=request,
+                election=obj,
+                actor=request.user,
+                metadata={"source": "django_admin"},
+            )
+
+    def delete_model(self, request, obj):
+        metadata = {"election_id": obj.pk, "name": obj.name, "source": "django_admin"}
+        super().delete_model(request, obj)
+        record_audit_event(
+            action="ELECTION_DELETED",
+            outcome=AuditLog.Outcome.SUCCESS,
+            request=request,
+            actor=request.user,
+            metadata=metadata,
+        )
+
+    def delete_queryset(self, request, queryset):
+        deleted = list(queryset.values("id", "name", "year"))
+        queryset.delete()
+        for obj in deleted:
+            record_audit_event(
+                action="ELECTION_DELETED",
+                outcome=AuditLog.Outcome.SUCCESS,
+                request=request,
+                actor=request.user,
+                metadata={**obj, "source": "django_admin_bulk"},
+            )
 
 
 @admin.register(Student)
@@ -147,6 +220,45 @@ class StudentAdmin(admin.ModelAdmin):
             # Activator can only toggle 'is_active', nothing else
             return [f.name for f in self.model._meta.fields if f.name != "is_active"]
         return super().get_readonly_fields(request, obj)
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        record_audit_event(
+            action="VOTER_UPDATED" if change else "VOTER_CREATED",
+            outcome=AuditLog.Outcome.SUCCESS,
+            request=request,
+            election=obj.election,
+            student=obj,
+            actor=request.user,
+            metadata={"source": "django_admin"},
+        )
+
+    def delete_model(self, request, obj):
+        election = obj.election
+        student_reference = obj.student_id
+        super().delete_model(request, obj)
+        record_audit_event(
+            action="VOTER_DELETED",
+            outcome=AuditLog.Outcome.SUCCESS,
+            request=request,
+            election=election,
+            student_id=student_reference,
+            actor=request.user,
+            metadata={"source": "django_admin"},
+        )
+
+    def delete_queryset(self, request, queryset):
+        deleted = list(queryset.values("id", "student_id", "election_id"))
+        queryset.delete()
+        for obj in deleted:
+            record_audit_event(
+                action="VOTER_DELETED",
+                outcome=AuditLog.Outcome.SUCCESS,
+                request=request,
+                actor=request.user,
+                student_id=obj["student_id"],
+                metadata={"election_id": obj["election_id"], "source": "django_admin_bulk"},
+            )
 
 
 @admin.register(Position)
@@ -166,6 +278,39 @@ class CandidateAdmin(BallotLockedAdminMixin, admin.ModelAdmin):
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
     list_display = ("first_name", "last_name", "role")
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        record_audit_event(
+            action="USER_UPDATED" if change else "USER_CREATED",
+            outcome=AuditLog.Outcome.SUCCESS,
+            request=request,
+            actor=request.user,
+            metadata={"user_id": obj.pk, "role": obj.role, "source": "django_admin"},
+        )
+
+    def delete_model(self, request, obj):
+        metadata = {"user_id": obj.pk, "role": obj.role, "source": "django_admin"}
+        super().delete_model(request, obj)
+        record_audit_event(
+            action="USER_DELETED",
+            outcome=AuditLog.Outcome.SUCCESS,
+            request=request,
+            actor=request.user,
+            metadata=metadata,
+        )
+
+    def delete_queryset(self, request, queryset):
+        deleted = list(queryset.values("id", "username", "role"))
+        queryset.delete()
+        for obj in deleted:
+            record_audit_event(
+                action="USER_DELETED",
+                outcome=AuditLog.Outcome.SUCCESS,
+                request=request,
+                actor=request.user,
+                metadata={**obj, "source": "django_admin_bulk"},
+            )
 
 
 @admin.register(Vote)

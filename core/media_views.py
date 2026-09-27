@@ -8,6 +8,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .permissions import IsStaffOrSuperUser
+from .audit import record_audit_event
+from .models import AuditLog
 
 class ImageUploadView(APIView):
     """
@@ -71,6 +73,13 @@ class ImageUploadView(APIView):
                     ]
                 )
 
+                record_audit_event(
+                    action="CANDIDATE_IMAGE_UPLOADED",
+                    outcome=AuditLog.Outcome.SUCCESS,
+                    request=request,
+                    actor=request.user,
+                    metadata={"storage": "cloudinary", "public_id": result["public_id"]},
+                )
                 return Response({
                     "url": result["secure_url"],
                     "public_id": result["public_id"],
@@ -104,6 +113,13 @@ class ImageUploadView(APIView):
                 relative_url = f"{settings.MEDIA_URL}candidates/{filename}"
                 url = request.build_absolute_uri(relative_url)
 
+                record_audit_event(
+                    action="CANDIDATE_IMAGE_UPLOADED",
+                    outcome=AuditLog.Outcome.SUCCESS,
+                    request=request,
+                    actor=request.user,
+                    metadata={"storage": "local", "filename": filename},
+                )
                 return Response({
                     "url": url,
                     "filename": filename,

@@ -5,6 +5,8 @@ from rest_framework.exceptions import AuthenticationFailed
 from django.utils.translation import gettext as _
 from django.utils import timezone
 from .models import Student, Election
+from .audit import record_audit_event
+from .models import AuditLog
 from .utils import (
     deactivate_expired_voter_session,
     verify_voter_token,
@@ -57,6 +59,13 @@ class VoterAuthentication(BaseAuthentication):
             self.security_logger.warning(
                 f"AUTH_FAILED_ELECTION: student_id={student_id}, election_id={election_id}, ip={client_ip}"
             )
+            record_audit_event(
+                action="VOTER_AUTH_FAILED",
+                outcome=AuditLog.Outcome.DENIED,
+                request=request,
+                student_id=student_id,
+                metadata={"reason": "election_not_found", "election_id": election_id},
+            )
             raise AuthenticationFailed(_("Election not found."))
 
         now = timezone.now()
@@ -67,15 +76,39 @@ class VoterAuthentication(BaseAuthentication):
             self.security_logger.warning(
                 f"AUTH_FAILED_EARLY: student_id={student_id}, election_id={election_id}, ip={client_ip}"
             )
+            record_audit_event(
+                action="VOTER_AUTH_FAILED",
+                outcome=AuditLog.Outcome.DENIED,
+                request=request,
+                election=election,
+                student_id=student_id,
+                metadata={"reason": "election_not_started"},
+            )
             raise AuthenticationFailed(_("Voting has not started yet."))
         if lifecycle["status"] == "ended":
             self.security_logger.warning(
                 f"AUTH_FAILED_LATE: student_id={student_id}, election_id={election_id}, ip={client_ip}"
             )
+            record_audit_event(
+                action="VOTER_AUTH_FAILED",
+                outcome=AuditLog.Outcome.DENIED,
+                request=request,
+                election=election,
+                student_id=student_id,
+                metadata={"reason": "election_ended"},
+            )
             raise AuthenticationFailed(_("Voting has ended."))
         if not lifecycle["voting_open"]:
             self.security_logger.warning(
                 f"AUTH_FAILED_PAUSED: student_id={student_id}, election_id={election_id}, ip={client_ip}"
+            )
+            record_audit_event(
+                action="VOTER_AUTH_FAILED",
+                outcome=AuditLog.Outcome.DENIED,
+                request=request,
+                election=election,
+                student_id=student_id,
+                metadata={"reason": "election_paused"},
             )
             raise AuthenticationFailed(_("Voting is paused for this election."))
 
@@ -85,6 +118,14 @@ class VoterAuthentication(BaseAuthentication):
         except Student.DoesNotExist:
             self.security_logger.warning(
                 f"AUTH_FAILED_STUDENT: student_id={student_id}, election_id={election_id}, ip={client_ip}"
+            )
+            record_audit_event(
+                action="VOTER_AUTH_FAILED",
+                outcome=AuditLog.Outcome.DENIED,
+                request=request,
+                election=election,
+                student_id=student_id,
+                metadata={"reason": "student_not_found"},
             )
             raise AuthenticationFailed(_("Invalid student identifier for this election."))
 
@@ -96,6 +137,15 @@ class VoterAuthentication(BaseAuthentication):
                 f"AUTH_FAILED_SESSION_EXPIRED: student_id={student_id}, "
                 f"election_id={election_id}, ip={client_ip}"
             )
+            record_audit_event(
+                action="VOTER_AUTH_FAILED",
+                outcome=AuditLog.Outcome.DENIED,
+                request=request,
+                election=election,
+                student=student,
+                student_id=student_id,
+                metadata={"reason": "session_expired"},
+            )
             raise AuthenticationFailed(
                 _("Your voting session has expired. Please ask an election official to reactivate you.")
             )
@@ -103,6 +153,15 @@ class VoterAuthentication(BaseAuthentication):
         if not verify_voter_token(f"{student.student_id}_{election.id}", token):
             self.security_logger.warning(
                 f"AUTH_FAILED_TOKEN: student_id={student_id}, election_id={election_id}, ip={client_ip}"
+            )
+            record_audit_event(
+                action="VOTER_AUTH_FAILED",
+                outcome=AuditLog.Outcome.DENIED,
+                request=request,
+                election=election,
+                student=student,
+                student_id=student_id,
+                metadata={"reason": "invalid_token"},
             )
             raise AuthenticationFailed(_("Invalid voter token."))
 

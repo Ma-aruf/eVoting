@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     ElectionViewSet,
+    AuditLogViewSet,
     StudentViewSet,
     PositionViewSet,
     CandidateViewSet,
@@ -32,6 +33,7 @@ from .sms_views import VoterSMSGenerateView, VoterSMSResendView, VoterSMSSendVie
 
 router = DefaultRouter()
 router.register(r"elections", ElectionViewSet, basename="election")
+router.register(r"audit-logs", AuditLogViewSet, basename="audit-log")
 router.register(r"students", StudentViewSet, basename="student")
 router.register(r"positions", PositionViewSet, basename="position")
 router.register(r"candidates", CandidateViewSet, basename="candidate")

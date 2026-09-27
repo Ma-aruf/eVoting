@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
-from .models import Election, Position, Candidate, Vote, Student, User
+from .models import AuditLog, Election, Position, Candidate, Vote, Student, User
 from .serializer_helpers import normalize_legacy_election_flag
 from .utils import election_has_votes
 from .election_lifecycle import (
@@ -266,6 +266,19 @@ class ElectionSerializer(serializers.ModelSerializer):
                     "detail": "Election settings cannot be changed after voting activity."
                 })
         return data
+
+
+class AuditLogSerializer(serializers.ModelSerializer):
+    election_name = serializers.CharField(source="election.name", read_only=True, default="")
+    actor_username = serializers.CharField(source="actor.username", read_only=True, default="")
+
+    class Meta:
+        model = AuditLog
+        fields = [
+            "id", "action", "outcome", "election", "election_name",
+            "student_reference", "actor_username", "ip_address", "metadata", "created_at",
+        ]
+        read_only_fields = fields
 
 
 class ElectionToggleSerializer(serializers.Serializer):

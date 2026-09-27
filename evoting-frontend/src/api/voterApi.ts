@@ -16,6 +16,9 @@ export function saveVoterSession(response: VoterLoginResponse) {
     sessionStorage.setItem('student_id', response.student.student_id);
     sessionStorage.setItem('student_name', response.student.full_name);
     sessionStorage.setItem('election_id', String(response.election.id));
+    if (response.election.voter_entry_code) {
+        sessionStorage.setItem('voter_entry_code', response.election.voter_entry_code);
+    }
     sessionStorage.setItem('election_name', response.election.name);
     sessionStorage.setItem('election_year', String(response.election.year));
     sessionStorage.setItem(VOTER_LIFECYCLE_KEY, JSON.stringify({
@@ -54,6 +57,7 @@ export function clearVoterSession() {
     sessionStorage.removeItem('student_id');
     sessionStorage.removeItem('student_name');
     sessionStorage.removeItem('election_id');
+    sessionStorage.removeItem('voter_entry_code');
     sessionStorage.removeItem('election_name');
     sessionStorage.removeItem('election_year');
     sessionStorage.removeItem(VOTER_LIFECYCLE_KEY);
@@ -65,6 +69,11 @@ export function voterHeaders(session: VoterSession) {
         'X-Election-Id': session.electionId,
         'X-Voter-Token': session.token,
     };
+}
+
+export function getVoterLoginPath() {
+    const entryCode = sessionStorage.getItem('voter_entry_code');
+    return entryCode ? `/voter-login/${entryCode}` : '/';
 }
 
 export const voterApi = {

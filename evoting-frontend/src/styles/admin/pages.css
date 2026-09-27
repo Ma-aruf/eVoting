@@ -478,6 +478,21 @@
     gap: .5rem;
 }
 
+.audit-logs-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    margin-top: .75rem;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+}
+
+.audit-logs-pagination > div {
+    display: flex;
+    gap: .5rem;
+}
+
 .student-form,
 .student-import-form {
     display: grid;
@@ -1258,6 +1273,16 @@
     background: var(--color-primary-soft);
 }
 
+.audit-logs-table {
+}
+
+.audit-logs-table thead th {
+    background: var(--color-primary);
+    text-transform: none;
+    color: white;
+}
+
+
 .sms-delivery-table {
 }
 
@@ -1577,6 +1602,7 @@
         width: 100%;
     }
 }
+
 .activation-metrics {
     grid-template-columns: repeat(5, minmax(0, 1fr));
 }

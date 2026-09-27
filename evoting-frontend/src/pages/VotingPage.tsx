@@ -11,7 +11,13 @@ import {
     FiThumbsUp,
     FiUserPlus
 } from 'react-icons/fi';
-import {clearVoterSession, getVoterSession, markVoterSessionUnableToVote, voterApi} from '../api/voterApi';
+import {
+    clearVoterSession,
+    getVoterLoginPath,
+    getVoterSession,
+    markVoterSessionUnableToVote,
+    voterApi,
+} from '../api/voterApi';
 import {type Candidate, useVotingData} from '../hooks/useVotingData';
 import {
     voterLifecycleMessage,
@@ -109,15 +115,16 @@ export default function VotingPage() {
     const voterToken = sessionStorage.getItem('voter_token');
     const electionId = sessionStorage.getItem('election_id');
     const voterSession = getVoterSession();
+    const voterLoginPath = getVoterLoginPath();
     const hasVoterSession = Boolean(voterSession);
     const sessionCanVote = Boolean(voterSession?.canVoteNow && voterSession.election.voting_open && voterSession.election.status === 'open');
 
     // Redirect if not authenticated or missing election context
     useEffect(() => {
         if (!studentId || !voterToken || !electionId || !hasVoterSession) {
-            navigate('/');
+            navigate(voterLoginPath);
         }
-    }, [studentId, voterToken, electionId, hasVoterSession, navigate]);
+    }, [studentId, voterToken, electionId, hasVoterSession, navigate, voterLoginPath]);
 
     // Fetch voting data using React Query (cached for entire session)
     const {data: votingData, isLoading: loading, error: queryError} = useVotingData(
@@ -178,7 +185,7 @@ export default function VotingPage() {
                 }
                 clearVoterSession();
                 queryClient.removeQueries({queryKey: ['votingData']});
-                navigate('/voter-login', {
+                navigate(voterLoginPath, {
                     replace: true,
                     state: {message: 'Your voter session is no longer valid. Please sign in again.'},
                 });
@@ -186,7 +193,7 @@ export default function VotingPage() {
             }
             setError(queryError instanceof Error ? queryError.message : 'Failed to load voting data.');
         }
-    }, [navigate, queryClient, queryError]);
+    }, [navigate, queryClient, queryError, voterLoginPath]);
 
     const handleSelectCandidate = (positionId: number, candidate: Candidate) => {
         setSelectedVotes(prev =>
@@ -246,7 +253,7 @@ export default function VotingPage() {
 
     const handleSubmitVotes = useCallback(async () => {
         if (!studentId || !voterToken || !electionId || !canPresentBallot || submissionInFlight.current) {
-            navigate('/');
+            navigate(voterLoginPath);
             return;
         }
 
@@ -289,7 +296,7 @@ export default function VotingPage() {
             redirectTimeout.current = setTimeout(() => {
                 clearVoterSession();
                 queryClient.removeQueries({queryKey: ['votingData']});
-                navigate('/');
+                navigate(voterLoginPath);
             }, 3000);
 
         } catch (err: unknown) {
@@ -300,7 +307,7 @@ export default function VotingPage() {
             } else if (apiError.response?.status === 401 || apiError.response?.status === 404) {
                 clearVoterSession();
                 queryClient.removeQueries({queryKey: ['votingData']});
-                navigate('/voter-login', {
+                navigate(voterLoginPath, {
                     replace: true,
                     state: {message: 'Your voter session is no longer valid. Please sign in again.'},
                 });
@@ -312,14 +319,14 @@ export default function VotingPage() {
                     setTimeout(() => {
                         clearVoterSession();
                         queryClient.removeQueries({queryKey: ['votingData']});
-                        navigate('/');
+                        navigate(voterLoginPath);
                     }, 3000);
                 } else if (apiError.response?.data?.detail === 'Student is not activated to vote.') {
                     setError('You have not been activated for this election.');
                     setTimeout(() => {
                         clearVoterSession();
                         queryClient.removeQueries({queryKey: ['votingData']});
-                        navigate('/');
+                        navigate(voterLoginPath);
                     }, 3000);
                 } else {
                     setError('Voting is not currently available. Please try again later.');
@@ -338,7 +345,7 @@ export default function VotingPage() {
             setSubmitting(false);
             submissionInFlight.current = false;
         }
-    }, [canPresentBallot, election?.id, electionId, navigate, positions.length, queryClient, selectedVotes, studentId, voterToken]);
+    }, [canPresentBallot, election?.id, electionId, navigate, positions.length, queryClient, selectedVotes, studentId, voterLoginPath, voterToken]);
 
     // Keep the existing timed auto-submit behavior for the final review card.
     useEffect(() => {
@@ -370,7 +377,7 @@ export default function VotingPage() {
                 <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-6 text-center">
                     <h2 className="text-lg font-semibold text-gray-800 mb-3">Voting unavailable</h2>
                     <p className="text-sm text-gray-600 mb-4">{voterSession ? voterLifecycleMessage(voterSession.election.status) : 'Your voter session is no longer valid. Please sign in again.'}</p>
-                    <button type="button" onClick={() => navigate('/voter-login')}
+                    <button type="button" onClick={() => navigate(voterLoginPath)}
                             className="w-full py-2 bg-blue-600 text-white rounded-sm hover:bg-blue-700">Return to Login
                     </button>
                 </div>
@@ -399,7 +406,7 @@ export default function VotingPage() {
                     <h2 className="text-xl font-bold text-gray-800 text-center mb-2">Error</h2>
                     <p className="text-gray-600 text-center mb-6">{error}</p>
                     <button
-                        onClick={() => navigate('/')}
+                        onClick={() => navigate(voterLoginPath)}
                         className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                     >
                         Return to Login

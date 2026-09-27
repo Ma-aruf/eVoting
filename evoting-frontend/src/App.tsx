@@ -19,6 +19,7 @@ import StudentLoginPage from "./pages/StudentLoginPage";
 import VotingPage from "./pages/VotingPage";
 import ResultsPage from "./pages/admin/ResultsPage";
 import LiveResultsPage from "./pages/admin/LiveResultsPage";
+import AuditLogsPage from './pages/admin/AuditLogsPage';
 import NotFoundPage from './pages/NotFoundPage';
 
 // Create a client with real-time configuration for admin data
@@ -136,6 +137,14 @@ function App() {
                                 element={
                                     <ProtectedRoute allowedRoles={['superuser', 'staff']}>
                                         <ResultsPage/>
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="audit-logs"
+                                element={
+                                    <ProtectedRoute allowedRoles={['activator', 'superuser', 'staff']}>
+                                        <AuditLogsPage/>
                                     </ProtectedRoute>
                                 }
                             />
