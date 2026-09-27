@@ -10,7 +10,7 @@ import type {UserRole} from '../contexts/AuthContext';
 function getSafeDestination(role: UserRole) {
     if (role === 'activator') return '/admin/activations';
     if (role === 'superuser' || role === 'staff') return '/admin/dashboard';
-    return getVoterSession() ? '/vote' : '/voter-login';
+    return getVoterSession() ? '/vote' : '/admin/login';
 }
 
 export default function NotFoundPage() {

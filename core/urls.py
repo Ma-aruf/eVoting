@@ -16,6 +16,7 @@ from .views import (
     ElectionManageView,
     ElectionScheduleUpdateView,
     ElectionEndTimeExtensionView,
+    VoterElectionEntryView,
     StudentVoterLoginView,
     UserViewSet,
     ImageUploadView,
@@ -52,6 +53,7 @@ urlpatterns = [
     path("health/", healthcheck),
     path("healthz/", healthz),
     # Voter authentication
+    path("voter/elections/<str:voter_entry_code>/", VoterElectionEntryView.as_view(), name="voter-election-entry"),
     path("voter/login/", StudentVoterLoginView.as_view(), name="voter-login"),
 
 

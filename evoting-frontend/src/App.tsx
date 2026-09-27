@@ -60,8 +60,7 @@ function App() {
                 <AuthProvider>
                     <ToastContainer />
                     <Routes>
-                        <Route path="/" element={<StudentLoginPage/>}/>
-                        <Route path="/voter-login" element={<StudentLoginPage/>}/>
+                        <Route path="/voter-login/:electionCode" element={<StudentLoginPage/>}/>
                         <Route path="/admin/login" element={<LoginPage/>}/>
                         <Route path="/vote" element={<VotingPage/>}/>
                         <Route

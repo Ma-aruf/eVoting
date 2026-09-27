@@ -1,7 +1,7 @@
 import {type FormEvent, useState} from 'react';
-import {useQueryClient} from '@tanstack/react-query';
+import {useQuery, useQueryClient} from '@tanstack/react-query';
 import {FiArrowRight, FiUser} from 'react-icons/fi';
-import {useLocation, useNavigate} from 'react-router-dom';
+import {useLocation, useNavigate, useParams} from 'react-router-dom';
 import api from '../apiClient.ts';
 import AuthLayout from '../components/AuthLayout';
 import Alert from '../components/ui/Alert';
@@ -13,6 +13,13 @@ import type {VoterLoginResponse} from '../types/election';
 import {voterLifecycleMessage, voterLifecycleMessageFromDetail} from '../utils/electionLifecycle';
 
 type ApiError = { response?: { status?: number; data?: { detail?: string } } };
+type VoterElectionEntry = {
+    name: string;
+    year: number;
+    voter_login_mode: 'activator_id' | 'activator_pin' | 'sms_pin';
+    status: string;
+    voting_open: boolean;
+};
 
 function getVoterLoginError(error: unknown) {
     const apiError = error as ApiError;
@@ -66,6 +73,7 @@ function getVoterLoginError(error: unknown) {
 }
 
 export default function StudentLoginPage() {
+    const {electionCode} = useParams<{electionCode?: string}>();
     const [studentId, setStudentId] = useState('');
     const [pin, setPin] = useState('');
     const [loading, setLoading] = useState(false);
@@ -75,6 +83,17 @@ export default function StudentLoginPage() {
     );
     const navigate = useNavigate();
     const queryClient = useQueryClient();
+    const electionEntryQuery = useQuery({
+        queryKey: ['voter-election-entry', electionCode],
+        queryFn: async () => {
+            const response = await api.get<VoterElectionEntry>(
+                `api/voter/elections/${electionCode}/`
+            );
+            return response.data;
+        },
+        enabled: Boolean(electionCode),
+        retry: false,
+    });
 
     const handleSubmit = async (event: FormEvent) => {
         event.preventDefault();
@@ -84,7 +103,11 @@ export default function StudentLoginPage() {
         queryClient.removeQueries({queryKey: ['votingData']});
         try {
             const submittedStudentId = studentId.trim();
-            const response = await api.post<VoterLoginResponse>('api/voter/login/', {student_id: submittedStudentId, pin});
+            const response = await api.post<VoterLoginResponse>('api/voter/login/', {
+                student_id: submittedStudentId,
+                pin,
+                ...(electionCode ? {election_code: electionCode} : {}),
+            });
             const {can_vote_now: canVoteNow, election} = response.data;
             if (!canVoteNow || !election.voting_open || election.status !== 'open') {
                 setError(voterLifecycleMessage(election.status));
@@ -99,19 +122,34 @@ export default function StudentLoginPage() {
         }
     };
 
-    return <AuthLayout title="Voter Login">
+    const electionEntry = electionEntryQuery.data;
+    const electionLabel = electionEntry
+        ? `${electionEntry.name} - ${electionEntry.year}`
+        : undefined;
+    const requiresPin = electionEntry?.voter_login_mode !== 'activator_id';
+    const pinLabel = electionEntry?.voter_login_mode === 'sms_pin'
+        ? 'SMS PIN'
+        : '8-digit voter PIN';
+
+    return <AuthLayout title="Voter Login" eyebrow={electionLabel}>
         <form onSubmit={handleSubmit} className="auth-form">
-            {error && <Alert variant="error" title="Unable to continue">{error}</Alert>}
+            {(error || electionEntryQuery.isError) && (
+                <Alert variant="error" title="Unable to continue">
+                    {error || 'This election login link is not valid.'}
+                </Alert>
+            )}
             <FormField id="student-id" label="Voter ID" required>
                 <TextInput autoComplete="username" inputMode="text" value={studentId}
                            onChange={(event) => setStudentId(event.target.value.toUpperCase())}
                            placeholder="e.g. STU-001" required autoFocus/>
             </FormField>
-            <FormField id="voter-pin" label="8-digit voter PIN (if required)">
-                <TextInput autoComplete="one-time-code" inputMode="numeric" maxLength={8}
-                           value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, 8))}
-                           placeholder="Leave blank if your election uses student-ID login"/>
-            </FormField>
+            {requiresPin && (
+                <FormField id="voter-pin" label={pinLabel} required>
+                    <TextInput autoComplete="one-time-code" inputMode="numeric" maxLength={8}
+                               value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, 8))}
+                               placeholder={`Enter your ${pinLabel.toLowerCase()}`}/>
+                </FormField>
+            )}
             <Button type="submit" className="auth-submit" loading={loading}
                     disabled={!studentId.trim()}
                     leadingIcon={<FiUser aria-hidden="true"/>}

@@ -189,7 +189,7 @@ class ElectionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Election
         fields = [
-            "id", "name", "year", "start_time", "end_time", "voting_enabled",
+            "id", "name", "voter_entry_code", "year", "start_time", "end_time", "voting_enabled",
             "voter_login_mode",
             "status", "voting_open", "candidate_changes_locked", "ballot_ready",
             "is_active",

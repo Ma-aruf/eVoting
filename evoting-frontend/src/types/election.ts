@@ -12,6 +12,7 @@ export interface ElectionLifecycleFields {
 export interface Election extends ElectionLifecycleFields {
     id: number;
     name: string;
+    voter_entry_code?: string;
     year: number;
     start_time: string;
     end_time: string;

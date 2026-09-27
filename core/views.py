@@ -1260,6 +1260,34 @@ class ElectionCreateView(APIView):
         return Response(ElectionSerializer(election).data, status=status.HTTP_201_CREATED)
 
 
+class VoterElectionEntryView(APIView):
+    """Return safe election context for a public voter login link."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request, voter_entry_code):
+        try:
+            election = Election.objects.get(voter_entry_code=voter_entry_code.lower())
+        except Election.DoesNotExist:
+            return Response(
+                {"detail": "This election login link is not valid."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        lifecycle = election_lifecycle(
+            election,
+            timezone.now(),
+            include_candidate_lock=False,
+        )
+        return Response({
+            "name": election.name,
+            "year": election.year,
+            "voter_login_mode": election.voter_login_mode,
+            "status": lifecycle["status"],
+            "voting_open": lifecycle["voting_open"],
+        })
+
+
 class StudentVoterLoginView(APIView):
     """Authenticate an activated voter with their one-time PIN."""
 
@@ -1282,6 +1310,7 @@ class StudentVoterLoginView(APIView):
     def _actual_post(self, request):
         student_id = request.data.get("student_id")
         pin = request.data.get("pin")
+        election_code = str(request.data.get("election_code") or "").strip().lower()
 
         if not student_id:
             return Response(
@@ -1297,8 +1326,20 @@ class StudentVoterLoginView(APIView):
         )
 
         now = timezone.now()
+        election_filter = {}
+        if election_code:
+            try:
+                election_filter["election"] = Election.objects.get(
+                    voter_entry_code=election_code
+                )
+            except Election.DoesNotExist:
+                return Response(
+                    {"detail": "This election login link is not valid."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
         matching_students = list(
-            Student.objects.filter(student_id=student_id).select_related("election")
+            Student.objects.filter(student_id=student_id, **election_filter)
+            .select_related("election")
         )
         if not matching_students:
             self.security_logger.warning(

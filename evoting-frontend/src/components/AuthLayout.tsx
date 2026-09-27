@@ -8,13 +8,14 @@ type AuthLayoutProps = {
     eyebrow?: string;
 };
 
-export default function AuthLayout({title, children, securityMessage}: AuthLayoutProps) {
+export default function AuthLayout({title, children, securityMessage, eyebrow}: AuthLayoutProps) {
     return <main className="auth-layout">
         <section className="auth-presentation" aria-label="eVoting information">
             <img className="absolute top-1 left-1 w-50" src="/logo.png" alt="logo"/>
             <div className="auth-brand-lockup"></div>
         </section>
         <section className="auth-content" aria-labelledby="auth-page-title">
+            {eyebrow && <p className="auth-election-context">{eyebrow}</p>}
             <div className="auth-card">
                 <div className="auth-card-heading">
                     <h1 id="auth-page-title">{title}</h1>

@@ -1,5 +1,5 @@
 import {type ChangeEvent, type FormEvent, useState} from 'react';
-import {FiCalendar, FiCheckCircle, FiClock, FiEdit2, FiPlus} from 'react-icons/fi';
+import {FiCalendar, FiCheckCircle, FiClock, FiCopy, FiEdit2, FiPlus} from 'react-icons/fi';
 import StatisticCard from '../../components/StatisticCard';
 
 import Modal from '../../components/ui/Modal';
@@ -58,6 +58,7 @@ export default function ElectionsPage() {
     const [editedStartTime, setEditedStartTime] = useState('');
     const [editedEndTime, setEditedEndTime] = useState('');
     const [scheduleEditError, setScheduleEditError] = useState('');
+    const [copiedEntryCode, setCopiedEntryCode] = useState<string | null>(null);
     const editingElection = elections.find(election => election.id === scheduleElectionId) ?? null;
     const selectedVoterLoginMode = voterLoginModeOptions.find(
         option => option.value === voterLoginMode
@@ -155,6 +156,15 @@ export default function ElectionsPage() {
                 },
             }
         );
+    };
+
+    const voterLoginUrl = (election: Election) =>
+        `${window.location.origin}/voter-login/${election.voter_entry_code}`;
+
+    const copyVoterLoginUrl = async (election: Election) => {
+        await navigator.clipboard.writeText(voterLoginUrl(election));
+        setCopiedEntryCode(election.voter_entry_code ?? null);
+        window.setTimeout(() => setCopiedEntryCode(null), 1800);
     };
 
     return (
@@ -274,6 +284,7 @@ export default function ElectionsPage() {
                                 <th scope="col">Voting opens</th>
                                 <th scope="col">Voting closes</th>
                                 <th scope="col">Status</th>
+                                <th scope="col">Voter login link</th>
                                 <th scope="col">Actions</th>
                             </tr>
                             </thead>
@@ -303,6 +314,24 @@ export default function ElectionsPage() {
 
                                     <td data-label="Status">
                                         {electionStatusPresentation(election.status).label}
+                                    </td>
+
+                                    <td data-label="Voter login link">
+                                        <div className="election-login-link">
+                                            <a href={voterLoginUrl(election)} target="_blank" rel="noreferrer">
+                                                {election.voter_entry_code}
+                                            </a>
+                                            <Button
+                                                type="button"
+                                                variant="quiet"
+                                                size="compact"
+                                                leadingIcon={<FiCopy aria-hidden="true"/>}
+                                                aria-label={`Copy voter login link for ${election.name}`}
+                                                onClick={() => void copyVoterLoginUrl(election)}
+                                            >
+                                                {copiedEntryCode === election.voter_entry_code ? 'Copied' : 'Copy'}
+                                            </Button>
+                                        </div>
                                     </td>
 
                                     <td data-label="Actions">

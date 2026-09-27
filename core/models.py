@@ -1,8 +1,24 @@
+import secrets
+
 from django.db import models
 from django.db.models import F, Q
 from django.contrib.auth.models import AbstractUser, UserManager as DjangoUserManager
 from django.core.exceptions import ValidationError
 from django.utils import timezone
+
+
+VOTER_ENTRY_CODE_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789"
+VOTER_ENTRY_CODE_PREFIXES = {
+    "activator_id": "id",
+    "activator_pin": "pn",
+    "sms_pin": "sm",
+}
+
+
+def generate_voter_entry_code(login_mode="activator_pin"):
+    prefix = VOTER_ENTRY_CODE_PREFIXES.get(login_mode, "pn")
+    suffix = "".join(secrets.choice(VOTER_ENTRY_CODE_ALPHABET) for _ in range(4))
+    return prefix + suffix
 
 
 class UserManager(DjangoUserManager):
@@ -91,6 +107,12 @@ class Election(models.Model):
     )
 
     name = models.CharField(max_length=100)
+    voter_entry_code = models.CharField(
+        max_length=6,
+        unique=True,
+        default=generate_voter_entry_code,
+        editable=False,
+    )
     year = models.PositiveIntegerField()
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
@@ -164,6 +186,15 @@ class Election(models.Model):
 
         if errors:
             raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        expected_prefix = VOTER_ENTRY_CODE_PREFIXES.get(self.voter_login_mode, "pn")
+        if not self.voter_entry_code or not self.voter_entry_code.startswith(expected_prefix):
+            code = generate_voter_entry_code(self.voter_login_mode)
+            while type(self).objects.filter(voter_entry_code=code).exclude(pk=self.pk).exists():
+                code = generate_voter_entry_code(self.voter_login_mode)
+            self.voter_entry_code = code
+        return super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.name}, ({self.year})"
