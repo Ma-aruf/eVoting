@@ -1244,9 +1244,15 @@
 .sms-delivery-table {
 }
 
-.management-table .sms-delivery-table thead {
+.sms-delivery-table thead th {
     background: var(--color-primary);
-    text-transform: unset;
+    text-transform: none;
+    color: white;
+}
+
+.sms-delivery-table thead th:last-child {
+    display: flex;
+    align-self: flex-end;
 }
 
 .table-secondary {
@@ -1450,3 +1456,107 @@
     }
 }
 
+
+.not-found-page {
+    display: grid;
+    min-height: 100vh;
+    place-items: center;
+    padding: var(--space-6) var(--space-4);
+    background: var(--color-background);
+}
+
+.not-found-content {
+    display: flex;
+    width: min(100%, 34rem);
+    flex-direction: column;
+    align-items: center;
+    padding: var(--space-6);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-sm);
+    text-align: center;
+}
+
+.not-found-logo {
+    width: min(100%, 12rem);
+    height: auto;
+    margin-bottom: var(--space-5);
+}
+
+.not-found-code {
+    margin: 0;
+    color: var(--color-primary);
+    font-size: clamp(3rem, 12vw, 5.5rem);
+    font-weight: 700;
+    line-height: .9;
+}
+
+.not-found-code::after {
+    display: block;
+    width: 2.5rem;
+    height: .2rem;
+    margin: var(--space-3) auto var(--space-4);
+    background: var(--color-accent-gold);
+    content: '';
+}
+
+.not-found-content h1 {
+    margin: 0;
+    color: var(--color-text);
+    font-size: var(--font-size-xl);
+    line-height: var(--line-height-tight);
+}
+
+.not-found-message {
+    max-width: 28rem;
+    margin: var(--space-3) 0 0;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+}
+
+.not-found-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    margin-top: var(--space-5);
+}
+
+.not-found-back {
+    display: inline-flex;
+    min-height: 2.5rem;
+    align-items: center;
+    gap: var(--space-2);
+    border: 0;
+    padding: .5rem .75rem;
+    color: var(--color-primary);
+    background: transparent;
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+}
+
+.not-found-back:hover {
+    color: var(--color-primary-dark);
+    background: var(--color-primary-soft);
+}
+
+@media (max-width: 30rem) {
+    .not-found-page {
+        padding: var(--space-4) var(--space-3);
+    }
+
+    .not-found-content {
+        padding: var(--space-5) var(--space-4);
+    }
+
+    .not-found-actions {
+        width: 100%;
+        flex-direction: column;
+    }
+
+    .not-found-actions .ui-button {
+        width: 100%;
+    }
+}

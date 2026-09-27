@@ -231,7 +231,7 @@ class BulkStudentUploadView(APIView):
             phone_number = get_str(header_map["phone_number"]) if "phone_number" in header_map else ""
 
             if not student_id or not full_name or not class_name or (
-                election.voter_login_mode == Election.VOTER_LOGIN_MODE_SMS and not phone_number
+                    election.voter_login_mode == Election.VOTER_LOGIN_MODE_SMS and not phone_number
             ):
                 continue  # skip incomplete rows
 
@@ -1300,7 +1300,7 @@ class StudentVoterLoginView(APIView):
             student
             for student in open_students
             if election_ballot_ready(student.election)
-            and student_can_vote_now(student, student.election, now)
+               and student_can_vote_now(student, student.election, now)
         ]
 
         if len(eligible_students) == 1:
@@ -1346,22 +1346,24 @@ class StudentVoterLoginView(APIView):
                 )
 
             if (
-                open_student.election.voter_login_mode == Election.VOTER_LOGIN_MODE_ID
-                and (
+                    open_student.election.voter_login_mode == Election.VOTER_LOGIN_MODE_ID
+                    and (
                     open_student.voter_activation_expires_at is None
                     or voter_activation_expired(open_student.voter_activation_expires_at, now)
                     or (
-                        open_student.voter_session_expires_at is not None
-                        and voter_session_expired(open_student.voter_session_expires_at, now)
+                            open_student.voter_session_expires_at is not None
+                            and voter_session_expired(open_student.voter_session_expires_at, now)
                     )
-                )
+            )
             ):
                 deactivate_expired_voter(open_student)
                 return Response(
-                    {"detail": "This voter activation has expired. Please ask an election official to activate you again."},
+                    {
+                        "detail": "This voter activation has expired. Please ask an election official to activate you again."},
                     status=status.HTTP_403_FORBIDDEN,
                 )
-            if election_uses_pin_login(open_student.election) and (not open_student.voting_pin_hash or not open_student.voting_pin_created_at):
+            if election_uses_pin_login(open_student.election) and (
+                    not open_student.voting_pin_hash or not open_student.voting_pin_created_at):
                 deactivate_expired_voter(open_student)
                 return Response(
                     {
@@ -1373,7 +1375,8 @@ class StudentVoterLoginView(APIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-            if election_uses_pin_login(open_student.election) and voter_access_expired(open_student.voting_pin_created_at, now, voter_pin_ttl_for_election(open_student.election)):
+            if election_uses_pin_login(open_student.election) and voter_access_expired(
+                    open_student.voting_pin_created_at, now, voter_pin_ttl_for_election(open_student.election)):
                 deactivate_expired_voter(open_student)
                 return Response(
                     {
@@ -1404,7 +1407,8 @@ class StudentVoterLoginView(APIView):
                 detail = "Voting has ended."
             return Response({"detail": detail}, status=status.HTTP_403_FORBIDDEN)
 
-        if election_uses_pin_login(active_election) and (not isinstance(pin, str) or len(pin) != 8 or not pin.isdigit()):
+        if election_uses_pin_login(active_election) and (
+                not isinstance(pin, str) or len(pin) != 8 or not pin.isdigit()):
             return Response(
                 {"detail": "An 8-digit voter PIN is required."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -1424,7 +1428,8 @@ class StudentVoterLoginView(APIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-            if election_uses_pin_login(active_election) and (not student.voting_pin_hash or not student.voting_pin_created_at):
+            if election_uses_pin_login(active_election) and (
+                    not student.voting_pin_hash or not student.voting_pin_created_at):
                 deactivate_expired_voter(student)
                 return Response(
                     {
@@ -1436,7 +1441,9 @@ class StudentVoterLoginView(APIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-            if election_uses_pin_login(active_election) and voter_access_expired(student.voting_pin_created_at, now, voter_pin_ttl_for_election(active_election)):
+            if election_uses_pin_login(active_election) and voter_access_expired(student.voting_pin_created_at, now,
+                                                                                 voter_pin_ttl_for_election(
+                                                                                     active_election)):
                 deactivate_expired_voter(student)
                 return Response(
                     {
@@ -1463,7 +1470,7 @@ class StudentVoterLoginView(APIView):
             if election_uses_pin_login(active_election) and not verify_voter_pin(pin, student.voting_pin_hash):
                 student.voting_pin_attempts += 1
                 attempts_exhausted = (
-                    student.voting_pin_attempts >= VOTER_PIN_MAX_ATTEMPTS
+                        student.voting_pin_attempts >= VOTER_PIN_MAX_ATTEMPTS
                 )
                 if attempts_exhausted:
                     student.is_active = False

@@ -30,7 +30,8 @@ import Badge from '../../components/ui/Badge';
 import LoadingState from '../../components/ui/LoadingState';
 import EmptyState from '../../components/ui/EmptyState';
 import ErrorState from '../../components/ui/ErrorState';
-import {BsFillGearFill, BsSend, BsSendFill} from "react-icons/bs";
+import ConfirmModal from '../../components/ConfirmModal';
+import {BsFillGearFill, BsSendFill} from "react-icons/bs";
 
 type ApiError = {
     response?: {
@@ -57,15 +58,6 @@ const smsStatusLabels: Record<SmsVoterStatusRow['status'], string> = {
     voted: 'Voted',
 };
 
-const smsStatusVariants: Record<SmsVoterStatusRow['status'], 'neutral' | 'success' | 'warning' | 'error' | 'primary'> = {
-    not_sent: 'neutral',
-    sent: 'success',
-    generated: 'warning',
-    expired: 'warning',
-    failed: 'error',
-    missing_phone: 'warning',
-    voted: 'primary',
-};
 
 function formatSmsDate(value: string | null) {
     if (!value) return '—';
@@ -87,13 +79,17 @@ function canGenerateSmsPinForVoter(row: SmsVoterStatusRow) {
     return row.status === 'not_sent' || row.status === 'expired' || row.status === 'failed' || row.status === 'missing_phone';
 }
 
+type SmsConfirmAction =
+    | {kind: 'send_all'}
+    | {kind: 'resend'; row: SmsVoterStatusRow}
+    | {kind: 'generate'; row: SmsVoterStatusRow};
+
 export default function ActivationsPage() {
     const {user} = useAuth();
     const isScopedRole = user?.role === 'activator' || user?.role === 'staff';
     // Selection and search state
 
-    const [selectedElectionId, setSelectedElectionId] =
-        useState<number | null>(null);
+    const [selectedElectionId, setSelectedElectionId] = useState<number | null>(null);
 
     const [studentQuery, setStudentQuery] = useState('');
     const [selectedStudentId, setSelectedStudentId] = useState('');
@@ -106,6 +102,7 @@ export default function ActivationsPage() {
     const [smsStatusSearch, setSmsStatusSearch] = useState('');
     const [resendingStudentId, setResendingStudentId] = useState<number | null>(null);
     const [generatingStudentId, setGeneratingStudentId] = useState<number | null>(null);
+    const [smsConfirmAction, setSmsConfirmAction] = useState<SmsConfirmAction | null>(null);
 
     const listboxId = 'activation-student-options';
 
@@ -120,6 +117,46 @@ export default function ActivationsPage() {
     const sendSmsPins = useSendSmsPins();
     const resendSmsPin = useResendSmsPin();
     const generateSmsPin = useGenerateSmsPin();
+
+    const confirmSmsAction = async () => {
+        if (!smsConfirmAction || !effectiveElectionId) return;
+
+        if (smsConfirmAction.kind === 'send_all') {
+            setSmsSendResult(null);
+            const result = await sendSmsPins.mutateAsync(effectiveElectionId);
+            setSmsSendResult(result);
+            return;
+        }
+
+        const {row} = smsConfirmAction;
+        if (smsConfirmAction.kind === 'resend') {
+            setResendingStudentId(row.id);
+            try {
+                await resendSmsPin.mutateAsync({electionId: effectiveElectionId, studentId: row.id});
+            } finally {
+                setResendingStudentId(null);
+            }
+            return;
+        }
+
+        setGeneratingStudentId(row.id);
+        try {
+            const data = await generateSmsPin.mutateAsync({electionId: effectiveElectionId, studentId: row.id});
+            if (data.voting_pin) {
+                setGeneratedPin(data.voting_pin);
+                setGeneratedPinStudent(row.full_name);
+                setActivationSuccessStudent('');
+            }
+        } finally {
+            setGeneratingStudentId(null);
+        }
+    };
+
+    const smsConfirmationMessage = smsConfirmAction?.kind === 'send_all'
+        ? 'Send a fresh PIN by SMS to all eligible voters in this election?'
+        : smsConfirmAction?.kind === 'resend'
+            ? 'Send a new PIN by SMS to ' + smsConfirmAction.row.full_name + '?'
+            : 'Generate a PIN for ' + (smsConfirmAction?.row.full_name ?? 'this voter') + ' without sending an SMS?';
 
     // Query data
 
@@ -556,13 +593,7 @@ export default function ActivationsPage() {
                                             loading={sendSmsPins.isPending}
                                             disabled={!canSendSmsPins}
                                             title={!canSendSmsPins ? (activationBlockMessage || 'SMS PIN delivery is not available for this election yet.') : undefined}
-                                            onClick={() => {
-                                                if (!window.confirm('Send fresh voter PINs by SMS to all eligible voters in this election?')) return;
-                                                setSmsSendResult(null);
-                                                sendSmsPins.mutate(effectiveElectionId, {
-                                                    onSuccess: data => setSmsSendResult(data),
-                                                });
-                                            }}
+                                            onClick={() => setSmsConfirmAction({kind: 'send_all'})}
                                         >
                                             Send PINs by SMS
                                         </Button>
@@ -649,17 +680,7 @@ export default function ActivationsPage() {
                                                                             size='compact'
                                                                             loading={resendingStudentId === row.id}
                                                                             disabled={!canSendSmsPins || resendingStudentId !== null || generatingStudentId !== null}
-                                                                            onClick={() => {
-                                                                                if (!effectiveElectionId || !window.confirm('Send a new PIN by SMS?')) return;
-                                                                                setResendingStudentId(row.id);
-                                                                                resendSmsPin.mutate(
-                                                                                    {
-                                                                                        electionId: effectiveElectionId,
-                                                                                        studentId: row.id
-                                                                                    },
-                                                                                    {onSettled: () => setResendingStudentId(null)},
-                                                                                );
-                                                                            }}
+                                                                            onClick={() => setSmsConfirmAction({kind: 'resend', row})}
                                                                         >
 
                                                                             <div
@@ -682,26 +703,7 @@ export default function ActivationsPage() {
                                                                             size='compact'
                                                                             loading={generatingStudentId === row.id}
                                                                             disabled={!canSendSmsPins || resendingStudentId !== null || generatingStudentId !== null}
-                                                                            onClick={() => {
-                                                                                if (!effectiveElectionId || !window.confirm('Generate a PIN without sending SMS?')) return;
-                                                                                setGeneratingStudentId(row.id);
-                                                                                generateSmsPin.mutate(
-                                                                                    {
-                                                                                        electionId: effectiveElectionId,
-                                                                                        studentId: row.id
-                                                                                    },
-                                                                                    {
-                                                                                        onSuccess: data => {
-                                                                                            if (data.voting_pin) {
-                                                                                                setGeneratedPin(data.voting_pin);
-                                                                                                setGeneratedPinStudent(row.full_name);
-                                                                                                setActivationSuccessStudent('');
-                                                                                            }
-                                                                                        },
-                                                                                        onSettled: () => setGeneratingStudentId(null),
-                                                                                    },
-                                                                                );
-                                                                            }}
+                                                                            onClick={() => setSmsConfirmAction({kind: 'generate', row})}
                                                                         >
                                                                             <div
                                                                                 className="flex flex-row gap-1 items-center">
@@ -946,6 +948,16 @@ export default function ActivationsPage() {
                     )}
                 </div>
             )}
+        <ConfirmModal
+            isOpen={Boolean(smsConfirmAction)}
+            onClose={() => setSmsConfirmAction(null)}
+            onConfirm={confirmSmsAction}
+            title={smsConfirmAction?.kind === 'send_all' ? 'Send PINs by SMS' : smsConfirmAction?.kind === 'resend' ? 'Resend voter PIN' : 'Generate voter PIN'}
+            message={smsConfirmationMessage}
+            confirmText={smsConfirmAction?.kind === 'send_all' ? 'Send PINs' : smsConfirmAction?.kind === 'resend' ? 'Resend PIN' : 'Generate PIN'}
+            cancelText='Cancel'
+            type='warning'
+        />
         </PageContainer>
     );
 }

@@ -19,6 +19,7 @@ import StudentLoginPage from "./pages/StudentLoginPage";
 import VotingPage from "./pages/VotingPage";
 import ResultsPage from "./pages/admin/ResultsPage";
 import LiveResultsPage from "./pages/admin/LiveResultsPage";
+import NotFoundPage from './pages/NotFoundPage';
 
 // Create a client with real-time configuration for admin data
 const queryClient = new QueryClient({
@@ -147,9 +148,9 @@ function App() {
                                     </ProtectedRoute>
                                 }
                             />
-                            {/* Fallback */}
-                            <Route path="*" element={<Navigate to="/admin/dashboard" replace/>}/>
                         </Route>
+                        <Route path="/admin/*" element={<NotFoundPage/>}/>
+                        <Route path="*" element={<NotFoundPage/>}/>
                     </Routes>
                 </AuthProvider>
             </BrowserRouter>

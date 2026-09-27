@@ -113,6 +113,9 @@ class ElectionAdmin(admin.ModelAdmin):
             return False
         return super().has_change_permission(request, obj)
 
+    def has_delete_permission(self, request, obj=None):
+        return bool(request.user and request.user.is_superuser)
+
     def save_model(self, request, obj, form, change):
         with transaction.atomic():
             was_enabled = False
