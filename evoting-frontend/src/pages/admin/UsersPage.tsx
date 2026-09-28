@@ -1,11 +1,13 @@
 import {type FormEvent, useEffect, useState} from 'react';
-import {FiEdit2, FiLock, FiPlus, FiSearch, FiTrash2} from 'react-icons/fi';
+import {FiChevronLeft, FiChevronRight, FiEdit2, FiLock, FiPlus, FiSearch, FiTrash2, FiUsers} from 'react-icons/fi';
 import api from '../../apiClient';
 import ConfirmModal from '../../components/ConfirmModal';
 import PageContainer from '../../components/PageContainer';
 import Alert from '../../components/ui/Alert';
 import Button from '../../components/ui/Button';
+import EmptyState from '../../components/ui/EmptyState';
 import FormField from '../../components/ui/FormField';
+import LoadingState from '../../components/ui/LoadingState';
 import Modal from '../../components/ui/Modal';
 import SelectField from '../../components/ui/SelectField';
 import TextInput from '../../components/ui/TextInput';
@@ -36,6 +38,7 @@ interface ListResponse<T> {
 }
 
 type ApiError = { response?: { data?: unknown } };
+const PAGE_SIZE = 10;
 
 function errorMessage(error: unknown, fallback: string) {
     const detail = (error as ApiError).response?.data;
@@ -51,6 +54,8 @@ function errorMessage(error: unknown, fallback: string) {
 export default function UsersPage() {
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(false);
+    const [usersLoading, setUsersLoading] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
     const [showForm, setShowForm] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [formError, setFormError] = useState('');
@@ -64,9 +69,15 @@ export default function UsersPage() {
     const elections = electionsQuery.data ?? [];
 
     const filteredUsers = users.filter(user => user.username.toLowerCase().includes(searchTerm.toLowerCase()));
+    const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+    const visiblePage = Math.min(currentPage, totalPages);
+    const visibleUsers = filteredUsers.slice(
+        (visiblePage - 1) * PAGE_SIZE,
+        visiblePage * PAGE_SIZE,
+    );
 
     const fetchUsers = async () => {
-        setLoading(true);
+        setUsersLoading(true);
         try {
             const res = await api.get<User[] | ListResponse<User>>('api/users/');
             const data = res.data;
@@ -74,7 +85,7 @@ export default function UsersPage() {
         } catch (error) {
             showError(errorMessage(error, 'Failed to load users.'));
         } finally {
-            setLoading(false);
+            setUsersLoading(false);
         }
     };
 
@@ -181,6 +192,16 @@ export default function UsersPage() {
                     search</Button>}
 
             <section className="management-panel users-table-section" aria-label="User records">
+                {usersLoading ? (
+                    <LoadingState title="Loading users" message="Fetching managed user accounts." />
+                ) : filteredUsers.length === 0 ? (
+                    <EmptyState
+                        title={searchTerm ? 'No users match your search' : 'No users found'}
+                        message={searchTerm ? 'Try a different username.' : 'Add a user to get started.'}
+                        icon={<FiUsers aria-hidden="true" />}
+                    />
+                ) : (
+                    <>
                 <div className="management-table-wrap">
                     <table className="management-table audit-logs-table users-table">
                         <caption className="sr-only">Managed users</caption>
@@ -194,7 +215,7 @@ export default function UsersPage() {
                         </tr>
                         </thead>
                         <tbody>
-                        {filteredUsers.map(user => (
+                        {visibleUsers.map(user => (
                             <tr key={user.id}>
                                 <td className="users-table-identity" data-label="Username">
                                     <div className="users-identity">
@@ -232,15 +253,38 @@ export default function UsersPage() {
                                 </td>
                             </tr>
                         ))}
-                        {!loading && filteredUsers.length === 0 && (
-                            <tr>
-                                <td colSpan={5}
-                                    className="users-empty-cell">{searchTerm ? 'No users match your search.' : 'No users found. Add a user to get started.'}</td>
-                            </tr>
-                        )}
                         </tbody>
                     </table>
                 </div>
+                        {totalPages > 1 && (
+                            <nav className="audit-logs-pagination" aria-label="Users pagination">
+                                <span>Page {visiblePage} of {totalPages}</span>
+                                <div>
+                                    <Button
+                                        type="button"
+                                        variant="quiet"
+                                        size="compact"
+                                        leadingIcon={<FiChevronLeft aria-hidden="true"/>}
+                                        disabled={visiblePage === 1}
+                                        onClick={() => setCurrentPage(page => Math.max(page - 1, 1))}
+                                    >
+                                        Previous
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="quiet"
+                                        size="compact"
+                                        trailingIcon={<FiChevronRight aria-hidden="true"/>}
+                                        disabled={visiblePage === totalPages}
+                                        onClick={() => setCurrentPage(page => Math.min(page + 1, totalPages))}
+                                    >
+                                        Next
+                                    </Button>
+                                </div>
+                            </nav>
+                        )}
+                    </>
+                )}
             </section>
 
             <Modal open={showForm} onClose={resetForm} title={editingUser ? 'Edit user' : 'Add user'}

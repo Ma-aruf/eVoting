@@ -1,4 +1,4 @@
-import {type FormEvent, useState} from 'react';
+import {type FormEvent, useEffect, useState} from 'react';
 import {useQuery, useQueryClient} from '@tanstack/react-query';
 import {FiArrowRight, FiUser} from 'react-icons/fi';
 import {useLocation, useNavigate, useParams} from 'react-router-dom';
@@ -94,6 +94,14 @@ export default function StudentLoginPage() {
         enabled: Boolean(electionCode),
         retry: false,
     });
+    const isInvalidElectionLink = electionEntryQuery.isError
+        && (electionEntryQuery.error as ApiError).response?.status === 404;
+
+    useEffect(() => {
+        if (isInvalidElectionLink) {
+            navigate('/404', {replace: true});
+        }
+    }, [isInvalidElectionLink, navigate]);
 
     const handleSubmit = async (event: FormEvent) => {
         event.preventDefault();
@@ -133,6 +141,8 @@ export default function StudentLoginPage() {
     const pinLabel = electionEntry?.voter_login_mode === 'sms_pin'
         ? 'SMS PIN'
         : '8-digit voter PIN';
+
+    if (isInvalidElectionLink) return null;
 
     return <AuthLayout title="Voter Login" eyebrow={electionLabel}>
         <form onSubmit={handleSubmit} className="auth-form">

@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import {useState} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {FiActivity, FiChevronLeft, FiChevronRight} from 'react-icons/fi';
 
@@ -36,14 +36,11 @@ export default function AuditLogsPage() {
     const events = auditQuery.data ?? [];
     const [currentPage, setCurrentPage] = useState(1);
     const totalPages = Math.max(1, Math.ceil(events.length / PAGE_SIZE));
+    const visiblePage = Math.min(currentPage, totalPages);
     const visibleEvents = events.slice(
-        (currentPage - 1) * PAGE_SIZE,
-        currentPage * PAGE_SIZE,
+        (visiblePage - 1) * PAGE_SIZE,
+        visiblePage * PAGE_SIZE,
     );
-
-    useEffect(() => {
-        setCurrentPage(page => Math.min(page, totalPages));
-    }, [totalPages]);
 
     return (
         <section className="management-panel audit-logs-page" aria-labelledby="audit-logs-title">
@@ -89,14 +86,14 @@ export default function AuditLogsPage() {
                     </table>
                     {totalPages > 1 && (
                         <nav className="audit-logs-pagination" aria-label="Audit trail pagination">
-                            <span>Page {currentPage} of {totalPages}</span>
+                            <span>Page {visiblePage} of {totalPages}</span>
                             <div>
                                 <Button
                                     type="button"
                                     variant="quiet"
                                     size="compact"
                                     leadingIcon={<FiChevronLeft aria-hidden="true"/>}
-                                    disabled={currentPage === 1}
+                                    disabled={visiblePage === 1}
                                     onClick={() => setCurrentPage(page => Math.max(page - 1, 1))}
                                 >
                                     Previous
@@ -106,7 +103,7 @@ export default function AuditLogsPage() {
                                     variant="quiet"
                                     size="compact"
                                     trailingIcon={<FiChevronRight aria-hidden="true"/>}
-                                    disabled={currentPage === totalPages}
+                                    disabled={visiblePage === totalPages}
                                     onClick={() => setCurrentPage(page => Math.min(page + 1, totalPages))}
                                 >
                                     Next
