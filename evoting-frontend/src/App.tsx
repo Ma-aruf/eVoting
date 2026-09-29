@@ -59,10 +59,11 @@ function App() {
         <QueryClientProvider client={queryClient}>
             <BrowserRouter>
                 <AuthProvider>
-                    <ToastContainer />
+                    <ToastContainer/>
                     <Routes>
                         <Route path="/voter-login/:electionCode" element={<StudentLoginPage/>}/>
                         <Route path="/admin/login" element={<LoginPage/>}/>
+                        <Route path="/" element={<LoginPage/>}/>
                         <Route path="/vote" element={<VotingPage/>}/>
                         <Route
                             path="/admin/live-results"
