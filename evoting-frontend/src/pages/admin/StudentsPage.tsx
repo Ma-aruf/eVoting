@@ -43,12 +43,25 @@ import {
 
 import {getApiErrorDetail} from '../../utils/apiErrors';
 import {showError} from '../../utils/toast';
+import {downloadCsv} from '../../utils/exportCsv';
 
 const CLASS_OPTIONS = ['Form 1', 'Form 2', 'Form 3'];
 
 type UploadResult = {
     detail?: string;
-    errors?: unknown;
+    created?: number;
+    invalid_count?: number;
+    preview?: boolean;
+    valid_count?: number;
+    rows?: Array<{
+        row_number: number;
+        student_id: string;
+        full_name: string;
+        class_name: string;
+        phone_number: string;
+        errors: string[];
+        warnings: string[];
+    }>;
 };
 
 const message = (error: unknown, fallback: string): string =>
@@ -157,6 +170,7 @@ export default function StudentsPage() {
     const [phoneNumber, setPhoneNumber] = useState('');
 
     const [file, setFile] = useState<File | null>(null);
+    const [importPreview, setImportPreview] = useState<UploadResult | null>(null);
 
     const [editing, setEditing] = useState<Student | null>(null);
     const [deleting, setDeleting] = useState<Student | null>(null);
@@ -253,18 +267,23 @@ export default function StudentsPage() {
     const handleUpload = (event: FormEvent) => {
         event.preventDefault();
 
-        if (file && effectiveElectionId) {
-            upload.mutate(
-                {
-                    file,
-                    election_id: effectiveElectionId,
-                },
-                {
-                    onSuccess: () => setFile(null),
-                }
-            );
-            setShowImport(false);
-        }
+        if (!file || !effectiveElectionId) return;
+        upload.reset();
+        setImportPreview(null);
+        upload.mutate({file, election_id: effectiveElectionId, action: 'preview'}, {
+            onSuccess: result => setImportPreview(result as UploadResult),
+        });
+    };
+
+    const handleConfirmImport = () => {
+        if (!file || !effectiveElectionId || !importPreview?.valid_count) return;
+        upload.mutate({file, election_id: effectiveElectionId, action: 'commit'}, {
+            onSuccess: () => {
+                setFile(null);
+                setImportPreview(null);
+                setShowImport(false);
+            },
+        });
     };
 
     const handleDelete = () => {
@@ -353,6 +372,19 @@ export default function StudentsPage() {
                     </FormField>
                 </div>
                 <div className="voter-header-buttons">
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        leadingIcon={<FiDownloadCloud aria-hidden="true"/>}
+                        disabled={!selected || students.length === 0}
+                        onClick={() => selected && downloadCsv(
+                            `voters-${selected.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-${selected.year}.csv`,
+                            [
+                                ['Election', 'Year', 'Voter ID', 'Full name', 'Class', 'Phone', 'Access active', 'Voted'],
+                                ...students.map(student => [selected.name, selected.year, student.student_id, student.full_name, student.class_name, student.phone_number ?? '', student.is_active, student.has_voted]),
+                            ],
+                        )}
+                    >Export voters</Button>
                     <Button
                         leadingIcon={<FiPlus aria-hidden="true"/>}
                         onClick={() => setShowAdd(true)}
@@ -718,7 +750,7 @@ export default function StudentsPage() {
 
             <Modal
                 open={showImport}
-                onClose={() => setShowImport(false)}
+                onClose={() => { setShowImport(false); setImportPreview(null); upload.reset(); }}
                 title="Import voters"
                 description={
                     selected
@@ -730,9 +762,9 @@ export default function StudentsPage() {
                     onSubmit={handleUpload}
                     className="student-import-form"
                 >
-                    <Alert variant="info" title="Excel format">
+                    <Alert variant="info" title="Import format">
                         <div className="space-y-2">
-                            <p>Use an Excel sheet with exactly these columns:</p>
+                            <p>Use a CSV file or XLSX workbook with these column headers:</p>
                             <div className="space-y-1">
                                 <code className="ps-6 text-red-400">student_id</code>
                                 <br/>
@@ -763,7 +795,7 @@ export default function StudentsPage() {
 
                     <FormField
                         id="student-file"
-                        label="Excel file"
+                        label="Voter file"
                     >
                         <div className="file-picker-wrapper">
                             <label htmlFor="student-file-input" className="file-picker-label">
@@ -771,16 +803,18 @@ export default function StudentsPage() {
                                 <span className="file-picker-text">
                                     {file ? file.name : 'Click to pick a file'}
                                 </span>
-                                <span className="file-picker-hint">.xlsx, .xls, .csv</span>
+                                <span className="file-picker-hint">.xlsx or .csv</span>
                             </label>
                             <input
                                 id="student-file-input"
                                 type="file"
-                                accept=".xlsx,.xls"
+                                accept=".xlsx,.csv"
                                 className="file-picker-input"
-                                onChange={event =>
-                                    setFile(event.target.files?.[0] ?? null)
-                                }
+                                onChange={event => {
+                                    upload.reset();
+                                    setFile(event.target.files?.[0] ?? null);
+                                    setImportPreview(null);
+                                }}
                             />
                         </div>
                     </FormField>
@@ -797,7 +831,7 @@ export default function StudentsPage() {
                         </Alert>
                     )}
 
-                    {uploadResult?.detail && !upload.error && (
+                    {uploadResult?.detail && !upload.error && !uploadResult.preview && (
                         <Alert
                             variant="success"
                             title="Import complete"
@@ -806,41 +840,48 @@ export default function StudentsPage() {
                         </Alert>
                     )}
 
-                    {Boolean(uploadResult?.errors) && (
-                        <Alert
-                            variant="warning"
-                            title="Some rows need attention"
-                        >
-                            <pre className="students-upload-errors">
-                                {JSON.stringify(
-                                    uploadResult?.errors,
-                                    null,
-                                    2
-                                )}
-                            </pre>
-                        </Alert>
+                    {importPreview?.preview && (
+                        <div className="student-import-preview" aria-live="polite">
+                                <Alert variant={importPreview.invalid_count ? 'warning' : 'success'} title="Import preview">
+                                {importPreview.valid_count} valid row(s); {importPreview.invalid_count} row(s) need attention. Invalid rows will be skipped; warnings do not prevent import.
+                            </Alert>
+                            <div className="management-table-wrap mt-3 max-h-72 overflow-auto">
+                                <table className="management-table">
+                                    <caption className="sr-only">Voter import preview and row validation results</caption>
+                                    <thead><tr><th scope="col">Row</th><th scope="col">Voter ID</th><th scope="col">Name</th><th scope="col">Class</th><th scope="col">Phone</th><th scope="col">Validation</th></tr></thead>
+                                    <tbody>{importPreview.rows?.map(row => (
+                                        <tr key={row.row_number}>
+                                            <td data-label="Row">{row.row_number}</td>
+                                            <td data-label="Voter ID">{row.student_id || '—'}</td>
+                                            <td data-label="Name">{row.full_name || '—'}</td>
+                                            <td data-label="Class">{row.class_name || '—'}</td>
+                                            <td data-label="Phone">{row.phone_number || '—'}</td>
+                                            <td data-label="Validation">{row.errors.length ? row.errors.join('; ') : row.warnings.length ? `Warning: ${row.warnings.join('; ')}` : 'Ready to import'}</td>
+                                        </tr>
+                                    ))}</tbody>
+                                </table>
+                            </div>
+                        </div>
                     )}
 
                     <div className="ui-modal-actions">
                         <Button
                             type="button"
                             variant="quiet"
-                            onClick={() => setShowImport(false)}
+                            onClick={() => { setShowImport(false); setImportPreview(null); upload.reset(); }}
                         >
                             Cancel
                         </Button>
 
-                        <Button
-                            type="submit"
-                            loading={upload.isPending}
-                            disabled={!file || !effectiveElectionId}
-                            className="voter-import-button"
-                            leadingIcon={
-                                <FiUploadCloud aria-hidden="true"/>
-                            }
-                        >
-                            Import voters
-                        </Button>
+                        {importPreview?.preview ? (
+                            <Button type="button" loading={upload.isPending} disabled={!importPreview.valid_count} className="voter-import-button" leadingIcon={<FiUploadCloud aria-hidden="true"/>} onClick={handleConfirmImport}>
+                                Import {importPreview.valid_count} valid voters
+                            </Button>
+                        ) : (
+                            <Button type="submit" loading={upload.isPending} disabled={!file || !effectiveElectionId} className="voter-import-button" leadingIcon={<FiUploadCloud aria-hidden="true"/>}>
+                                Preview file
+                            </Button>
+                        )}
                     </div>
                 </form>
             </Modal>

@@ -114,8 +114,32 @@ def student_has_current_voter_access(student, now=None) -> bool:
     )
 
 
-def deactivate_expired_voter(student) -> None:
+def deactivate_expired_voter(student, reason=None) -> None:
     """Clear expired voter access and deactivate the student."""
+    from .audit import record_audit_event
+    from .models import AuditLog
+
+    current_time = timezone.now()
+    if reason is None:
+        if student.voter_session_expires_at and student.voter_session_expires_at <= current_time:
+            reason = "session_expired"
+        elif student.voter_activation_expires_at and student.voter_activation_expires_at <= current_time:
+            reason = "activation_expired"
+        elif student.voting_pin_created_at and voter_access_expired(
+            student.voting_pin_created_at,
+            current_time,
+            voter_pin_ttl_for_election(student.election),
+        ):
+            reason = "pin_expired"
+        else:
+            reason = "access_cleared"
+    record_audit_event(
+        action="VOTER_ACCESS_EXPIRED",
+        outcome=AuditLog.Outcome.SUCCESS,
+        election=student.election,
+        student=student,
+        metadata={"reason": reason},
+    )
     student.is_active = False
     student.voting_pin_hash = ""
     student.voting_pin_created_at = None
@@ -141,7 +165,8 @@ def deactivate_expired_voter_session(student) -> None:
 
 def deactivate_expired_voters(now=None) -> int:
     """Deactivate voters whose activation, PIN, or session access has ended."""
-    from .models import Election, Student
+    from .audit import record_audit_event
+    from .models import AuditLog, Election, Student
 
     current_time = now or timezone.now()
     sms_pin_expired = Q(
@@ -168,10 +193,31 @@ def deactivate_expired_voters(now=None) -> int:
         election__voter_login_mode=Election.VOTER_LOGIN_MODE_ID,
         voter_activation_expires_at__isnull=True,
     )
-    return Student.objects.filter(
+    expired_students = list(Student.objects.filter(
         is_active=True,
         has_voted=False,
-    ).filter(pin_expired | sms_pin_expired | session_expired | activation_expired | legacy_id_activation).update(
+    ).filter(pin_expired | sms_pin_expired | session_expired | activation_expired | legacy_id_activation).select_related("election"))
+    for student in expired_students:
+        if student.voter_session_expires_at and student.voter_session_expires_at <= current_time:
+            reason = "session_expired"
+        elif student.voter_activation_expires_at and student.voter_activation_expires_at <= current_time:
+            reason = "activation_expired"
+        else:
+            reason = "pin_expired"
+        record_audit_event(
+            action="VOTER_ACCESS_EXPIRED",
+            outcome=AuditLog.Outcome.SUCCESS,
+            election=student.election,
+            student=student,
+            metadata={"reason": reason},
+        )
+    if not expired_students:
+        return 0
+    return Student.objects.filter(
+        pk__in=[student.pk for student in expired_students],
+        is_active=True,
+        has_voted=False,
+    ).update(
         is_active=False,
         voting_pin_hash="",
         voting_pin_created_at=None,

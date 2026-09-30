@@ -1,4 +1,6 @@
 from io import BytesIO
+import csv
+from io import StringIO
 import logging
 
 from django.conf import settings
@@ -71,7 +73,6 @@ from .utils import (
     voter_activation_expired,
     voter_activation_expiry,
     voter_session_expired,
-    deactivate_expired_voters,
     election_has_votes,
     generate_voter_pin,
     hash_voter_pin,
@@ -185,8 +186,6 @@ class StudentViewSet(viewsets.ModelViewSet):
     permission_classes = [CanAccessStudents]
 
     def get_queryset(self):
-        # Keep stored activation status current when staff load voter lists.
-        deactivate_expired_voters()
         queryset = scope_queryset(Student.objects.all(), self.request.user)
         election_id = self.request.query_params.get("election_id")
         if election_id:
@@ -254,9 +253,7 @@ class StudentViewSet(viewsets.ModelViewSet):
 
 class BulkStudentUploadView(APIView):
     """
-    Allow staff/superuser to upload an Excel file to create students in bulk.
-    Expected columns (case-insensitive): student_id, full_name, class_name,
-    and phone_number for SMS PIN elections.
+    Preview and import validated CSV/XLSX voter rows.
     """
 
     permission_classes = [IsStaffOrSuperUser]
@@ -276,24 +273,34 @@ class BulkStudentUploadView(APIView):
             )
         try:
             election = get_scoped_election_or_404(request.user, election_id)
-        except Election.DoesNotExist:
+        except (Election.DoesNotExist, Http404):
             return Response(
                 {"detail": "Invalid election_id."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         try:
-            wb = load_workbook(filename=BytesIO(upload.read()), read_only=True)
-            ws = wb.active
+            extension = upload.name.rsplit(".", 1)[-1].lower()
+            content = upload.read()
+            if extension == "csv":
+                source_rows = list(csv.reader(StringIO(content.decode("utf-8-sig"))))
+            elif extension == "xls":
+                return Response(
+                    {"detail": "Legacy XLS files are not supported. Save the workbook as XLSX or CSV."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            else:
+                workbook = load_workbook(filename=BytesIO(content), read_only=True, data_only=True)
+                source_rows = list(workbook.active.iter_rows(values_only=True))
+                workbook.close()
         except Exception:
             return Response(
-                {"detail": "Could not read Excel file."},
+                {"detail": "Could not read the uploaded CSV or XLSX file."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Map headers to indices
-        header_row = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), [])
-        header_map = {str(h or "").strip().lower(): idx for idx, h in enumerate(header_row)}
+        header_row = source_rows[0] if source_rows else []
+        header_map = {str(value or "").strip().lower(): index for index, value in enumerate(header_row)}
         required = ["student_id", "full_name", "class_name"]
         if election.voter_login_mode == Election.VOTER_LOGIN_MODE_SMS:
             required.append("phone_number")
@@ -304,95 +311,114 @@ class BulkStudentUploadView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        rows_to_create = []
-        file_ids = set()
+        parsed_rows = []
+        seen_ids = set()
+        data_rows = source_rows[1:]
+        existing_ids = set(Student.objects.filter(
+            election=election,
+            student_id__in=[
+                str(row[header_map["student_id"]]).strip()
+                for row in data_rows
+                if len(row) > header_map["student_id"] and row[header_map["student_id"]] is not None
+            ],
+        ).values_list("student_id", flat=True))
+        existing_phones = set(Student.objects.filter(
+            election=election,
+        ).exclude(phone_number="").values_list("phone_number", flat=True))
+        seen_phones = set()
+        for row_number, row in enumerate(data_rows, start=2):
+            def value_for(field):
+                index = header_map.get(field)
+                value = row[index] if index is not None and index < len(row) else None
+                return str(value).strip() if value is not None else ""
 
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            # Force everything to string right away (handles int/float/None nicely)
-            get_str = lambda idx: str(row[idx]).strip() if row[idx] is not None else ""
-
-            student_id = get_str(header_map["student_id"])
-            full_name = get_str(header_map["full_name"])
-            class_name = get_str(header_map["class_name"])
-            phone_number = get_str(header_map["phone_number"]) if "phone_number" in header_map else ""
-
-            if not student_id or not full_name or not class_name or (
-                    election.voter_login_mode == Election.VOTER_LOGIN_MODE_SMS and not phone_number
-            ):
-                continue  # skip incomplete rows
-
-            if phone_number:
+            values = {
+                "student_id": value_for("student_id"),
+                "full_name": value_for("full_name"),
+                "class_name": value_for("class_name"),
+                "phone_number": value_for("phone_number"),
+            }
+            if not any(values.values()):
+                continue
+            errors = []
+            warnings = []
+            for field in required:
+                if not values[field]:
+                    errors.append(f"{field} is required")
+            voter_id = values["student_id"]
+            if voter_id and voter_id in seen_ids:
+                errors.append("duplicate voter ID in this file")
+            elif voter_id:
+                seen_ids.add(voter_id)
+            if voter_id in existing_ids:
+                errors.append("voter ID already exists in this election")
+            if values["phone_number"]:
                 try:
-                    phone_number = normalize_ghana_phone_number(phone_number)
+                    values["phone_number"] = normalize_ghana_phone_number(values["phone_number"])
+                    phone = values["phone_number"]
+                    if phone in existing_phones or phone in seen_phones:
+                        warnings.append("phone number is also used by another voter")
+                    seen_phones.add(phone)
                 except DjangoValidationError as error:
-                    return Response(
-                        {"detail": f"Invalid phone number for voter {student_id}: {error.messages[0]}"},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
+                    errors.append(error.messages[0])
+            parsed_rows.append({"row_number": row_number, **values, "errors": errors, "warnings": warnings})
 
-            if student_id in file_ids:
-                continue  # skip duplicates in the same file
-            file_ids.add(student_id)
-
-            rows_to_create.append(
-                Student(
-                    student_id=student_id,
-                    full_name=full_name,
-                    class_name=class_name,
-                    phone_number=phone_number,
-                    election=election,
-                )
-            )
-
-        if not rows_to_create:
-            return Response(
-                {"detail": "No valid rows found to import."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        existing_ids = set(
-            Student.objects.filter(
-                student_id__in=[s.student_id for s in rows_to_create],
-                election_id=election_id  # Only check within this election
-            )
-            .values_list("student_id", flat=True)
+        valid_rows = [row for row in parsed_rows if not row["errors"]]
+        skipped_existing = sum(
+            "voter ID already exists in this election" in row["errors"]
+            for row in parsed_rows
         )
+        action = request.data.get("action", "commit")
+        if action == "preview":
+            return Response({
+                "preview": True,
+                "rows": parsed_rows,
+                "valid_count": len(valid_rows),
+                "invalid_count": len(parsed_rows) - len(valid_rows),
+            })
+        if action != "commit":
+            return Response({"detail": "action must be preview or commit."}, status=status.HTTP_400_BAD_REQUEST)
+        if not valid_rows:
+            return Response({
+                "detail": "No valid rows are available to import.",
+                "created": 0,
+                "skipped_existing": skipped_existing,
+                "invalid_count": len(parsed_rows),
+                "rows": parsed_rows,
+            }, status=status.HTTP_200_OK)
 
-        rows_to_create = [s for s in rows_to_create if s.student_id not in existing_ids]
-
-        if not rows_to_create:
-            return Response(
-                {"detail": "All provided students already exist."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
+        students_to_create = [Student(
+            student_id=row["student_id"],
+            full_name=row["full_name"],
+            class_name=row["class_name"],
+            phone_number=row["phone_number"],
+            election=election,
+        ) for row in valid_rows]
         try:
-            created_students = Student.objects.bulk_create(rows_to_create, ignore_conflicts=True)
+            with transaction.atomic():
+                Student.objects.bulk_create(students_to_create, ignore_conflicts=True)
+            created_ids = set(Student.objects.filter(
+                election=election,
+                student_id__in=[row["student_id"] for row in valid_rows],
+            ).values_list("student_id", flat=True))
+            created_count = len(created_ids - existing_ids)
             record_audit_event(
                 action="VOTERS_IMPORTED",
                 outcome=AuditLog.Outcome.SUCCESS,
                 request=request,
                 election=election,
                 actor=request.user,
-                metadata={
-                    "created_count": len(created_students),
-                    "skipped_existing": len(existing_ids),
-                },
+                metadata={"created_count": created_count, "invalid_count": len(parsed_rows) - len(valid_rows)},
             )
-            return Response(
-                {
-                    "detail": "Students imported successfully.",
-                    "created": len(rows_to_create),
-                    "skipped_existing": len(existing_ids),
-                    "election": election.name,
-                },
-                status=status.HTTP_201_CREATED,
-            )
-        except Exception as e:
-            return Response(
-                {"detail": f"Bulk import failed: {str(e)}"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({
+                "detail": f"Imported {created_count} voter(s). Invalid rows were skipped.",
+                "created": created_count,
+                "skipped_existing": skipped_existing,
+                "invalid_count": len(parsed_rows) - len(valid_rows),
+                "election": election.name,
+            }, status=status.HTTP_201_CREATED)
+        except Exception:
+            return Response({"detail": "Bulk import failed. Please retry or contact support."}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class PositionViewSet(viewsets.ModelViewSet):
@@ -1767,7 +1793,7 @@ class StudentVoterLoginView(APIView):
                 )
             if election_uses_pin_login(open_student.election) and (
                     not open_student.voting_pin_hash or not open_student.voting_pin_created_at):
-                deactivate_expired_voter(open_student)
+                deactivate_expired_voter(open_student, "pin_missing")
                 return Response(
                     {
                         "detail": (
@@ -1780,7 +1806,7 @@ class StudentVoterLoginView(APIView):
 
             if election_uses_pin_login(open_student.election) and voter_access_expired(
                     open_student.voting_pin_created_at, now, voter_pin_ttl_for_election(open_student.election)):
-                deactivate_expired_voter(open_student)
+                deactivate_expired_voter(open_student, "pin_expired")
                 return Response(
                     {
                         "detail": (
@@ -1847,7 +1873,7 @@ class StudentVoterLoginView(APIView):
 
             if election_uses_pin_login(active_election) and (
                     not student.voting_pin_hash or not student.voting_pin_created_at):
-                deactivate_expired_voter(student)
+                deactivate_expired_voter(student, "pin_missing")
                 return Response(
                     {
                         "detail": (
@@ -1861,7 +1887,7 @@ class StudentVoterLoginView(APIView):
             if election_uses_pin_login(active_election) and voter_access_expired(student.voting_pin_created_at, now,
                                                                                  voter_pin_ttl_for_election(
                                                                                      active_election)):
-                deactivate_expired_voter(student)
+                deactivate_expired_voter(student, "pin_expired")
                 return Response(
                     {
                         "detail": (
@@ -1873,7 +1899,7 @@ class StudentVoterLoginView(APIView):
                 )
 
             if election_uses_pin_login(active_election) and student.voting_pin_attempts >= VOTER_PIN_MAX_ATTEMPTS:
-                deactivate_expired_voter(student)
+                deactivate_expired_voter(student, "pin_attempts_exhausted")
                 return Response(
                     {
                         "detail": (

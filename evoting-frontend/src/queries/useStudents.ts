@@ -166,10 +166,11 @@ export const useBulkUploadStudents = () => {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async (data: {file: File; election_id: number}) => {
+        mutationFn: async (data: {file: File; election_id: number; action?: 'preview' | 'commit'}) => {
             const formData = new FormData();
             formData.append('file', data.file);
             formData.append('election_id', data.election_id.toString());
+            formData.append('action', data.action ?? 'commit');
 
             const response = await api.post('api/students/bulk-upload/', formData, {
                 headers: {'Content-Type': 'multipart/form-data'},
@@ -177,10 +178,12 @@ export const useBulkUploadStudents = () => {
             return response.data;
         },
         onSuccess: (data, variables) => {
-            showSuccess(data.detail || 'Voter import completed');
-            queryClient.invalidateQueries({
-                queryKey: queryKeys.students(variables.election_id),
-            });
+            if (variables.action === 'commit') {
+                showSuccess(data.detail || 'Voter import completed');
+                queryClient.invalidateQueries({
+                    queryKey: queryKeys.students(variables.election_id),
+                });
+            }
         },
         onError: (error: unknown) => {
             showError(getApiErrorDetail(error) ?? 'Voter import failed');

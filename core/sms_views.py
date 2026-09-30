@@ -7,16 +7,18 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .election_access import get_scoped_election_or_404
-from .election_lifecycle import election_ballot_ready, election_status
+from .election_lifecycle import election_ballot_ready, election_lifecycle, election_status
 from .models import AuditLog, Election, Student, VoterSMSAttempt
 from .audit import record_audit_event
-from .permissions import IsStaffOrSuperUser
+from .permissions import CanActivateVoters, IsStaffOrSuperUser
 from .sms.services import get_sms_configuration_error, send_sms
 from .utils import (
     generate_voter_pin,
     hash_voter_pin,
+    student_has_current_voter_access,
     voter_access_expired,
     voter_pin_ttl_for_election,
+    voter_session_expired,
 )
 
 
@@ -27,6 +29,109 @@ CONFIGURATION_MESSAGES = {
     "invalid_sender_id": "The SMS sender ID is missing or invalid.",
     "invalid_configuration": "The SMS provider configuration is invalid.",
 }
+
+
+class VoterRecoveryStatusView(APIView):
+    permission_classes = [CanActivateVoters]
+
+    def get(self, request):
+        election_id = request.query_params.get("election_id")
+        if not election_id:
+            return Response({"detail": "election_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            election = get_scoped_election_or_404(request.user, election_id)
+        except (Election.DoesNotExist, Http404):
+            return Response({"detail": "Election not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        now = timezone.now()
+        lifecycle_status = election_lifecycle(election, now, include_candidate_lock=False)["status"]
+        ballot_ready = election_ballot_ready(election)
+        latest_attempts = {}
+        for attempt in VoterSMSAttempt.objects.filter(election=election).order_by("-attempted_at", "-id"):
+            latest_attempts.setdefault(attempt.student_id, attempt)
+
+        voter_records = list(Student.objects.filter(election=election).order_by("full_name", "id"))
+        latest_events = {}
+        for event in AuditLog.objects.filter(
+            election=election,
+            student_id__in=[student.id for student in voter_records],
+        ).order_by("-created_at", "-id"):
+            latest_events.setdefault(event.student_id, event)
+
+        rows = []
+        for student in voter_records:
+            access_valid = student_has_current_voter_access(student, now)
+            latest_event = latest_events.get(student.id)
+            if student.has_voted:
+                state, reason = "voted", "This voter has already submitted a ballot."
+            elif lifecycle_status != "open":
+                state = lifecycle_status
+                reason = {
+                    "scheduled": "Voting has not started yet.",
+                    "paused": "Voting is paused.",
+                    "ended": "Voting has ended.",
+                }.get(lifecycle_status, "Voting is unavailable.")
+            elif not ballot_ready:
+                state, reason = "ballot_unready", "The ballot is not ready for voting."
+            elif not access_valid and latest_event and (
+                latest_event.action == "VOTER_ACCESS_EXPIRED"
+                or (
+                    latest_event.action == "VOTER_AUTH_FAILED"
+                    and latest_event.metadata.get("reason") == "session_expired"
+                )
+            ):
+                reason_code = latest_event.metadata.get("reason")
+                state = reason_code or "inactive"
+                reason = {
+                    "session_expired": "The authenticated voting session expired.",
+                    "activation_expired": "The voter activation expired.",
+                    "pin_expired": "The voter PIN expired.",
+                    "pin_missing": "No valid voter PIN is available.",
+                    "pin_attempts_exhausted": "Access was disabled after too many incorrect PIN attempts.",
+                }.get(reason_code, "Voter access expired.")
+            elif election.voter_login_mode == Election.VOTER_LOGIN_MODE_SMS:
+                attempt = latest_attempts.get(student.id)
+                valid_pin = _student_has_valid_sms_pin(student, election, now)
+                if valid_pin and attempt and attempt.status == VoterSMSAttempt.Status.GENERATED:
+                    state, reason = "generated", "A PIN is active but was not sent by SMS."
+                elif valid_pin:
+                    state, reason = "pin_active", "A valid PIN is available for login."
+                elif student.voting_pin_created_at:
+                    state, reason = "pin_expired", "The voter PIN has expired."
+                elif not student.phone_number:
+                    state, reason = "missing_phone", "No phone number is registered for SMS delivery."
+                elif attempt and attempt.status in {VoterSMSAttempt.Status.FAILED, VoterSMSAttempt.Status.DISABLED}:
+                    state, reason = "sms_failed", "The last SMS attempt did not deliver a PIN."
+                else:
+                    state, reason = "not_sent", "No PIN has been sent or generated for this voter."
+            elif student.voter_session_expires_at and voter_session_expired(student.voter_session_expires_at, now):
+                state, reason = "session_expired", "The authenticated voting session has expired."
+            elif student.voter_activation_expires_at and student.voter_activation_expires_at <= now:
+                state, reason = "activation_expired", "The voter activation has expired."
+            elif student.voting_pin_created_at and voter_access_expired(
+                student.voting_pin_created_at, now, voter_pin_ttl_for_election(election)
+            ):
+                state, reason = "pin_expired", "The voter PIN has expired."
+            elif access_valid:
+                state, reason = "active", "The voter can currently log in."
+            else:
+                state, reason = "inactive", "This voter has not been activated."
+
+            rows.append({
+                "id": student.id,
+                "student_id": student.student_id,
+                "full_name": student.full_name,
+                "phone_number": student.phone_number,
+                "has_voted": student.has_voted,
+                "is_active": access_valid,
+                "state": state,
+                "reason": reason,
+                "can_invalidate": access_valid and not student.has_voted,
+                "last_attempt_at": attempt.attempted_at.isoformat() if election.voter_login_mode == Election.VOTER_LOGIN_MODE_SMS and (attempt := latest_attempts.get(student.id)) else None,
+                "last_error_category": attempt.error_category if election.voter_login_mode == Election.VOTER_LOGIN_MODE_SMS and attempt else "",
+            })
+
+        return Response({"election_id": election.id, "students": rows})
 
 
 def _student_has_valid_sms_pin(student, election, now=None):

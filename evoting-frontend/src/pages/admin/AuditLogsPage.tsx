@@ -7,6 +7,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import ErrorState from '../../components/ui/ErrorState';
 import LoadingState from '../../components/ui/LoadingState';
 import Button from '../../components/ui/Button';
+import {downloadCsv} from '../../utils/exportCsv';
 
 const PAGE_SIZE = 10;
 
@@ -18,6 +19,8 @@ type AuditEvent = {
     election_name: string;
     student_reference: string;
     actor_username: string;
+    ip_address?: string | null;
+    metadata?: unknown;
     created_at: string;
 };
 
@@ -48,6 +51,15 @@ export default function AuditLogsPage() {
                 <div>
                     <h1 id="audit-logs-title">Audit trail</h1>
                 </div>
+                <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={!events.length}
+                    onClick={() => downloadCsv('election-audit-trail.csv', [
+                        ['Time', 'Action', 'Result', 'Election', 'Voter reference', 'Actor', 'IP address', 'Metadata'],
+                        ...events.map(event => [event.created_at, event.action, event.outcome, event.election_name, event.student_reference, event.actor_username, event.ip_address ?? '', JSON.stringify(event.metadata ?? '')]),
+                    ])}
+                >Export audit CSV</Button>
             </div>
 
             {auditQuery.isLoading ? (

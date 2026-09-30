@@ -24,16 +24,16 @@ export const useActivateStudent = () => {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({student_id, election_id}: {student_id: string; election_id: number}) => {
+        mutationFn: async ({student_id, election_id, is_active = true}: {student_id: string; election_id: number; is_active?: boolean}) => {
             const response = await api.post('api/students/activate/', {
                 student_id,
                 election_id,
-                is_active: true,
+                is_active,
             });
             return response.data as ActivationResponse;
         },
 
-        onMutate: async ({student_id, election_id}) => {
+        onMutate: async ({student_id, election_id, is_active = true}) => {
             await queryClient.cancelQueries({
                 queryKey: queryKeys.students(election_id),
             });
@@ -49,7 +49,7 @@ export const useActivateStudent = () => {
 
                     return oldStudents.map(student =>
                         student.student_id === student_id
-                            ? {...student, is_active: true}
+                            ? {...student, is_active}
                             : student,
                     );
                 },
@@ -66,6 +66,9 @@ export const useActivateStudent = () => {
         },
 
         onSuccess: (_data, {election_id}) => {
+            queryClient.invalidateQueries({
+                queryKey: ['voter-recovery-status', election_id],
+            });
             queryClient.invalidateQueries({
                 queryKey: queryKeys.students(election_id),
                 refetchType: 'inactive',

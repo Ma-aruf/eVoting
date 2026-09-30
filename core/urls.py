@@ -30,7 +30,7 @@ from .result_views import (
     ElectionStatsView,
     PositionStatsView,
 )
-from .sms_views import VoterSMSGenerateView, VoterSMSResendView, VoterSMSSendView, VoterSMSStatusView
+from .sms_views import VoterRecoveryStatusView, VoterSMSGenerateView, VoterSMSResendView, VoterSMSSendView, VoterSMSStatusView
 
 router = DefaultRouter()
 router.register(r"elections", ElectionViewSet, basename="election")
@@ -65,6 +65,7 @@ urlpatterns = [
 
     # Student activation (for activators/staff)
     path("students/activate/", StudentActivationView.as_view(), name="student-activate"),
+    path("students/recovery-status/", VoterRecoveryStatusView.as_view(), name="student-recovery-status"),
     path("students/send-sms-pins/", VoterSMSSendView.as_view(), name="student-send-sms-pins"),
     path("students/sms-status/", VoterSMSStatusView.as_view(), name="student-sms-status"),
     path("students/resend-sms-pin/", VoterSMSResendView.as_view(), name="student-resend-sms-pin"),

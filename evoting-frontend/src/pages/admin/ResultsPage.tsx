@@ -18,6 +18,7 @@ import {useAuth} from '../../hooks/useAuth';
 import {useResults} from '../../queries/useResults';
 import {showError} from '../../utils/toast';
 import {downloadElectionResultsCsv} from '../../utils/exportElectionResults';
+import {downloadCsv} from '../../utils/exportCsv';
 import {useNavigate} from 'react-router-dom';
 
 export default function ResultsPage() {
@@ -109,6 +110,14 @@ export default function ResultsPage() {
                         <FiDownload className="w-4 h-4 mr-2" aria-hidden="true"/>
                         Export CSV
                     </button>}
+                    {results && !resultsError && <button
+                        type="button"
+                        onClick={() => downloadCsv(`turnout-${results.election_name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-${results.year}.csv`, [
+                            ['Election', 'Year', 'Eligible voters', 'Voters voted', 'Did not vote', 'Turnout (%)'],
+                            [results.election_name, results.year, results.total_voters, results.voters_voted, Math.max(0, results.total_voters - results.voters_voted), results.voter_turnout.toFixed(2)],
+                        ])}
+                        className="ui-button ui-button--secondary"
+                    >Export turnout</button>}
                 </div>
             </div>
 

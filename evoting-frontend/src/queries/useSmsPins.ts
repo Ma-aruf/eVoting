@@ -17,6 +17,33 @@ export interface SmsPinSendResponse {
 
 export type SmsVoterStatus = 'not_sent' | 'sent' | 'generated' | 'expired' | 'failed' | 'missing_phone' | 'voted';
 
+export interface VoterRecoveryStatusRow {
+    id: number;
+    student_id: string;
+    full_name: string;
+    phone_number: string;
+    has_voted: boolean;
+    is_active: boolean;
+    state: string;
+    reason: string;
+    can_invalidate: boolean;
+    last_attempt_at: string | null;
+    last_error_category: string;
+}
+
+export const useVoterRecoveryStatus = (electionId: number | null, enabled = true) => useQuery({
+    queryKey: ['voter-recovery-status', electionId],
+    queryFn: async (): Promise<VoterRecoveryStatusRow[]> => {
+        const response = await api.get('api/students/recovery-status/', {
+            params: {election_id: electionId},
+        });
+        return response.data.students ?? [];
+    },
+    enabled: enabled && electionId !== null,
+    staleTime: 5 * 1000,
+    refetchInterval: 10 * 1000,
+});
+
 export interface SmsVoterStatusRow {
     id: number;
     student_id: string;

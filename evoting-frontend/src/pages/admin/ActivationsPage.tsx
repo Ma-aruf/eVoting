@@ -10,13 +10,15 @@ import {useActivateStudent} from '../../queries/useActivations';
 import {
     type SmsPinSendResponse,
     type SmsVoterStatusRow,
+    type VoterRecoveryStatusRow,
     useGenerateSmsPin,
     useResendSmsPin,
     useSendSmsPins,
     useSmsVoterStatus,
+    useVoterRecoveryStatus,
 } from '../../queries/useSmsPins';
 
-import {showError} from '../../utils/toast';
+import {showError, showSuccess} from '../../utils/toast';
 
 import PageContainer from '../../components/PageContainer';
 import StatisticCard from '../../components/StatisticCard';
@@ -79,10 +81,15 @@ function canGenerateSmsPinForVoter(row: SmsVoterStatusRow) {
     return row.status === 'not_sent' || row.status === 'expired' || row.status === 'failed' || row.status === 'missing_phone';
 }
 
+function recoveryStateLabel(row: VoterRecoveryStatusRow) {
+    return row.state.replaceAll('_', ' ').replace(/^\w/, value => value.toUpperCase());
+}
+
 type SmsConfirmAction =
     | {kind: 'send_all'}
     | {kind: 'resend'; row: SmsVoterStatusRow}
-    | {kind: 'generate'; row: SmsVoterStatusRow};
+    | {kind: 'generate'; row: SmsVoterStatusRow}
+    | {kind: 'invalidate'; student_id: string; full_name: string};
 
 export default function ActivationsPage() {
     const {user} = useAuth();
@@ -128,6 +135,16 @@ export default function ActivationsPage() {
             return;
         }
 
+        if (smsConfirmAction.kind === 'invalidate') {
+            await activateStudent.mutateAsync({
+                student_id: smsConfirmAction.student_id,
+                election_id: effectiveElectionId,
+                is_active: false,
+            });
+            showSuccess(`Access invalidated for ${smsConfirmAction.full_name}.`);
+            return;
+        }
+
         const {row} = smsConfirmAction;
         if (smsConfirmAction.kind === 'resend') {
             setResendingStudentId(row.id);
@@ -156,7 +173,9 @@ export default function ActivationsPage() {
         ? 'Send a fresh PIN by SMS to all eligible voters in this election?'
         : smsConfirmAction?.kind === 'resend'
             ? 'Send a new PIN by SMS to ' + smsConfirmAction.row.full_name + '?'
-            : 'Generate a PIN for ' + (smsConfirmAction?.row.full_name ?? 'this voter') + ' without sending an SMS?';
+            : smsConfirmAction?.kind === 'generate'
+                ? 'Generate a PIN for ' + smsConfirmAction.row.full_name + ' without sending an SMS?'
+                : `Invalidate ${smsConfirmAction?.full_name}'s current voter access? They will need to be activated again before logging in.`;
 
     // Query data
 
@@ -241,6 +260,10 @@ export default function ActivationsPage() {
         selectedElection.ballot_ready
     );
     const canViewSmsStatus = user?.role === 'staff' || user?.role === 'superuser';
+    const recoveryStatusQuery = useVoterRecoveryStatus(
+        effectiveElectionId,
+        selectedElection?.voter_login_mode !== 'sms_pin'
+    );
     const smsStatusQuery = useSmsVoterStatus(
         effectiveElectionId,
         canViewSmsStatus && selectedElection?.voter_login_mode === 'sms_pin'
@@ -255,6 +278,16 @@ export default function ActivationsPage() {
             row.phone_number.toLowerCase().includes(query)
         );
     }, [smsStatusQuery.data, smsStatusSearch]);
+    const filteredRecoveryVoters = useMemo(() => {
+        const query = smsStatusSearch.trim().toLowerCase();
+        const rows = recoveryStatusQuery.data ?? [];
+        if (!query) return rows;
+        return rows.filter(row =>
+            row.student_id.toLowerCase().includes(query) ||
+            row.full_name.toLowerCase().includes(query) ||
+            row.reason.toLowerCase().includes(query)
+        );
+    }, [recoveryStatusQuery.data, smsStatusSearch]);
 
     // Select the election automatically
 
@@ -266,7 +299,6 @@ export default function ActivationsPage() {
                     election => election.id === selectedElectionId
                 ))
         ) {
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             setSelectedElectionId(electionChoices[0].id);
         }
     }, [electionChoices, isScopedRole, selectedElectionId]);
@@ -740,7 +772,16 @@ export default function ActivationsPage() {
                                                                             </div>
                                                                         </Button>
                                                                     )}
-                                                                    {!canSendSmsToVoter(row) && !canGenerateSmsPinForVoter(row) && (
+                                                                    {(row.status === 'sent' || row.status === 'generated') && (
+                                                                        <Button
+                                                                            type="button"
+                                                                            variant="danger"
+                                                                            size="compact"
+                                                                            disabled={resendingStudentId !== null || generatingStudentId !== null}
+                                                                            onClick={() => setSmsConfirmAction({kind: 'invalidate', student_id: row.student_id, full_name: row.full_name})}
+                                                                        >Invalidate</Button>
+                                                                    )}
+                                                                    {!canSendSmsToVoter(row) && !canGenerateSmsPinForVoter(row) && row.status !== 'sent' && row.status !== 'generated' && (
                                                                         <span className='text-xs text-gray-400'>—</span>
                                                                     )}
                                                                 </div>
@@ -958,6 +999,49 @@ export default function ActivationsPage() {
                         )}
                     </section>
 
+                    {selectedElection.voter_login_mode !== 'sms_pin' && (
+                        <section className="ui-section" aria-labelledby="voter-recovery-title">
+                            <div className="ui-section-heading">
+                                <div>
+                                    <h2 id="voter-recovery-title">Voter access and recovery</h2>
+                                    <p>Review each voter’s login eligibility and invalidate active access when needed.</p>
+                                </div>
+                            </div>
+                            {recoveryStatusQuery.isLoading ? (
+                                <LoadingState title="Loading voter access" message="Checking current voter eligibility."/>
+                            ) : recoveryStatusQuery.isError ? (
+                                <Alert variant="error" title="Voter access status unavailable">We could not load current login eligibility.</Alert>
+                            ) : filteredRecoveryVoters.length === 0 ? (
+                                <EmptyState title={smsStatusSearch ? 'No matching voters' : 'No voters to display'} message={smsStatusSearch ? 'Try a different search term.' : 'Add voters to this election to review access.'}/>
+                            ) : (
+                                <div className="management-table-wrap">
+                                    <table className="management-table">
+                                        <caption className="sr-only">Voter login eligibility and recovery actions</caption>
+                                        <thead><tr><th scope="col">Voter</th><th scope="col">Access status</th><th scope="col">Why</th><th scope="col">Actions</th></tr></thead>
+                                        <tbody>{filteredRecoveryVoters.map(row => (
+                                            <tr key={row.id}>
+                                                <td data-label="Voter"><div className="management-table-cell--primary">{row.full_name}</div><div className="text-xs text-gray-500">{row.student_id}</div></td>
+                                                <td data-label="Access status">{recoveryStateLabel(row)}</td>
+                                                <td data-label="Why">{row.reason}</td>
+                                                <td data-label="Actions"><div className="flex flex-wrap justify-end gap-2">
+                                                    {!row.is_active && !row.has_voted && (
+                                                        <Button type="button" variant="primary" size="compact" disabled={!canActivateVoters || activateStudent.isPending} title={!canActivateVoters ? activationBlockMessage : undefined} onClick={() => activateStudent.mutate({student_id: row.student_id, election_id: effectiveElectionId!}, {onSuccess: data => {
+                                                            if (data.voting_pin) {
+                                                                setGeneratedPin(data.voting_pin);
+                                                                setGeneratedPinStudent(row.full_name);
+                                                            } else setActivationSuccessStudent(row.full_name);
+                                                        }, onError: error => showError(errorMessage(error))})}>Reactivate</Button>
+                                                    )}
+                                                    {row.can_invalidate && <Button type="button" variant="danger" size="compact" onClick={() => setSmsConfirmAction({kind: 'invalidate', student_id: row.student_id, full_name: row.full_name})}>Invalidate</Button>}
+                                                </div></td>
+                                            </tr>
+                                        ))}</tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </section>
+                    )}
+
                     {/* Empty and loading states */}
 
                     {!isLoading && !availableStudents.length && (
@@ -980,9 +1064,9 @@ export default function ActivationsPage() {
             isOpen={Boolean(smsConfirmAction)}
             onClose={() => setSmsConfirmAction(null)}
             onConfirm={confirmSmsAction}
-            title={smsConfirmAction?.kind === 'send_all' ? 'Send PINs by SMS' : smsConfirmAction?.kind === 'resend' ? 'Resend voter PIN' : 'Generate voter PIN'}
+            title={smsConfirmAction?.kind === 'send_all' ? 'Send PINs by SMS' : smsConfirmAction?.kind === 'resend' ? 'Resend voter PIN' : smsConfirmAction?.kind === 'invalidate' ? 'Invalidate voter access' : 'Generate voter PIN'}
             message={smsConfirmationMessage}
-            confirmText={smsConfirmAction?.kind === 'send_all' ? 'Send PINs' : smsConfirmAction?.kind === 'resend' ? 'Resend PIN' : 'Generate PIN'}
+            confirmText={smsConfirmAction?.kind === 'send_all' ? 'Send PINs' : smsConfirmAction?.kind === 'resend' ? 'Resend PIN' : smsConfirmAction?.kind === 'invalidate' ? 'Invalidate access' : 'Generate PIN'}
             cancelText='Cancel'
             type='warning'
         />
