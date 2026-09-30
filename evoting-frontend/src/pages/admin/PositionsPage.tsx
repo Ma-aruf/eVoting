@@ -325,7 +325,7 @@ export default function PositionsPage() {
                 </FormField>
             </section>
             {candidateChangesLocked && selectedElection && (
-                <Alert className="mt-4" variant="warning" title="Ballot changes are locked">
+                <Alert className="mt-4 ballot-lock-alert" variant="warning" title="Ballot changes are locked">
                     {ballotLockMessage(selectedElectionId)}
                 </Alert>
             )}

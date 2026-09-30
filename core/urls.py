@@ -25,6 +25,7 @@ from .views import (
 
 from .result_views import (
     CandidatesForPositionView,
+    ElectionOperationsView,
     ElectionResultsView,
     ElectionStatsView,
     PositionStatsView,
@@ -88,6 +89,7 @@ urlpatterns = [
     path("elections/<int:election_id>/extend/", ElectionEndTimeExtensionView.as_view(), name="election-extend-end-time"),
 
     # Stats & results endpoints
+    path("dashboard/operations/", ElectionOperationsView.as_view(), name="dashboard-operations"),
     path("elections/<int:election_id>/stats/", ElectionStatsView.as_view(), name="election-stats"),
     path("votes/position-stats/", PositionStatsView.as_view(), name="position-stats"),
     path("elections/<int:election_id>/results/", ElectionResultsView.as_view(), name="election-results"),

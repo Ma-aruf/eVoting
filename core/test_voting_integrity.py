@@ -112,6 +112,9 @@ class VotingIntegrityTests(TestCase):
     def post(self, payload=None, **headers):
         return self.client.post("/api/vote/", payload or self.ballot(), format="json", **headers)
 
+    def pause_election_for_results(self):
+        Election.objects.filter(pk=self.election.pk).update(voting_enabled=False)
+
     def test_successful_complete_ballot_updates_student_only_after_success(self):
         response = self.post(**self.headers())
         self.assertEqual(response.status_code, 201, response.content)
@@ -133,6 +136,7 @@ class VotingIntegrityTests(TestCase):
         staff = User.objects.create_user(
             "approval-results", password="x", role="staff", assigned_election=self.election
         )
+        self.pause_election_for_results()
         request = APIRequestFactory().get("/api/results/")
         force_authenticate(request, user=staff)
         response = ElectionResultsView.as_view()(request, election_id=self.election.id)
@@ -202,6 +206,7 @@ class VotingIntegrityTests(TestCase):
         staff = User.objects.create_user(
             "all-skipped-results", password="x", role="staff", assigned_election=self.election
         )
+        self.pause_election_for_results()
         request = APIRequestFactory().get("/api/results/")
         force_authenticate(request, user=staff)
         results = ElectionResultsView.as_view()(request, election_id=self.election.id)
@@ -242,6 +247,7 @@ class VotingIntegrityTests(TestCase):
         staff = User.objects.create_user(
             "percentage-results", password="x", role="staff", assigned_election=self.election
         )
+        self.pause_election_for_results()
         request = APIRequestFactory().get("/api/results/")
         force_authenticate(request, user=staff)
         results = ElectionResultsView.as_view()(request, election_id=self.election.id)
@@ -313,6 +319,7 @@ class VotingIntegrityTests(TestCase):
         staff = User.objects.create_user(
             "approval-tie-results", password="x", role="staff", assigned_election=self.election
         )
+        self.pause_election_for_results()
         request = APIRequestFactory().get("/api/results/")
         force_authenticate(request, user=staff)
         response = ElectionResultsView.as_view()(request, election_id=self.election.id)
@@ -331,6 +338,7 @@ class VotingIntegrityTests(TestCase):
         staff = User.objects.create_user(
             "legacy-results", password="x", role="staff", assigned_election=self.election
         )
+        self.pause_election_for_results()
         request = APIRequestFactory().get("/api/results/")
         force_authenticate(request, user=staff)
         response = ElectionResultsView.as_view()(request, election_id=self.election.id)
@@ -520,6 +528,7 @@ class VotingIntegrityTests(TestCase):
             )).status_code, 201
         )
         staff = User.objects.create_user("results", password="x", role="staff", assigned_election=self.election)
+        self.pause_election_for_results()
         factory = APIRequestFactory()
         results_request = factory.get("/api/results/")
         force_authenticate(results_request, user=staff)
@@ -600,6 +609,7 @@ class VotingIntegrityTests(TestCase):
             )
             self.assertEqual(response.status_code, 200)
 
+        self.pause_election_for_results()
         results = self.client.get(f"/api/elections/{self.election.id}/results/")
         stats = self.client.get(f"/api/elections/{self.election.id}/stats/")
         self.assertEqual(results.status_code, 200)

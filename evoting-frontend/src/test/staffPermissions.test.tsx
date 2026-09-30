@@ -54,16 +54,60 @@ beforeEach(() => {
     vi.spyOn(api, 'get').mockImplementation(async (url, config) => {
         const parsed = new URL(url, 'http://localhost');
         const electionId = Number(config?.params?.election_id ?? parsed.searchParams.get('election_id'));
+        if (parsed.pathname === '/api/dashboard/operations/') {
+            const visible = electionData.filter(election =>
+                (election.status === 'open' || election.status === 'paused') &&
+                (currentUser.role === 'superuser' || election.id === currentUser.assignedElection?.id)
+            );
+            const rows = visible.map(election => {
+                const students = voterRecords.filter(voter => voter.election === election.id);
+                const voted = students.filter(voter => voter.has_voted).length;
+                const active = students.filter(voter => voter.is_active && !voter.has_voted).length;
+                return {
+                    ...election,
+                    voter_login_mode: 'activator_pin',
+                    total_voters: students.length,
+                    active_voters: active,
+                    logged_in_voters: 0,
+                    voters_voted: voted,
+                    yet_to_activate: students.length - active - voted,
+                    failed_logins: 0,
+                    expired_sessions: 0,
+                    sms_sent: 0,
+                    sms_failed: 0,
+                    sms_generated: 0,
+                    turnout_percentage: students.length ? voted / students.length * 100 : 0,
+                };
+            });
+            const totals = {
+                total_voters: rows.reduce((sum, row) => sum + row.total_voters, 0),
+                active_voters: rows.reduce((sum, row) => sum + row.active_voters, 0),
+                logged_in_voters: 0,
+                voters_voted: rows.reduce((sum, row) => sum + row.voters_voted, 0),
+                yet_to_activate: rows.reduce((sum, row) => sum + row.yet_to_activate, 0),
+                failed_logins: 0,
+                expired_sessions: 0,
+                sms_sent: 0,
+                sms_failed: 0,
+                sms_generated: 0,
+                turnout_percentage: 0,
+            };
+            totals.turnout_percentage = totals.total_voters ? totals.voters_voted / totals.total_voters * 100 : 0;
+            return {data: {totals, elections: rows}};
+        }
         if (parsed.pathname === '/api/elections/') return {data: electionData};
         if (parsed.pathname === '/api/students/') return {data: voterRecords.filter(voter => voter.election === electionId)};
         if (parsed.pathname === '/api/positions/') return {data: positions.filter(position => position.election === electionId)};
         if (parsed.pathname === '/api/candidates/') return {data: []};
         const result = parsed.pathname.match(/^\/api\/elections\/(\d+)\/results\/$/);
-        if (result) return {data: {
-            election_id: Number(result[1]), election_name: elections[Number(result[1]) - 1].name,
+        if (result) {
+            const election = electionData.find(item => item.id === Number(result[1]))!;
+            return {data: {
+            election_id: election.id, election_name: election.name,
             year: 2026, total_students: 1, students_who_voted: 0, voter_turnout_percentage: 0,
-            voting_enabled: true, status: 'scheduled', voting_open: false, candidate_changes_locked: false, positions: [],
+            voting_enabled: election.voting_enabled, status: election.status, voting_open: election.voting_open, candidate_changes_locked: false, positions: [],
         }};
+        }
         throw new Error(`Unexpected GET ${url}`);
     });
     vi.spyOn(api, 'post').mockResolvedValue({data: {}});
@@ -98,7 +142,7 @@ describe('staff election workflows', () => {
         expect(await screen.findByText('No open or paused elections')).toBeInTheDocument();
         expect(screen.queryByText('Active', {exact: true})).not.toBeInTheDocument();
         expect(screen.queryByText('Other Election')).not.toBeInTheDocument();
-        expect(screen.queryByText('Assigned Election')).not.toBeInTheDocument();
+        expect(screen.getByRole('heading', {name: 'Assigned Election'})).toBeInTheDocument();
         expect(screen.getByRole('link', {name: 'Positions'})).toBeInTheDocument();
         expect(screen.getByRole('link', {name: 'Manage Elections'})).toBeInTheDocument();
         expect(screen.getByRole('link', {name: 'Activate Voters'})).toBeInTheDocument();
@@ -114,12 +158,67 @@ describe('staff election workflows', () => {
             {...elections[1], id: 4, name: 'Ended Election', status: 'ended', voting_enabled: true},
         ];
         openPage('/admin/dashboard', 'superuser');
-        expect(await screen.findByRole('heading', {name: 'Assigned Election'})).toBeInTheDocument();
-        expect(screen.getByRole('heading', {name: 'Other Election'})).toBeInTheDocument();
+        expect(await screen.findByText('Assigned Election')).toBeInTheDocument();
+        expect(screen.getByText('Other Election')).toBeInTheDocument();
         expect(screen.getByText('Voting Open')).toBeInTheDocument();
         expect(screen.getByText('Paused')).toBeInTheDocument();
         expect(screen.queryByText('Scheduled Election')).not.toBeInTheDocument();
         expect(screen.queryByText('Ended Election')).not.toBeInTheDocument();
+    });
+
+    it('shows combined metrics across current elections for superusers', async () => {
+        electionData = [
+            {...elections[0], status: 'open', voting_open: true},
+            {...elections[1], status: 'paused', voting_enabled: false},
+        ];
+        voterRecords = [
+            {...voters[0], is_active: true},
+            {...voters[1], has_voted: true},
+            {id: 23, student_id: 'V3', full_name: 'Waiting Voter', class_name: 'Form 3', election: 2, is_active: false, has_voted: false},
+        ];
+        openPage('/admin/dashboard', 'superuser');
+
+        const statistics = await screen.findByRole('region', {name: 'Election statistics'});
+        const cardValue = (label: string) => within(statistics).getByText(label).closest('article')?.querySelector('.statistic-card-value')?.textContent;
+        expect(cardValue('Total voters')).toBe('3');
+        expect(cardValue('Active voters')).toBe('1');
+        expect(cardValue('Voters voted')).toBe('1');
+        expect(cardValue('Yet to activate')).toBe('1');
+        expect(cardValue('Turnout')).toBe('33.3%');
+        expect(screen.getAllByRole('link', {name: 'View results'}).map(link => link.getAttribute('href'))).toEqual([
+            '/admin/live-results?election=1',
+            '/admin/live-results?election=2',
+        ]);
+    });
+
+    it.each(['paused', 'ended'] as const)('shows five results statistics when the election is %s', async status => {
+        electionData[0] = {...electionData[0], status, voting_enabled: status !== 'paused'};
+        openPage('/admin/results');
+
+        const statistics = await screen.findByRole('region', {name: 'Election results statistics'});
+        expect(within(statistics).getAllByRole('article')).toHaveLength(5);
+        expect(within(statistics).getByText('Did not vote').closest('article')?.querySelector('.statistic-card-value')).toHaveTextContent('1');
+        expect(within(statistics).getByText('Positions').closest('article')?.querySelector('.statistic-card-value')).toHaveTextContent('0');
+        expect(screen.getByRole('button', {name: 'Export CSV'})).toHaveClass('ui-button--success');
+    });
+
+    it.each(['scheduled', 'open'] as const)('hides results and export while the election is %s', async status => {
+        electionData[0] = {...electionData[0], status, voting_open: status === 'open'};
+        openPage('/admin/results');
+
+        expect(await screen.findByText('Results can be shown only when the election is paused or has ended.')).toBeInTheDocument();
+        expect(screen.queryByRole('region', {name: 'Election results statistics'})).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: 'Export CSV'})).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: 'Live Results'})).not.toBeInTheDocument();
+        expect(api.get).not.toHaveBeenCalledWith('api/elections/1/results/');
+    });
+
+    it('blocks a direct live-results link while voting is open', async () => {
+        electionData[0] = {...electionData[0], status: 'open', voting_open: true};
+        openPage('/admin/live-results?election=1');
+
+        expect(await screen.findByText('Results can be shown only when the election is paused or has ended.')).toBeInTheDocument();
+        expect(api.get).not.toHaveBeenCalledWith('api/elections/1/results/');
     });
 
     it('shows one plain lifecycle status per election without a voting-control column', async () => {
@@ -390,6 +489,7 @@ describe('staff election workflows', () => {
     });
 
     it.each(['/admin/results', '/admin/live-results?election=2'])('scopes results at %s to the assignment', async path => {
+        electionData[0] = {...electionData[0], status: 'paused', voting_enabled: false};
         openPage(path);
         await waitFor(() => expect(api.get).toHaveBeenCalledWith('api/elections/1/results/'));
         expect(api.get).not.toHaveBeenCalledWith('api/elections/2/results/');
@@ -623,7 +723,7 @@ describe('voter lifecycle contract', () => {
     }, 10_000);
 
     it.each([
-        ['Student is not activated to vote.', 'You have not been activated for this election. Please ask an election official for access.'],
+        ['Student is not activated to vote.', 'You are not currently activated to vote in this election. Please ask an election official to activate your voter ID.'],
         ['Student has already voted.', 'You have already voted in this election.'],
     ])('translates voter eligibility errors safely', async (detail, message) => {
         const user = userEvent.setup();

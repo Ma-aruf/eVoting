@@ -778,6 +778,7 @@ export default function CandidatesPage() {
 
             {candidateChangesLocked && selectedElection && (
                 <Alert
+                    className="ballot-lock-alert"
                     variant="warning"
                     title="Candidate changes are locked"
                 >

@@ -10,6 +10,10 @@
     justify-content: flex-end;
 }
 
+.results-actions .ui-button--success:hover {
+    background: var(--color-success-strong);
+}
+
 .results-election-context,
 .results-position-section,
 .results-empty-state {
@@ -49,13 +53,23 @@
 
 .results-summary-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: .75rem;
 }
 
 .results-summary-grid .statistic-card {
-    height: 6rem;
+    height: 4.5rem;
+    width: 100%;
     border-radius: 0;
+}
+
+.results-summary-grid .statistic-card--split .statistic-card-content {
+    justify-content: center;
+    padding: .5rem .625rem;
+}
+
+.results-summary-grid .statistic-card--split .statistic-card-icon {
+    font-size: 1rem;
 }
 
 .results-summary-grid .statistic-card-label {
@@ -63,7 +77,20 @@
 }
 
 .results-summary-grid .statistic-card-value {
-    font-size: 1.5rem;
+    margin-top: .25rem;
+    font-size: 1.35rem;
+}
+
+@media (max-width: 63.99rem) {
+    .results-page .results-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 47.99rem) {
+    .results-page .results-summary-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 .results-summary-card {

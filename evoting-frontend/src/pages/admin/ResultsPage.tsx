@@ -5,12 +5,14 @@ import {
     FiChevronLeft,
     FiChevronRight,
     FiClipboard,
+    FiClock,
     FiDownload,
     FiMonitor,
     FiRefreshCw,
     FiUsers
 } from 'react-icons/fi';
 import StatisticCard from '../../components/StatisticCard';
+import ErrorState from '../../components/ui/ErrorState';
 import {useElections} from '../../queries/useElections';
 import {useAuth} from '../../hooks/useAuth';
 import {useResults} from '../../queries/useResults';
@@ -26,12 +28,17 @@ export default function ResultsPage() {
     const [selectedElectionId, setSelectedElectionId] = useState<number | null>(null);
 
     // Queries
-    const {data: elections = [], isLoading: electionsLoading} = useElections({refetchInterval: 45_000});
-    const defaultElectionId = elections.find(election => election.voting_open)?.id ?? elections[0]?.id ?? null;
+    const {data: elections = [], isLoading: electionsLoading} = useElections({refetchInterval: 5_000});
+    const defaultElectionId = elections.find(election => election.status === 'ended' || election.status === 'paused')?.id ?? elections[0]?.id ?? null;
     const effectiveElectionId = isScopedRole
         ? user?.assignedElection?.id ?? null
         : selectedElectionId ?? defaultElectionId;
-    const {data: results, isLoading: resultsLoading, error: resultsError} = useResults(effectiveElectionId);
+    const selectedElection = elections.find(election => election.id === effectiveElectionId);
+    const resultsAvailable = selectedElection?.status === 'paused' || selectedElection?.status === 'ended';
+    const liveResultsAvailable = ['open', 'paused', 'ended'].includes(selectedElection?.status ?? '');
+    const {data: results, isLoading: resultsLoading, error: resultsError, refetch: retryResults} = useResults(
+        resultsAvailable ? effectiveElectionId : null
+    );
 
     // Combined loading state
     const loading = electionsLoading || resultsLoading;
@@ -85,7 +92,7 @@ export default function ResultsPage() {
                     ))}
                 </select>}
                 <div className="results-actions">
-                    {effectiveElectionId && (
+                    {effectiveElectionId && liveResultsAvailable && (
                         <button
                             type="button"
                             onClick={() => navigate(`/admin/live-results?election=${effectiveElectionId}`)}
@@ -95,13 +102,13 @@ export default function ResultsPage() {
                             Live Results
                         </button>
                     )}
-                    <button
-                        onClick={() => results && downloadElectionResultsCsv(results)}
+                    {results && !resultsError && <button
+                        onClick={() => downloadElectionResultsCsv(results)}
                         className="ui-button ui-button--success"
                     >
                         <FiDownload className="w-4 h-4 mr-2" aria-hidden="true"/>
                         Export CSV
-                    </button>
+                    </button>}
                 </div>
             </div>
 
@@ -116,10 +123,24 @@ export default function ResultsPage() {
                         </div>
                     </div>
                 )}
-                {results ? (
+                {resultsError ? (
+                    <ErrorState
+                        title="Results unavailable"
+                        message="We could not verify that this election is paused or has ended. Results are hidden until the status can be confirmed."
+                        action={<button className="ui-button ui-button--secondary ui-button--compact" onClick={() => void retryResults()}>Try again</button>}
+                    />
+                ) : selectedElection && !resultsAvailable ? (
+                    <div className="results-empty-state" role="status">
+                        <FiClock className="mx-auto h-12 w-12 text-gray-400" aria-hidden="true"/>
+                        <h3 className="mt-2 text-sm font-medium text-gray-900">Results unavailable</h3>
+                        <p className="mt-1 text-sm text-gray-500">
+                            Results can be shown only when the election is paused or has ended.
+                        </p>
+                    </div>
+                ) : results ? (
                     <div className="space-y-6">
                         {/* Election Summary */}
-                        <section className="results-summary-grid">
+                        <section className="results-summary-grid" aria-label="Election results statistics">
                             <StatisticCard
                                 label="Total voters"
                                 value={results.total_voters.toLocaleString()}
@@ -135,10 +156,24 @@ export default function ResultsPage() {
                                 layout="split"
                             />
                             <StatisticCard
+                                label="Did not vote"
+                                value={Math.max(0, results.total_voters - results.voters_voted).toLocaleString()}
+                                icon={<FiClock/>}
+                                status="warning"
+                                layout="split"
+                            />
+                            <StatisticCard
                                 label="Turnout"
                                 value={`${results.voter_turnout.toFixed(1)}%`}
                                 icon={<FiBarChart2/>}
                                 status="success"
+                                layout="split"
+                            />
+                            <StatisticCard
+                                label="Positions"
+                                value={results.positions.length.toLocaleString()}
+                                icon={<FiClipboard/>}
+                                status="info"
                                 layout="split"
                             />
                         </section>

@@ -1390,8 +1390,8 @@ class StudentActivationView(APIView):
                 )
                 return Response(
                     {"detail": (
-                                    "This voter is already eligible to vote in another open election. "
-                                    "Deactivate that access before activating the voter here."
+                        "This voter is already eligible to vote in another open election. "
+                        "Deactivate that access before activating the voter here."
                     )},
                     status=status.HTTP_409_CONFLICT,
                 )
@@ -1537,6 +1537,13 @@ class VoterElectionEntryView(APIView):
         except Election.DoesNotExist:
             return Response(
                 {"detail": "This election login link is not valid."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # added this block to fix ended, paused and scheduled elections from being accessed via voter entry code
+        if election.status in ["ended", "paused", "scheduled"]:
+            return Response(
+                {"detail": "This election is not available."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -1716,6 +1723,31 @@ class StudentVoterLoginView(APIView):
                     status=status.HTTP_409_CONFLICT,
                 )
 
+            if not open_student.is_active:
+                detail = (
+                    "You are not currently activated to vote in this election. "
+                    "Please ask an election official to activate your voter ID."
+                )
+                self.security_logger.warning(
+                    "LOGIN_DENIED_INACTIVE: student_id=%s, election_id=%s, ip=%s",
+                    student_id,
+                    open_student.election.id,
+                    client_ip,
+                )
+                record_audit_event(
+                    action="VOTER_LOGIN_FAILED",
+                    outcome=AuditLog.Outcome.DENIED,
+                    request=request,
+                    election=open_student.election,
+                    student=open_student,
+                    student_id=student_id,
+                    metadata={"reason": "not_activated"},
+                )
+                return Response(
+                    {"detail": detail},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
             if (
                     open_student.election.voter_login_mode == Election.VOTER_LOGIN_MODE_ID
                     and (
@@ -1774,7 +1806,12 @@ class StudentVoterLoginView(APIView):
                 metadata={"reason": "not_activated"},
             )
             return Response(
-                {"detail": "Student is not activated to vote."},
+                {
+                    "detail": (
+                        "You are not currently activated to vote in this election. "
+                        "Please ask an election official to activate your voter ID."
+                    )
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
         else:
@@ -1881,6 +1918,14 @@ class StudentVoterLoginView(APIView):
                     student_id,
                     active_election.id,
                     client_ip,
+                )
+                record_audit_event(
+                    action="VOTER_LOGIN_FAILED",
+                    outcome=AuditLog.Outcome.DENIED,
+                    request=request,
+                    election=active_election,
+                    student=student,
+                    metadata={"reason": "invalid_pin", "attempts_exhausted": attempts_exhausted},
                 )
                 return Response({"detail": detail}, status=status.HTTP_403_FORBIDDEN)
 

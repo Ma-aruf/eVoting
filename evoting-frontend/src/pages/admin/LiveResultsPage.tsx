@@ -1,11 +1,12 @@
 import {useEffect, useMemo, useState, type CSSProperties} from 'react';
-import {FiAlertCircle, FiClock, FiUsers, FiX} from 'react-icons/fi';
+import {FiClock, FiUsers, FiX} from 'react-icons/fi';
 import {useLocation, useNavigate} from 'react-router-dom';
 import {useAuth} from '../../hooks/useAuth';
 import {useElections} from '../../queries/useElections';
 import {useResults, type CandidateResult} from '../../queries/useResults';
 import LoadingState from '../../components/ui/LoadingState';
 import ErrorState from '../../components/ui/ErrorState';
+import EmptyState from '../../components/ui/EmptyState';
 
 
 function percentage(value: number) {
@@ -89,9 +90,13 @@ export default function LiveResultsPage() {
     const requestedId = requestedElectionId ? Number(requestedElectionId) : null;
     const effectiveElectionId = isStaff ? user?.assignedElection?.id ?? null : requestedId;
     const election = elections.find(item => item.id === effectiveElectionId);
-    const resultsQuery = useResults(effectiveElectionId, {live: true, userId: user?.username ?? null});
+    const resultsAvailable = ['open', 'paused', 'ended'].includes(election?.status ?? '');
+    const resultsQuery = useResults(
+        resultsAvailable ? effectiveElectionId : null,
+        {live: true, userId: user?.username ?? null}
+    );
     const results = resultsQuery.data;
-    const initialLoading = electionsLoading || (resultsQuery.isLoading && !results);
+    const initialLoading = electionsLoading || (resultsAvailable && resultsQuery.isLoading && !results);
     const lifecycleStatus = results?.status ?? election?.status;
     const electionClosed = lifecycleStatus === 'ended';
     const positions = useMemo(
@@ -175,7 +180,16 @@ export default function LiveResultsPage() {
         </main>;
     }
 
-    if (resultsQuery.isError && !results) {
+    if (!resultsAvailable) {
+        return <main className="live-results-page" role="status"><EmptyState
+            title="Results unavailable"
+            message="Live results are available after voting starts. Scheduled elections do not have live results yet."
+            icon={<FiClock aria-hidden="true"/>}
+            action={<button className="ui-button ui-button--secondary ui-button--compact" onClick={closePage}>Return to dashboard</button>}
+        /></main>;
+    }
+
+    if (resultsQuery.isError) {
         return <main className="live-results-page"><ErrorState title="Results unavailable"
                                                                message="The selected election could not be loaded. It may be outside your permitted scope."
                                                                action={<button
@@ -215,9 +229,6 @@ export default function LiveResultsPage() {
                 </div>
             </header>
 
-            {resultsQuery.isError && results &&
-                <p className="live-results-connection-warning" role="status"><FiAlertCircle
-                    aria-hidden="true"/> Connection interrupted. Showing the last successful results.</p>}
             {electionClosed &&
                 <p className="live-results-closed" role="status"><FiClock aria-hidden="true"/> Election closed. Winner
                     labels reflect the final aggregate only.</p>}
