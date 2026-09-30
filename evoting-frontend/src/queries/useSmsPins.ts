@@ -32,7 +32,7 @@ export interface VoterRecoveryStatusRow {
 }
 
 export const useVoterRecoveryStatus = (electionId: number | null, enabled = true) => useQuery({
-    queryKey: ['voter-recovery-status', electionId],
+    queryKey: queryKeys.voterRecoveryStatus(electionId),
     queryFn: async (): Promise<VoterRecoveryStatusRow[]> => {
         const response = await api.get('api/students/recovery-status/', {
             params: {election_id: electionId},

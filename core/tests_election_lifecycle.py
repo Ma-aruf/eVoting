@@ -16,6 +16,7 @@ from .election_lifecycle import election_lifecycle, election_status, student_can
 from .models import Candidate, Election, Position, Student, Vote
 from .serializers import ElectionSerializer
 from .utils import create_voter_token
+from .utils import deactivate_expired_voters
 
 
 User = get_user_model()
@@ -751,6 +752,7 @@ class ElectionActivationReadinessTests(TestCase):
         self.assertEqual(activation.status_code, 200, activation.data)
         self.student.voting_pin_created_at = timezone.now() - timedelta(minutes=11)
         self.student.save(update_fields=["voting_pin_created_at"])
+        self.assertEqual(deactivate_expired_voters(), 1)
 
         listing = self.client.get(
             "/api/students/",

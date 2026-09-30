@@ -11,6 +11,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import ProtectedError
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from openpyxl import load_workbook

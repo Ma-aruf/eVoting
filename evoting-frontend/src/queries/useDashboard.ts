@@ -2,6 +2,7 @@ import {useQuery} from '@tanstack/react-query';
 import api from '../apiClient';
 import {useAuth} from '../hooks/useAuth';
 import type {ElectionStatus, VoterLoginMode} from '../types/election';
+import {queryKeys} from './queryKeys';
 
 export interface OperationsMetrics {
     total_voters: number;
@@ -35,7 +36,7 @@ export interface OperationsDashboard {
 export function useOperationsDashboard() {
     const {user} = useAuth();
     return useQuery({
-        queryKey: ['dashboard-operations', user?.username, user?.role, user?.assignedElection?.id],
+        queryKey: queryKeys.dashboardOperations(user?.username, user?.role, user?.assignedElection?.id),
         queryFn: async () => {
             const response = await api.get<OperationsDashboard>('api/dashboard/operations/');
             return response.data;

@@ -1,6 +1,7 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useQueryClient} from '@tanstack/react-query';
 import {useNavigate} from 'react-router-dom';
+import {queryKeys} from '../queries/queryKeys';
 import {
     FiAlertCircle,
     FiCheck,
@@ -184,7 +185,7 @@ export default function VotingPage() {
                     return;
                 }
                 clearVoterSession();
-                queryClient.removeQueries({queryKey: ['votingData']});
+                queryClient.removeQueries({queryKey: queryKeys.voterData});
                 navigate(voterLoginPath, {
                     replace: true,
                     state: {message: 'Your voter session is no longer valid. Please sign in again.'},
@@ -295,7 +296,7 @@ export default function VotingPage() {
             setSuccess(true);
             redirectTimeout.current = setTimeout(() => {
                 clearVoterSession();
-                queryClient.removeQueries({queryKey: ['votingData']});
+                queryClient.removeQueries({queryKey: queryKeys.voterData});
                 navigate(voterLoginPath);
             }, 3000);
 
@@ -306,7 +307,7 @@ export default function VotingPage() {
                 setError(lifecycleMessage);
             } else if (apiError.response?.status === 401 || apiError.response?.status === 404) {
                 clearVoterSession();
-                queryClient.removeQueries({queryKey: ['votingData']});
+                queryClient.removeQueries({queryKey: queryKeys.voterData});
                 navigate(voterLoginPath, {
                     replace: true,
                     state: {message: 'Your voter session is no longer valid. Please sign in again.'},
@@ -318,14 +319,14 @@ export default function VotingPage() {
                     setError('You have already voted in this election.');
                     setTimeout(() => {
                         clearVoterSession();
-                        queryClient.removeQueries({queryKey: ['votingData']});
+                        queryClient.removeQueries({queryKey: queryKeys.voterData});
                         navigate(voterLoginPath);
                     }, 3000);
                 } else if (apiError.response?.data?.detail === 'Student is not activated to vote.') {
                     setError('You have not been activated for this election.');
                     setTimeout(() => {
                         clearVoterSession();
-                        queryClient.removeQueries({queryKey: ['votingData']});
+                        queryClient.removeQueries({queryKey: queryKeys.voterData});
                         navigate(voterLoginPath);
                     }, 3000);
                 } else {

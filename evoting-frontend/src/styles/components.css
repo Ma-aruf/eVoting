@@ -257,7 +257,8 @@
 
 .ui-select {
     appearance: none;
-    padding-right: 2.5rem
+
+    padding-right: 2.5rem;
 }
 
 .ui-select-icon {
@@ -315,7 +316,6 @@
     align-items: flex-start;
     gap: var(--space-3);
     border: 1px solid;
-    border-radius: var(--radius-md);
     padding: .75rem .875rem;
     font-size: var(--font-size-sm);
     line-height: var(--line-height-normal)
@@ -792,6 +792,10 @@
     .confirmation-dialog-footer {
         margin-inline: -1rem;
         padding-inline: 1rem;
+    }
+
+    .ui-select {
+        font-size: 10px;
     }
 }
 

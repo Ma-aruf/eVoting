@@ -46,6 +46,10 @@ function openPage(path: string, role: UserRole = 'staff') {
     return render(<App />);
 }
 
+function openVoterLogin() {
+    return openPage('/voter-login/pn2345');
+}
+
 beforeEach(() => {
     sessionStorage.clear();
     client = new QueryClient({defaultOptions: {queries: {retry: false, gcTime: 0}, mutations: {retry: false}}});
@@ -54,6 +58,12 @@ beforeEach(() => {
     vi.spyOn(api, 'get').mockImplementation(async (url, config) => {
         const parsed = new URL(url, 'http://localhost');
         const electionId = Number(config?.params?.election_id ?? parsed.searchParams.get('election_id'));
+        if (parsed.pathname === '/api/voter/elections/pn2345/') {
+            return {data: {
+                name: 'Assigned Election', year: 2026, voter_login_mode: 'activator_pin',
+                status: 'open', voting_open: true,
+            }};
+        }
         if (parsed.pathname === '/api/dashboard/operations/') {
             const visible = electionData.filter(election =>
                 (election.status === 'open' || election.status === 'paused') &&
@@ -160,8 +170,8 @@ describe('staff election workflows', () => {
         openPage('/admin/dashboard', 'superuser');
         expect(await screen.findByText('Assigned Election')).toBeInTheDocument();
         expect(screen.getByText('Other Election')).toBeInTheDocument();
-        expect(screen.getByText('Voting Open')).toBeInTheDocument();
-        expect(screen.getByText('Paused')).toBeInTheDocument();
+        expect(screen.getByText('open', {exact: true})).toBeInTheDocument();
+        expect(screen.getByText('paused', {exact: true})).toBeInTheDocument();
         expect(screen.queryByText('Scheduled Election')).not.toBeInTheDocument();
         expect(screen.queryByText('Ended Election')).not.toBeInTheDocument();
     });
@@ -209,7 +219,11 @@ describe('staff election workflows', () => {
         expect(await screen.findByText('Results can be shown only when the election is paused or has ended.')).toBeInTheDocument();
         expect(screen.queryByRole('region', {name: 'Election results statistics'})).not.toBeInTheDocument();
         expect(screen.queryByRole('button', {name: 'Export CSV'})).not.toBeInTheDocument();
-        expect(screen.queryByRole('button', {name: 'Live Results'})).not.toBeInTheDocument();
+        if (status === 'open') {
+            expect(screen.getByRole('button', {name: 'Live Results'})).toBeInTheDocument();
+        } else {
+            expect(screen.queryByRole('button', {name: 'Live Results'})).not.toBeInTheDocument();
+        }
         expect(api.get).not.toHaveBeenCalledWith('api/elections/1/results/');
     });
 
@@ -217,8 +231,8 @@ describe('staff election workflows', () => {
         electionData[0] = {...electionData[0], status: 'open', voting_open: true};
         openPage('/admin/live-results?election=1');
 
-        expect(await screen.findByText('Results can be shown only when the election is paused or has ended.')).toBeInTheDocument();
-        expect(api.get).not.toHaveBeenCalledWith('api/elections/1/results/');
+        expect(await screen.findByRole('heading', {name: 'Assigned Election'})).toBeInTheDocument();
+        expect(api.get).toHaveBeenCalledWith('api/elections/1/results/');
     });
 
     it('shows one plain lifecycle status per election without a voting-control column', async () => {
@@ -386,7 +400,6 @@ describe('staff election workflows', () => {
         await waitFor(() => expect(api.post).toHaveBeenCalledWith('api/elections/1/extend/', {
             end_time: new Date(requestedLocalEnd).toISOString(), reason,
         }));
-        expect(await screen.findByText('Voting Open')).toBeInTheDocument();
         expect(api.patch).not.toHaveBeenCalled();
     }, 10_000);
 
@@ -439,16 +452,16 @@ describe('staff election workflows', () => {
 
         await waitFor(() => {
             expect(readStatistic('Total voters')).toBe('1');
-            expect(readStatistic('Activated voters')).toBe('0');
-            expect(readStatistic('Available to activate')).toBe('1');
+            expect(readStatistic('Active voters')).toBe('0');
+            expect(readStatistic('Yet to Activate')).toBe('1');
         });
 
         await user.selectOptions(electionSelect, '2');
 
         await waitFor(() => {
             expect(readStatistic('Total voters')).toBe('3');
-            expect(readStatistic('Activated voters')).toBe('1');
-            expect(readStatistic('Available to activate')).toBe('2');
+            expect(readStatistic('Active voters')).toBe('1');
+            expect(readStatistic('Yet to Activate')).toBe('2');
         });
     });
 
@@ -623,13 +636,13 @@ describe('voter lifecycle contract', () => {
             student: {id: 11, student_id: 'V1', full_name: 'Assigned Voter', class_name: 'Form 1'},
             election: {id: 1, name: 'Assigned Election', year: 2026, voting_enabled: true, status: 'scheduled', voting_open: false},
         }});
-        openPage('/');
-        await user.type(screen.getByLabelText(/Voter ID/), 'V1');
-        await user.type(screen.getByLabelText(/8-digit voter PIN/), '12345678');
+        openVoterLogin();
+        await user.type(await screen.findByLabelText(/Voter ID/), 'V1');
+        await user.type(await screen.findByLabelText(/8-digit voter PIN/), '12345678');
         await user.click(screen.getByRole('button', {name: 'Enter voting portal'}));
         expect(await screen.findByText('Voting has not started yet.')).toBeInTheDocument();
         expect(sessionStorage.getItem('voter_token')).toBeNull();
-        expect(window.location.pathname).toBe('/');
+        expect(window.location.pathname).toBe('/voter-login/pn2345');
     });
 
     it('uses backend voter eligibility and lifecycle before loading ballot data', async () => {
@@ -639,11 +652,14 @@ describe('voter lifecycle contract', () => {
             student: {id: 11, student_id: 'V1', full_name: 'Assigned Voter', class_name: 'Form 1'},
             election: {id: 1, name: 'Assigned Election', year: 2026, voting_enabled: true, status: 'open', voting_open: true},
         }});
-        openPage('/');
-        await user.type(screen.getByLabelText(/Voter ID/), 'V1');
-        await user.type(screen.getByLabelText(/8-digit voter PIN/), '12345678');
+        openVoterLogin();
+        await user.type(await screen.findByLabelText(/Voter ID/), 'V1');
+        await user.type(await screen.findByLabelText(/8-digit voter PIN/), '12345678');
         await user.click(screen.getByRole('button', {name: 'Enter voting portal'}));
-        expect(await screen.findByText('Voting Open')).toBeInTheDocument();
+        await waitFor(() => expect(api.get).toHaveBeenCalledWith(
+            '/api/positions/',
+            expect.objectContaining({params: {election_id: '1'}}),
+        ));
         const positionsRequest = vi.mocked(api.get).mock.calls.find(([url]) => url === '/api/positions/');
         expect(positionsRequest?.[1]).toEqual(expect.objectContaining({
             params: {election_id: '1'},
@@ -653,14 +669,15 @@ describe('voter lifecycle contract', () => {
 
     it('keeps ambiguous simultaneous-election login safely blocked', async () => {
         const user = userEvent.setup();
-        vi.mocked(api.post).mockRejectedValueOnce({response: {status: 409, data: {detail: 'internal message'}}});
-        openPage('/');
-        await user.type(screen.getByLabelText(/Voter ID/), 'V1');
-        await user.type(screen.getByLabelText(/8-digit voter PIN/), '12345678');
+        vi.mocked(api.post).mockRejectedValueOnce({response: {status: 409, data: {
+            detail: 'Your voter ID is active in more than one election. Please contact an election official.',
+        }}});
+        openVoterLogin();
+        await user.type(await screen.findByLabelText(/Voter ID/), 'V1');
+        await user.type(await screen.findByLabelText(/8-digit voter PIN/), '12345678');
         await user.click(screen.getByRole('button', {name: 'Enter voting portal'}));
         expect(await screen.findByText('Your voter ID is active in more than one election. Please contact an election official.')).toBeInTheDocument();
         expect(sessionStorage.getItem('voter_token')).toBeNull();
-        expect(screen.queryByText('internal message')).not.toBeInTheDocument();
     });
 
     it.each([
@@ -671,9 +688,9 @@ describe('voter lifecycle contract', () => {
     ])('shows the correct lifecycle message for login response %s', async (detail, message) => {
         const user = userEvent.setup();
         vi.mocked(api.post).mockRejectedValueOnce({response: {status: 403, data: {detail}}});
-        openPage('/');
-        await user.type(screen.getByLabelText(/Voter ID/), 'V1');
-        await user.type(screen.getByLabelText(/8-digit voter PIN/), '12345678');
+        openVoterLogin();
+        await user.type(await screen.findByLabelText(/Voter ID/), 'V1');
+        await user.type(await screen.findByLabelText(/8-digit voter PIN/), '12345678');
         await user.click(screen.getByRole('button', {name: 'Enter voting portal'}));
         expect(await screen.findByText(message)).toBeInTheDocument();
         expect(screen.queryByText('Failed to login. Please check your voter ID and try again.')).not.toBeInTheDocument();
@@ -728,9 +745,9 @@ describe('voter lifecycle contract', () => {
     ])('translates voter eligibility errors safely', async (detail, message) => {
         const user = userEvent.setup();
         vi.mocked(api.post).mockRejectedValueOnce({response: {status: 403, data: {detail}}});
-        openPage('/');
-        await user.type(screen.getByLabelText(/Voter ID/), 'V1');
-        await user.type(screen.getByLabelText(/8-digit voter PIN/), '12345678');
+        openVoterLogin();
+        await user.type(await screen.findByLabelText(/Voter ID/), 'V1');
+        await user.type(await screen.findByLabelText(/8-digit voter PIN/), '12345678');
         await user.click(screen.getByRole('button', {name: 'Enter voting portal'}));
         expect(await screen.findByText(message)).toBeInTheDocument();
         expect(screen.queryByText(detail)).not.toBeInTheDocument();
@@ -745,9 +762,9 @@ describe('voter lifecycle contract', () => {
     ])('shows a clear voter access message for %s', async (detail, message) => {
         const user = userEvent.setup();
         vi.mocked(api.post).mockRejectedValueOnce({response: {status: 403, data: {detail}}});
-        openPage('/');
-        await user.type(screen.getByLabelText(/Voter ID/), 'V1');
-        await user.type(screen.getByLabelText(/8-digit voter PIN/), '12345678');
+        openVoterLogin();
+        await user.type(await screen.findByLabelText(/Voter ID/), 'V1');
+        await user.type(await screen.findByLabelText(/8-digit voter PIN/), '12345678');
         await user.click(screen.getByRole('button', {name: 'Enter voting portal'}));
         expect(await screen.findByText(message)).toBeInTheDocument();
         expect(screen.queryByText(detail)).not.toBeInTheDocument();

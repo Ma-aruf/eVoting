@@ -252,7 +252,7 @@ class ElectionIsolationApiTests(TestCase):
             {"file": upload, "election_id": self.election_two.id},
             format="multipart",
         )
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 400)
 
     def test_staff_cannot_create_global_election(self):
         self.client.force_authenticate(self.staff)

@@ -76,12 +76,7 @@ export interface VoterLoginResponse {
     election: VoterElection;
 }
 
-export interface ElectionResultsLifecycle {
-    voting_enabled: boolean;
-    status: ElectionStatus;
-    voting_open: boolean;
-    candidate_changes_locked: boolean;
-}
+export type ElectionResultsLifecycle = ElectionLifecycleFields;
 
 export function isElectionStatus(value: unknown): value is ElectionStatus {
     return value === 'scheduled' || value === 'open' || value === 'paused' || value === 'ended';

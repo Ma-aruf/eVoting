@@ -10,6 +10,8 @@ export const queryKeys = {
   
   // Dashboard stats (scoped by election)
   dashboard: (electionId: number | null) => ['dashboard', electionId] as const,
+  dashboardOperations: (username: string | undefined, role: string | null | undefined, assignedElectionId: number | undefined) =>
+    ['dashboard-operations', username, role, assignedElectionId] as const,
   
   // Positions (scoped by election)
   positions: (electionId: number | null) => ['positions', electionId] as const,
@@ -30,4 +32,9 @@ export const queryKeys = {
   // Activation status (scoped by election)
   activations: (electionId: number | null) => ['activations', electionId] as const,
   smsStatus: (electionId: number | null) => ['sms-status', electionId] as const,
+  voterRecoveryStatus: (electionId: number | null) => ['voter-recovery-status', electionId] as const,
+  voterData: ['votingData'] as const,
+  voterDataForSession: (electionId: number | string | null, studentId: string | null) => ['votingData', electionId, studentId] as const,
+  voterElectionEntry: (electionCode: string | undefined) => ['voter-election-entry', electionCode] as const,
+  auditLogs: ['audit-logs'] as const,
 } as const;

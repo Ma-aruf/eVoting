@@ -2,6 +2,7 @@ import {useQuery} from '@tanstack/react-query';
 import {getVoterSession, voterApi} from '../api/voterApi';
 import type {VoterElection} from '../types/election';
 import {voterLifecycleMessage} from '../utils/electionLifecycle';
+import {queryKeys} from '../queries/queryKeys';
 
 type Election = VoterElection;
 
@@ -91,7 +92,7 @@ export function useVotingData(enabled: boolean = true) {
     const electionId = session?.electionId ?? null;
     const studentId = session?.studentId ?? null;
     return useQuery({
-        queryKey: ['votingData', electionId, studentId],
+        queryKey: queryKeys.voterDataForSession(electionId, studentId),
         queryFn: fetchVotingData,
         enabled: enabled && !!session && session.canVoteNow && session.election.voting_open && session.election.status === 'open',
     });

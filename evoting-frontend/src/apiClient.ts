@@ -69,12 +69,4 @@ api.interceptors.response.use(
     }
 );
 
-// Helper typed wrappers
-export const getElections = () => api.get('api/elections/');
-export const getPositions = (electionId: number | string) =>
-    api.get('api/positions/', {params: {election_id: electionId}});  
-
-export const getCandidates = (positionId: number | string) =>
-    api.get('api/candidates/', {params: {position_id: positionId}});
-
 export default api;

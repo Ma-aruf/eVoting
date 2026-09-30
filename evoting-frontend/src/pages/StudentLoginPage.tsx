@@ -12,6 +12,7 @@ import TextInput from '../components/ui/TextInput';
 import {clearVoterSession, saveVoterSession} from '../api/voterApi';
 import type {VoterLoginResponse} from '../types/election';
 import {voterLifecycleMessage, voterLifecycleMessageFromDetail} from '../utils/electionLifecycle';
+import {queryKeys} from '../queries/queryKeys';
 
 type ApiError = { response?: { status?: number; data?: { detail?: string } } };
 type VoterElectionEntry = {
@@ -85,7 +86,7 @@ export default function StudentLoginPage() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const electionEntryQuery = useQuery({
-        queryKey: ['voter-election-entry', electionCode],
+        queryKey: queryKeys.voterElectionEntry(electionCode),
         queryFn: async () => {
             const response = await api.get<VoterElectionEntry>(
                 `api/voter/elections/${electionCode}/`
@@ -105,7 +106,7 @@ export default function StudentLoginPage() {
         setError(null);
         setLoading(true);
         clearVoterSession();
-        queryClient.removeQueries({queryKey: ['votingData']});
+        queryClient.removeQueries({queryKey: queryKeys.voterData});
         try {
             const submittedStudentId = studentId.trim();
             const response = await api.post<VoterLoginResponse>('api/voter/login/', {

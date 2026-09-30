@@ -8,6 +8,7 @@ import ErrorState from '../../components/ui/ErrorState';
 import LoadingState from '../../components/ui/LoadingState';
 import Button from '../../components/ui/Button';
 import {downloadCsv} from '../../utils/exportCsv';
+import {queryKeys} from '../../queries/queryKeys';
 
 const PAGE_SIZE = 10;
 
@@ -28,7 +29,7 @@ type AuditResponse = { results?: AuditEvent[] };
 
 export default function AuditLogsPage() {
     const auditQuery = useQuery({
-        queryKey: ['audit-logs'],
+        queryKey: queryKeys.auditLogs,
         queryFn: async () => {
             const response = await api.get<AuditResponse | AuditEvent[]>('api/audit-logs/');
             return Array.isArray(response.data) ? response.data : response.data.results ?? [];

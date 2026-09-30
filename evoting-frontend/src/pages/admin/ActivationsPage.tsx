@@ -1,6 +1,17 @@
 import {type FormEvent, type KeyboardEvent, useEffect, useMemo, useState,} from 'react';
 
-import {FiBarChart2, FiCheckCircle, FiSend, FiUserPlus, FiUsers, FiUserX, FiX,} from 'react-icons/fi';
+import {
+    FiBarChart2,
+    FiCheckCircle,
+    FiEye,
+    FiEyeOff,
+    FiPower,
+    FiSend,
+    FiUserPlus,
+    FiUsers,
+    FiUserX,
+    FiX,
+} from 'react-icons/fi';
 
 import {useElections} from '../../queries/useElections';
 import {electionStatusPresentation} from '../../utils/electionLifecycle';
@@ -10,12 +21,12 @@ import {useActivateStudent} from '../../queries/useActivations';
 import {
     type SmsPinSendResponse,
     type SmsVoterStatusRow,
-    type VoterRecoveryStatusRow,
     useGenerateSmsPin,
     useResendSmsPin,
     useSendSmsPins,
     useSmsVoterStatus,
     useVoterRecoveryStatus,
+    type VoterRecoveryStatusRow,
 } from '../../queries/useSmsPins';
 
 import {showError, showSuccess} from '../../utils/toast';
@@ -34,6 +45,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import ErrorState from '../../components/ui/ErrorState';
 import ConfirmModal from '../../components/ConfirmModal';
 import {BsFillGearFill, BsSendFill} from "react-icons/bs";
+import {MdPersonOff} from "react-icons/md";
 
 type ApiError = {
     response?: {
@@ -86,10 +98,10 @@ function recoveryStateLabel(row: VoterRecoveryStatusRow) {
 }
 
 type SmsConfirmAction =
-    | {kind: 'send_all'}
-    | {kind: 'resend'; row: SmsVoterStatusRow}
-    | {kind: 'generate'; row: SmsVoterStatusRow}
-    | {kind: 'invalidate'; student_id: string; full_name: string};
+    | { kind: 'send_all' }
+    | { kind: 'resend'; row: SmsVoterStatusRow }
+    | { kind: 'generate'; row: SmsVoterStatusRow }
+    | { kind: 'invalidate'; student_id: string; full_name: string };
 
 export default function ActivationsPage() {
     const {user} = useAuth();
@@ -107,6 +119,7 @@ export default function ActivationsPage() {
     const [activationSuccessStudent, setActivationSuccessStudent] = useState('');
     const [smsSendResult, setSmsSendResult] = useState<SmsPinSendResponse | null>(null);
     const [smsStatusSearch, setSmsStatusSearch] = useState('');
+    const [isVoterTableVisible, setIsVoterTableVisible] = useState(true);
     const [resendingStudentId, setResendingStudentId] = useState<number | null>(null);
     const [generatingStudentId, setGeneratingStudentId] = useState<number | null>(null);
     const [smsConfirmAction, setSmsConfirmAction] = useState<SmsConfirmAction | null>(null);
@@ -278,6 +291,7 @@ export default function ActivationsPage() {
             row.phone_number.toLowerCase().includes(query)
         );
     }, [smsStatusQuery.data, smsStatusSearch]);
+
     const filteredRecoveryVoters = useMemo(() => {
         const query = smsStatusSearch.trim().toLowerCase();
         const rows = recoveryStatusQuery.data ?? [];
@@ -634,49 +648,80 @@ export default function ActivationsPage() {
                         </div>
                     )}
 
-                    <section className="ui-section">
+                    <>
                         {selectedElection?.voter_login_mode === 'sms_pin' ? (
                             <>
-                                <div className="ui-section-heading">
-                                    <div className="mb-4">
-                                        <h2>Send voter PINs by SMS</h2>
-                                        <p>
-                                            Send a fresh one-hour PIN to every eligible voter with a registered phone
-                                            number.
-                                            Voters will use their student ID and the PIN from the message to sign in.
-                                        </p>
+                                <section className="ui-section">
+                                    <div className="ui-section-heading">
+                                        <div className="mb-4">
+                                            <h2>Send voter PINs by SMS</h2>
+                                            <p>
+                                                Send a fresh one-hour PIN to every eligible voter with a registered
+                                                phone
+                                                number.
+                                                Voters will use their student ID and the PIN from the message to sign
+                                                in.
+                                            </p>
+                                        </div>
+                                        {canViewSmsStatus && effectiveElectionId ? (
+                                            <Button
+                                                type="button"
+                                                leadingIcon={<FiSend aria-hidden="true"/>}
+                                                loading={sendSmsPins.isPending}
+                                                disabled={!canSendSmsPins}
+                                                title={!canSendSmsPins ? (activationBlockMessage || 'SMS PIN delivery is not available for this election yet.') : undefined}
+                                                onClick={() => setSmsConfirmAction({kind: 'send_all'})}
+                                            >
+                                                Send PINs by SMS
+                                            </Button>
+                                        ) : (
+                                            <p className="text-sm text-gray-500">
+                                                {activationBlockMessage || 'SMS PIN delivery is not available for this election yet.'}
+                                            </p>
+                                        )}
                                     </div>
-                                    {canViewSmsStatus && effectiveElectionId ? (
-                                        <Button
-                                            type="button"
-                                            leadingIcon={<FiSend aria-hidden="true"/>}
-                                            loading={sendSmsPins.isPending}
-                                            disabled={!canSendSmsPins}
-                                            title={!canSendSmsPins ? (activationBlockMessage || 'SMS PIN delivery is not available for this election yet.') : undefined}
-                                            onClick={() => setSmsConfirmAction({kind: 'send_all'})}
-                                        >
-                                            Send PINs by SMS
-                                        </Button>
-                                    ) : (
-                                        <p className="text-sm text-gray-500">
-                                            {activationBlockMessage || 'SMS PIN delivery is not available for this election yet.'}
-                                        </p>
-                                    )}
-                                </div>
+                                </section>
 
                                 {canViewSmsStatus && (
-                                    <section className="sms-delivery-status">
-                                        <div className="sms-delivery-toolbar">
-                                            <FormField id="sms-status-search" label="Search voters">
-                                                <div className="relative">
+                                    <div
+                                        className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-10">
+                                        <Button
+                                            type="button"
+                                            variant="primary"
+                                            size="compact"
+                                            className="w-full sm:w-auto sm:flex-none"
+                                            style={{minHeight: '44px'}}
+                                            aria-expanded={isVoterTableVisible}
+                                            aria-controls="sms-voter-table-content"
+                                            onClick={() => setIsVoterTableVisible(visible => !visible)}
+                                        >
+                                            <span className="flex items-center justify-center gap-2">
+                                                {isVoterTableVisible
+                                                    ? <FiEyeOff size={20} className="shrink-0"/>
+                                                    : <FiEye size={20} className="shrink-0"/>}
+                                                {isVoterTableVisible
+                                                    ? 'Hide voter status & recovery'
+                                                    : 'View voter status & recovery'}
+                                            </span>
+                                        </Button>
+                                        {isVoterTableVisible &&
+                                            <div className="w-full min-w-0 sm:flex-1">
+                                                <FormField id="sms-status-search" label="Search voters">
                                                     <TextInput
-                                                        className="pl-9"
+                                                        className="w-full"
                                                         value={smsStatusSearch}
                                                         onChange={event => setSmsStatusSearch(event.target.value)}
                                                         placeholder="Search by voter ID, name, or phone"
                                                     />
-                                                </div>
-                                            </FormField>
+                                                </FormField>
+                                            </div>
+                                        }
+                                    </div>
+                                )}
+                                {canViewSmsStatus && isVoterTableVisible && (
+                                    <section className="ui-section sms-delivery-status" id="sms-voter-table-content">
+                                        <div className="ui-section-heading">
+                                            <h2>Voter status & recovery</h2>
                                         </div>
 
                                         {smsStatusQuery.isLoading ? (
@@ -740,7 +785,10 @@ export default function ActivationsPage() {
                                                                             size='compact'
                                                                             loading={resendingStudentId === row.id}
                                                                             disabled={!canSendSmsPins || resendingStudentId !== null || generatingStudentId !== null}
-                                                                            onClick={() => setSmsConfirmAction({kind: 'resend', row})}
+                                                                            onClick={() => setSmsConfirmAction({
+                                                                                kind: 'resend',
+                                                                                row
+                                                                            })}
                                                                         >
 
                                                                             <div
@@ -763,7 +811,10 @@ export default function ActivationsPage() {
                                                                             size='compact'
                                                                             loading={generatingStudentId === row.id}
                                                                             disabled={!canSendSmsPins || resendingStudentId !== null || generatingStudentId !== null}
-                                                                            onClick={() => setSmsConfirmAction({kind: 'generate', row})}
+                                                                            onClick={() => setSmsConfirmAction({
+                                                                                kind: 'generate',
+                                                                                row
+                                                                            })}
                                                                         >
                                                                             <div
                                                                                 className="flex flex-row gap-1 items-center">
@@ -778,7 +829,11 @@ export default function ActivationsPage() {
                                                                             variant="danger"
                                                                             size="compact"
                                                                             disabled={resendingStudentId !== null || generatingStudentId !== null}
-                                                                            onClick={() => setSmsConfirmAction({kind: 'invalidate', student_id: row.student_id, full_name: row.full_name})}
+                                                                            onClick={() => setSmsConfirmAction({
+                                                                                kind: 'invalidate',
+                                                                                student_id: row.student_id,
+                                                                                full_name: row.full_name
+                                                                            })}
                                                                         >Invalidate</Button>
                                                                     )}
                                                                     {!canSendSmsToVoter(row) && !canGenerateSmsPinForVoter(row) && row.status !== 'sent' && row.status !== 'generated' && (
@@ -797,249 +852,318 @@ export default function ActivationsPage() {
                             </>
                         ) : (
                             <>
-                                <div className="ui-section-heading">
-                                    <div>
-                                        <h2>Activate a voter</h2>
+                                <section className="ui-section">
+                                    <div className="ui-section-heading">
+                                        <div>
+                                            <h2>Activate a voter</h2>
 
-                                        <p>
-                                            Search by voter ID or name, select a
-                                            result, and confirm activation.
-                                        </p>
+                                            <p>
+                                                Search by voter ID or name, select a
+                                                result, and confirm activation.
+                                            </p>
+                                        </div>
+
                                     </div>
 
-                                </div>
-
-                                <form
-                                    onSubmit={handleActivate}
-                                    className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end"
-                                >
-                                    <FormField
-                                        id="activation-student"
-                                        label="Voter"
+                                    <form
+                                        onSubmit={handleActivate}
+                                        className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end"
                                     >
-                                        <div className="relative">
+                                        <FormField
+                                            id="activation-student"
+                                            label="Voter"
+                                        >
                                             <div className="relative">
+                                                <div className="relative">
 
-                                                <TextInput
-                                                    className="pl-9"
-                                                    value={studentQuery}
-                                                    onChange={event => {
-                                                        setStudentQuery(
-                                                            event.target.value
-                                                        );
-                                                        setSelectedStudentId('');
-                                                        setIsOpen(true);
-                                                        setActiveOption(0);
-                                                    }}
-                                                    onFocus={() => setIsOpen(true)}
-                                                    onKeyDown={handleSearchKeyDown}
-                                                    placeholder="Search name or voter ID"
-                                                    role="combobox"
-                                                    aria-expanded={isOpen}
-                                                    aria-controls={listboxId}
-                                                    aria-autocomplete="list"
-                                                    aria-activedescendant={
-                                                        isOpen && options[activeOption]
-                                                            ? 'activation-option-' +
-                                                            options[activeOption].id
-                                                            : undefined
-                                                    }
-                                                    disabled={
-                                                        !availableStudents.length || !canActivateVoters
-                                                    }
-                                                />
-                                            </div>
+                                                    <TextInput
+                                                        className="pl-9"
+                                                        value={studentQuery}
+                                                        onChange={event => {
+                                                            setStudentQuery(
+                                                                event.target.value
+                                                            );
+                                                            setSelectedStudentId('');
+                                                            setIsOpen(true);
+                                                            setActiveOption(0);
+                                                        }}
+                                                        onFocus={() => setIsOpen(true)}
+                                                        onKeyDown={handleSearchKeyDown}
+                                                        placeholder="Search name or voter ID"
+                                                        role="combobox"
+                                                        aria-expanded={isOpen}
+                                                        aria-controls={listboxId}
+                                                        aria-autocomplete="list"
+                                                        aria-activedescendant={
+                                                            isOpen && options[activeOption]
+                                                                ? 'activation-option-' +
+                                                                options[activeOption].id
+                                                                : undefined
+                                                        }
+                                                        disabled={
+                                                            !availableStudents.length || !canActivateVoters
+                                                        }
+                                                    />
+                                                </div>
 
-                                            {/* Search results */}
+                                                {/* Search results */}
 
-                                            {isOpen && canActivateVoters && (
-                                                <div
-                                                    id={listboxId}
-                                                    role="listbox"
-                                                    className="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 bg-white p-1 shadow-lg"
-                                                >
-                                                    {options.length ? (
-                                                        options.map(
-                                                            (student, index) => (
-                                                                <button
-                                                                    id={
-                                                                        'activation-option-' +
-                                                                        student.id
-                                                                    }
-                                                                    key={student.id}
-                                                                    type="button"
-                                                                    role="option"
-                                                                    aria-selected={
-                                                                        index ===
-                                                                        activeOption
-                                                                    }
-                                                                    className={
-                                                                        'block w-full rounded px-3 py-2 text-left text-sm ' +
-                                                                        (
+                                                {isOpen && canActivateVoters && (
+                                                    <div
+                                                        id={listboxId}
+                                                        role="listbox"
+                                                        className="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 bg-white p-1 shadow-lg"
+                                                    >
+                                                        {options.length ? (
+                                                            options.map(
+                                                                (student, index) => (
+                                                                    <button
+                                                                        id={
+                                                                            'activation-option-' +
+                                                                            student.id
+                                                                        }
+                                                                        key={student.id}
+                                                                        type="button"
+                                                                        role="option"
+                                                                        aria-selected={
                                                                             index ===
                                                                             activeOption
-                                                                                ? 'bg-blue-50 text-blue-900'
-                                                                                : 'text-gray-700 hover:bg-gray-50'
-                                                                        )
-                                                                    }
-                                                                    onMouseDown={event =>
-                                                                        event.preventDefault()
-                                                                    }
-                                                                    onClick={() =>
-                                                                        chooseStudent(
-                                                                            student
-                                                                        )
-                                                                    }
-                                                                >
+                                                                        }
+                                                                        className={
+                                                                            'block w-full rounded px-3 py-2 text-left text-sm ' +
+                                                                            (
+                                                                                index ===
+                                                                                activeOption
+                                                                                    ? 'bg-blue-50 text-blue-900'
+                                                                                    : 'text-gray-700 hover:bg-gray-50'
+                                                                            )
+                                                                        }
+                                                                        onMouseDown={event =>
+                                                                            event.preventDefault()
+                                                                        }
+                                                                        onClick={() =>
+                                                                            chooseStudent(
+                                                                                student
+                                                                            )
+                                                                        }
+                                                                    >
                                                             <span className="font-medium">
                                                                 {
                                                                     student.full_name
                                                                 }
                                                             </span>
 
-                                                                    <span className="ml-2 text-xs text-gray-500">
+                                                                        <span className="ml-2 text-xs text-gray-500">
                                                                 {
                                                                     student.student_id
                                                                 }
-                                                                        {' - '}
-                                                                        {
-                                                                            student.class_name
-                                                                        }
+                                                                            {' - '}
+                                                                            {
+                                                                                student.class_name
+                                                                            }
                                                             </span>
-                                                                </button>
+                                                                    </button>
+                                                                )
                                                             )
-                                                        )
-                                                    ) : (
-                                                        <p
-                                                            className="px-3 py-2 text-xs text-gray-500"
-                                                            role="status"
-                                                        >
-                                                            No matching eligible
-                                                            voters.
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            )}
+                                                        ) : (
+                                                            <p
+                                                                className="px-3 py-2 text-xs text-gray-500"
+                                                                role="status"
+                                                            >
+                                                                No matching eligible
+                                                                voters.
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </FormField>
+
+                                        <Button
+                                            type="submit"
+                                            loading={activateStudent.isPending}
+                                            disabled={
+                                                !selectedStudentId ||
+                                                !effectiveElectionId ||
+                                                !canActivateVoters
+                                            }
+                                            leadingIcon={
+                                                <FiUserPlus aria-hidden="true"/>
+                                            }
+                                        >
+                                            Activate voter
+                                        </Button>
+                                    </form>
+
+                                    {/* Selected voter details */}
+
+                                    {selectedStudent && (
+                                        <div
+                                            className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md bg-gray-50 p-3">
+                                            <div>
+                                                <p className="text-sm font-medium">
+                                                    {selectedStudent.full_name}
+                                                </p>
+
+                                                <p className="text-xs text-gray-500">
+                                                    {selectedStudent.student_id}
+                                                    {' - '}
+                                                    {selectedStudent.class_name}
+                                                </p>
+                                            </div>
+
+                                            <div className="flex gap-2">
+                                                <Badge
+                                                    variant={
+                                                        selectedStudent.is_active
+                                                            ? 'success'
+                                                            : 'neutral'
+                                                    }
+                                                >
+                                                    {selectedStudent.is_active
+                                                        ? 'Active'
+                                                        : 'Inactive'}
+                                                </Badge>
+
+                                                <Badge
+                                                    variant={
+                                                        selectedStudent.has_voted
+                                                            ? 'primary'
+                                                            : 'neutral'
+                                                    }
+                                                >
+                                                    {selectedStudent.has_voted
+                                                        ? 'Voted'
+                                                        : 'Not voted'}
+                                                </Badge>
+                                            </div>
                                         </div>
-                                    </FormField>
+                                    )}
 
-                                    <Button
-                                        type="submit"
-                                        loading={activateStudent.isPending}
-                                        disabled={
-                                            !selectedStudentId ||
-                                            !effectiveElectionId ||
-                                            !canActivateVoters
-                                        }
-                                        leadingIcon={
-                                            <FiUserPlus aria-hidden="true"/>
-                                        }
-                                    >
-                                        Activate voter
-                                    </Button>
-                                </form>
+                                    {/* Activation error */}
 
-                                {/* Selected voter details */}
-
-                                {selectedStudent && (
-                                    <div
-                                        className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md bg-gray-50 p-3">
-                                        <div>
-                                            <p className="text-sm font-medium">
-                                                {selectedStudent.full_name}
-                                            </p>
-
-                                            <p className="text-xs text-gray-500">
-                                                {selectedStudent.student_id}
-                                                {' - '}
-                                                {selectedStudent.class_name}
-                                            </p>
-                                        </div>
-
-                                        <div className="flex gap-2">
-                                            <Badge
-                                                variant={
-                                                    selectedStudent.is_active
-                                                        ? 'success'
-                                                        : 'neutral'
-                                                }
-                                            >
-                                                {selectedStudent.is_active
-                                                    ? 'Active'
-                                                    : 'Inactive'}
-                                            </Badge>
-
-                                            <Badge
-                                                variant={
-                                                    selectedStudent.has_voted
-                                                        ? 'primary'
-                                                        : 'neutral'
-                                                }
-                                            >
-                                                {selectedStudent.has_voted
-                                                    ? 'Voted'
-                                                    : 'Not voted'}
-                                            </Badge>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Activation error */}
-
-                                {mutationError && (
-                                    <Alert
-                                        variant="error"
-                                        title="Activation failed"
-                                        className="mt-4"
-                                    >
-                                        {mutationError}
-                                    </Alert>
-                                )}
+                                    {mutationError && (
+                                        <Alert
+                                            variant="error"
+                                            title="Activation failed"
+                                            className="mt-4"
+                                        >
+                                            {mutationError}
+                                        </Alert>
+                                    )}
+                                </section>
                             </>
                         )}
-                    </section>
+                    </>
 
                     {selectedElection.voter_login_mode !== 'sms_pin' && (
-                        <section className="ui-section" aria-labelledby="voter-recovery-title">
-                            <div className="ui-section-heading">
-                                <div>
-                                    <h2 id="voter-recovery-title">Voter access and recovery</h2>
-                                    <p>Review each voter’s login eligibility and invalidate active access when needed.</p>
-                                </div>
+                        <>
+                            <div className="mb-3 flex justify-end">
+                                <Button type="button" variant="secondary" size="compact"
+                                        aria-expanded={isVoterTableVisible} aria-controls="voter-recovery-table-content"
+                                        onClick={() => setIsVoterTableVisible(visible => !visible)}>
+                                    {isVoterTableVisible ? 'Hide voter access and recovery' : 'View voter access and recovery'}
+                                </Button>
                             </div>
-                            {recoveryStatusQuery.isLoading ? (
-                                <LoadingState title="Loading voter access" message="Checking current voter eligibility."/>
-                            ) : recoveryStatusQuery.isError ? (
-                                <Alert variant="error" title="Voter access status unavailable">We could not load current login eligibility.</Alert>
-                            ) : filteredRecoveryVoters.length === 0 ? (
-                                <EmptyState title={smsStatusSearch ? 'No matching voters' : 'No voters to display'} message={smsStatusSearch ? 'Try a different search term.' : 'Add voters to this election to review access.'}/>
-                            ) : (
-                                <div className="management-table-wrap">
-                                    <table className="management-table">
-                                        <caption className="sr-only">Voter login eligibility and recovery actions</caption>
-                                        <thead><tr><th scope="col">Voter</th><th scope="col">Access status</th><th scope="col">Why</th><th scope="col">Actions</th></tr></thead>
-                                        <tbody>{filteredRecoveryVoters.map(row => (
-                                            <tr key={row.id}>
-                                                <td data-label="Voter"><div className="management-table-cell--primary">{row.full_name}</div><div className="text-xs text-gray-500">{row.student_id}</div></td>
-                                                <td data-label="Access status">{recoveryStateLabel(row)}</td>
-                                                <td data-label="Why">{row.reason}</td>
-                                                <td data-label="Actions"><div className="flex flex-wrap justify-end gap-2">
-                                                    {!row.is_active && !row.has_voted && (
-                                                        <Button type="button" variant="primary" size="compact" disabled={!canActivateVoters || activateStudent.isPending} title={!canActivateVoters ? activationBlockMessage : undefined} onClick={() => activateStudent.mutate({student_id: row.student_id, election_id: effectiveElectionId!}, {onSuccess: data => {
-                                                            if (data.voting_pin) {
-                                                                setGeneratedPin(data.voting_pin);
-                                                                setGeneratedPinStudent(row.full_name);
-                                                            } else setActivationSuccessStudent(row.full_name);
-                                                        }, onError: error => showError(errorMessage(error))})}>Reactivate</Button>
-                                                    )}
-                                                    {row.can_invalidate && <Button type="button" variant="danger" size="compact" onClick={() => setSmsConfirmAction({kind: 'invalidate', student_id: row.student_id, full_name: row.full_name})}>Invalidate</Button>}
-                                                </div></td>
-                                            </tr>
-                                        ))}</tbody>
-                                    </table>
-                                </div>
-                            )}
-                        </section>
+                            {isVoterTableVisible &&
+                                <section className="ui-section" aria-labelledby="voter-recovery-title"
+                                         id="voter-recovery-table-content">
+                                    <div className="ui-section-heading">
+                                        <div>
+                                            <h2 id="voter-recovery-title">Voter access and recovery</h2>
+                                            <p>Review each voter’s login eligibility and invalidate active access when
+                                                needed.</p>
+                                        </div>
+                                    </div>
+                                    {recoveryStatusQuery.isLoading ? (
+                                        <LoadingState title="Loading voter access"
+                                                      message="Checking current voter eligibility."/>
+                                    ) : recoveryStatusQuery.isError ? (
+                                        <Alert variant="error" title="Voter access status unavailable">We could not load
+                                            current login eligibility.</Alert>
+                                    ) : filteredRecoveryVoters.length === 0 ? (
+                                        <EmptyState
+                                            title={smsStatusSearch ? 'No matching voters' : 'No voters to display'}
+                                            message={smsStatusSearch ? 'Try a different search term.' : 'Add voters to this election to review access.'}/>
+                                    ) : (
+                                        <div className="management-table-wrap">
+                                            <table className="management-table">
+                                                <caption className="sr-only">Voter login eligibility and recovery
+                                                    actions
+                                                </caption>
+                                                <thead>
+                                                <tr>
+                                                    <th scope="col">ID</th>
+                                                    <th scope="col">Voter</th>
+                                                    <th scope="col">Access status</th>
+                                                    <th scope="col">Why</th>
+                                                    <th scope="col">Actions</th>
+                                                </tr>
+                                                </thead>
+                                                <tbody>{filteredRecoveryVoters.map(row => (
+                                                    <tr key={row.id}>
+                                                        <td data-label="Voter ID">{row.student_id}</td>
+                                                        <td data-label="Voter">{row.full_name}</td>
+                                                        <td data-label="Access status">{recoveryStateLabel(row)}</td>
+                                                        <td data-label="Why">{row.reason}</td>
+                                                        <td data-label="Actions">
+                                                            <div className="flex flex-wrap justify-end gap-2">
+                                                                {!row.is_active && !row.has_voted && (
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="primary"
+                                                                        size="compact"
+                                                                        style={{minWidth: '95px', minHeight: "30px"}}
+                                                                        disabled={!canActivateVoters || activateStudent.isPending}
+                                                                        title={!canActivateVoters ? activationBlockMessage : undefined}
+                                                                        onClick={() => activateStudent.mutate({
+                                                                                student_id: row.student_id,
+                                                                                election_id: effectiveElectionId!
+                                                                            },
+                                                                            {
+                                                                                onSuccess: data => {
+                                                                                    if (data.voting_pin) {
+                                                                                        setGeneratedPin(data.voting_pin);
+                                                                                        setGeneratedPinStudent(row.full_name);
+                                                                                    } else setActivationSuccessStudent(row.full_name);
+                                                                                },
+                                                                                onError: error => showError(errorMessage(error))
+                                                                            })}>
+                                                                        <div
+                                                                            className="flex justify-between items-center gap-2">
+                                                                            <FiPower/>
+                                                                            Activate
+                                                                        </div>
+                                                                    </Button>
+                                                                )}
+                                                                {
+                                                                    row.can_invalidate &&
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="danger"
+                                                                        size="compact"
+                                                                        style={{minWidth: '95px', minHeight: "30px"}}
+                                                                        onClick={() => setSmsConfirmAction({
+                                                                            kind: 'invalidate',
+                                                                            student_id: row.student_id,
+                                                                            full_name: row.full_name
+                                                                        })}>
+                                                                        <div
+                                                                            className="flex justify-between items-center gap-2">
+                                                                            <MdPersonOff/>
+                                                                            Disable
+                                                                        </div>
+                                                                    </Button>}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}</tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </section>
+                            }
+                        </>
                     )}
 
                     {/* Empty and loading states */}
@@ -1060,16 +1184,16 @@ export default function ActivationsPage() {
                     )}
                 </div>
             )}
-        <ConfirmModal
-            isOpen={Boolean(smsConfirmAction)}
-            onClose={() => setSmsConfirmAction(null)}
-            onConfirm={confirmSmsAction}
-            title={smsConfirmAction?.kind === 'send_all' ? 'Send PINs by SMS' : smsConfirmAction?.kind === 'resend' ? 'Resend voter PIN' : smsConfirmAction?.kind === 'invalidate' ? 'Invalidate voter access' : 'Generate voter PIN'}
-            message={smsConfirmationMessage}
-            confirmText={smsConfirmAction?.kind === 'send_all' ? 'Send PINs' : smsConfirmAction?.kind === 'resend' ? 'Resend PIN' : smsConfirmAction?.kind === 'invalidate' ? 'Invalidate access' : 'Generate PIN'}
-            cancelText='Cancel'
-            type='warning'
-        />
+            <ConfirmModal
+                isOpen={Boolean(smsConfirmAction)}
+                onClose={() => setSmsConfirmAction(null)}
+                onConfirm={confirmSmsAction}
+                title={smsConfirmAction?.kind === 'send_all' ? 'Send PINs by SMS' : smsConfirmAction?.kind === 'resend' ? 'Resend voter PIN' : smsConfirmAction?.kind === 'invalidate' ? 'Invalidate voter access' : 'Generate voter PIN'}
+                message={smsConfirmationMessage}
+                confirmText={smsConfirmAction?.kind === 'send_all' ? 'Send PINs' : smsConfirmAction?.kind === 'resend' ? 'Resend PIN' : smsConfirmAction?.kind === 'invalidate' ? 'Invalidate access' : 'Generate PIN'}
+                cancelText='Cancel'
+                type='warning'
+            />
         </PageContainer>
     );
 }
