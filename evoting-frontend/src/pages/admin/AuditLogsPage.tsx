@@ -48,13 +48,13 @@ export default function AuditLogsPage() {
 
     return (
         <section className="management-panel audit-logs-page" aria-labelledby="audit-logs-title">
-            <div className="ui-section-heading">
+            <div className="flex flex-col mb-2 gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h1 id="audit-logs-title">Audit trail</h1>
+                    <h1 id="audit-logs-title"><strong>Audit trail</strong></h1>
                 </div>
                 <Button
                     type="button"
-                    variant="secondary"
+                    variant="success"
                     disabled={!events.length}
                     onClick={() => downloadCsv('election-audit-trail.csv', [
                         ['Time', 'Action', 'Result', 'Election', 'Voter reference', 'Actor', 'IP address', 'Metadata'],
@@ -76,6 +76,7 @@ export default function AuditLogsPage() {
                         <caption className="sr-only">Election audit trail</caption>
                         <thead>
                         <tr>
+                            <th scope="col">S/N</th>
                             <th scope="col">Time</th>
                             <th scope="col">Action</th>
                             <th scope="col">Result</th>
@@ -85,8 +86,9 @@ export default function AuditLogsPage() {
                         </tr>
                         </thead>
                         <tbody>
-                        {visibleEvents.map(event => (
-                            <tr key={event.id}>
+                        {visibleEvents.map((event, index) => (
+                            <tr key={index}>
+                                <td data-label="S/N">{index + 1}</td>
                                 <td data-label="Time">{new Date(event.created_at).toLocaleString()}</td>
                                 <td data-label="Action" className="management-table-cell--primary">{event.action}</td>
                                 <td data-label="Result">{event.outcome}</td>

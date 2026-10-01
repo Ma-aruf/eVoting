@@ -24,7 +24,6 @@ export const useElections = (options?: { refetchInterval?: number | false }) => 
                 const response: AxiosResponse<ElectionsPage | Election[]> = await api.get<ElectionsPage | Election[]>(nextUrl);
                 if (Array.isArray(response.data)) {
                     elections.push(...response.data);
-                    console.log("Election", response.data);
                     break;
                 }
                 elections.push(...(response.data.results ?? []));

@@ -29,7 +29,6 @@
 .candidates-page table.ui-table {
     width: 100%;
     min-width: 42rem;
-    border: 1px solid var(--color-border);
     border-collapse: collapse;
     background: var(--color-surface);
 }
@@ -367,7 +366,6 @@
 .students-table-wrap {
     margin-top: .75rem;
     overflow-x: auto;
-    border: 1px solid var(--color-border);
     background: var(--color-surface);
 }
 
@@ -586,7 +584,6 @@
 .elections-table-wrap {
     margin-top: .75rem;
     overflow-x: auto;
-    border: 1px solid var(--color-border);
     background: var(--color-surface);
 }
 
@@ -1308,7 +1305,7 @@
     }
 
     .elections-statistics {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 
     .management-form {
@@ -1364,7 +1361,7 @@
         display: flex;
         justify-content: space-between;
         gap: var(--space-3);
-        padding: .375rem 0;
+        padding: .475rem 0;
         border: 0;
         text-align: right;
     }
@@ -1385,10 +1382,6 @@
 }
 
 @media (max-width: 63.99rem) {
-    .dashboard-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
     .students-statistics {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
@@ -1407,10 +1400,6 @@
 }
 
 @media (max-width: 47.99rem) {
-    .dashboard-grid {
-        grid-template-columns: 1fr;
-    }
-
     .dashboard-section {
         padding: var(--space-4);
     }
@@ -1802,7 +1791,7 @@
 
 @media (max-width: 63.99rem) {
     .dashboard-page .dashboard-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 
     .dashboard-chart-grid {
@@ -1849,7 +1838,7 @@
 
 @media (max-width: 63.99rem) {
     .activation-metrics {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 }
 

@@ -531,7 +531,7 @@ export default function PositionsPage() {
                         icon={<FiList/>}
                     />
                 ) : (
-                    <div className="management-table-wrap">
+                    <div className="">
                         <table className="management-table">
                             <caption className="sr-only">
                                 Positions for {selectedElection.name}
@@ -539,6 +539,9 @@ export default function PositionsPage() {
 
                             <thead>
                             <tr>
+                                <th scope="col">
+                                    S/N
+                                </th>
                                 <th scope="col">
                                     Position
                                 </th>
@@ -554,8 +557,11 @@ export default function PositionsPage() {
                             </thead>
 
                             <tbody>
-                            {filteredPositions.map(position => (
-                                <tr key={position.id}>
+                            {filteredPositions.map((position, index) => (
+                                <tr key={index}>
+                                    <td data-label="Position">
+                                        {index + 1}
+                                    </td>
                                     <td data-label="Position">
                                         {position.name}
                                     </td>

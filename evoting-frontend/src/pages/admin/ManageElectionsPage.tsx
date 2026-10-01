@@ -1,10 +1,5 @@
 import {type FormEvent, useState} from 'react';
-import {
-    FiCalendar,
-    FiCheckCircle,
-    FiPlayCircle,
-    FiPauseCircle,
-} from 'react-icons/fi';
+import {FiCalendar, FiCheckCircle, FiPauseCircle, FiPlayCircle,} from 'react-icons/fi';
 
 import ConfirmModal from '../../components/ConfirmModal';
 import StatisticCard from '../../components/StatisticCard';
@@ -23,10 +18,10 @@ import {formatElectionDateTime, getElectionMutationMessage, toDateTimeLocalValue
 
 import {useConfirmModal} from '../../hooks/useConfirmModal';
 import {
+    type Election,
+    useExtendElection,
     useManageElections,
     useToggleElection,
-    useExtendElection,
-    type Election,
 } from '../../queries/useManageElections';
 
 export default function ManageElectionsPage() {
@@ -227,14 +222,17 @@ export default function ManageElectionsPage() {
                         icon={<FiCalendar/>}
                     />
                 ) : (
-                    <div className="management-table-wrap">
-                        <table className="management-table">
+                    <div>
+                        <table className="management-table ">
                             <caption className="sr-only">
                                 Election status controls
                             </caption>
 
                             <thead>
                             <tr>
+                                <th scope="col">
+                                    S/N
+                                </th>
                                 <th scope="col">
                                     Election
                                 </th>
@@ -254,14 +252,13 @@ export default function ManageElectionsPage() {
                             </thead>
 
                             <tbody>
-                            {elections.map(election => (
-                                <tr key={election.id}>
+                            {elections.map((election, index) => (
+                                <tr key={index}>
+                                    <td data-label="S/N">
+                                        {index + 1}
+                                    </td>
                                     <td data-label="Election">
-                                        {election.name}
-
-                                        <span className="table-secondary">
-                                                {election.year}
-                                            </span>
+                                        {election.name} - {election.year}
                                     </td>
 
                                     <td data-label="Window">
@@ -280,66 +277,66 @@ export default function ManageElectionsPage() {
 
                                     <td data-label="Actions" className="text-right">
                                         <div className="flex flex-wrap justify-end gap-2">
-                                        {election.status === 'ended' ? (
-                                            <span aria-label="No actions available">—</span>
-                                        ) : (
-                                            <>
-                                        {['open', 'paused'].includes(election.status) && (
-                                            <Button
-                                                size="compact"
-                                                variant="secondary"
-                                                leadingIcon={<FiCalendar aria-hidden="true"/>}
-                                                aria-label={`Extend closing time for ${election.name}`}
-                                                onClick={() => openExtension(election)}
-                                            >
-                                                Extend closing time
-                                            </Button>
-                                        )}
-                                        <Button
-                                            size="compact"
-                                            variant={
-                                                election.voting_enabled
-                                                    ? 'danger'
-                                                    : 'success'
-                                            }
-                                            loading={
-                                                toggleElection.isPending &&
-                                                actionElectionId === election.id
-                                            }
-                                            disabled={
-                                                toggleElection.isPending ||
-                                                (!election.voting_enabled && !election.ballot_ready)
-                                            }
-                                            title={!election.voting_enabled && !election.ballot_ready
-                                                ? 'Configure at least one position and a candidate for every position before enabling voting.'
-                                                : undefined}
-                                            leadingIcon={
-                                                election.voting_enabled ? (
-                                                    <FiPauseCircle
-                                                        aria-hidden="true"
-                                                    />
-                                                ) : (
-                                                    <FiPlayCircle
-                                                        aria-hidden="true"
-                                                    />
-                                                )
-                                            }
-                                            onClick={() =>
-                                                void handleToggle(
-                                                    election,
-                                                    !election.voting_enabled
-                                                )
-                                            }
-                                        >
-                                            {election.voting_enabled ? 'Pause voting' : 'Enable voting'}
-                                        </Button>
-                                        {!election.ballot_ready && (
-                                            <span className="w-full text-xs text-amber-700" role="note">
+                                            {election.status === 'ended' ? (
+                                                <span aria-label="No actions available">—</span>
+                                            ) : (
+                                                <>
+                                                    {['open', 'paused'].includes(election.status) && (
+                                                        <Button
+                                                            size="compact"
+                                                            variant="secondary"
+                                                            leadingIcon={<FiCalendar aria-hidden="true"/>}
+                                                            aria-label={`Extend closing time for ${election.name}`}
+                                                            onClick={() => openExtension(election)}
+                                                        >
+                                                            Extend closing time
+                                                        </Button>
+                                                    )}
+                                                    <Button
+                                                        size="compact"
+                                                        variant={
+                                                            election.voting_enabled
+                                                                ? 'danger'
+                                                                : 'success'
+                                                        }
+                                                        loading={
+                                                            toggleElection.isPending &&
+                                                            actionElectionId === election.id
+                                                        }
+                                                        disabled={
+                                                            toggleElection.isPending ||
+                                                            (!election.voting_enabled && !election.ballot_ready)
+                                                        }
+                                                        title={!election.voting_enabled && !election.ballot_ready
+                                                            ? 'Configure at least one position and a candidate for every position before enabling voting.'
+                                                            : undefined}
+                                                        leadingIcon={
+                                                            election.voting_enabled ? (
+                                                                <FiPauseCircle
+                                                                    aria-hidden="true"
+                                                                />
+                                                            ) : (
+                                                                <FiPlayCircle
+                                                                    aria-hidden="true"
+                                                                />
+                                                            )
+                                                        }
+                                                        onClick={() =>
+                                                            void handleToggle(
+                                                                election,
+                                                                !election.voting_enabled
+                                                            )
+                                                        }
+                                                    >
+                                                        {election.voting_enabled ? 'Pause voting' : 'Enable voting'}
+                                                    </Button>
+                                                    {!election.ballot_ready && (
+                                                        <span className="w-full text-xs text-amber-700" role="note">
                                                 Add a candidate to every position before enabling voting.
                                             </span>
-                                        )}
-                                            </>
-                                        )}
+                                                    )}
+                                                </>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>
@@ -400,7 +397,8 @@ export default function ManageElectionsPage() {
                         </FormField>
                         <div className="election-form-footer">
                             <div className="ui-modal-actions">
-                                <Button type="button" variant="quiet" onClick={closeExtension} disabled={extendElection.isPending}>
+                                <Button type="button" variant="quiet" onClick={closeExtension}
+                                        disabled={extendElection.isPending}>
                                     Cancel
                                 </Button>
                                 <Button type="submit" loading={extendElection.isPending}>

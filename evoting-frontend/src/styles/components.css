@@ -261,6 +261,12 @@
     padding-right: 2.5rem;
 }
 
+@media (min-width: 48rem) and (max-width: 63.99rem) {
+    .ui-select option {
+        font-size: 10px;
+    }
+}
+
 .ui-select-icon {
     position: absolute;
     top: 50%;

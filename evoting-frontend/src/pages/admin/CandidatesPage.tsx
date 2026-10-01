@@ -916,6 +916,7 @@ export default function CandidatesPage() {
                                     </caption>
                                     <thead>
                                     <tr>
+                                        <th scope="col">S/N</th>
                                         <th scope="col">Photo</th>
                                         <th scope="col">Candidate</th>
                                         <th scope="col">Voter ID</th>
@@ -925,20 +926,21 @@ export default function CandidatesPage() {
                                     </thead>
 
                                     <tbody>
-                                    {filteredCandidates.map(candidate => {
+                                    {filteredCandidates.map((candidate, index) => {
                                         const student = students.find(
                                             item =>
                                                 item.id === candidate.student
                                         );
 
                                         return (
-                                            <tr key={candidate.id}>
+                                            <tr key={index}>
+                                                <td>{index + 1}</td>
                                                 <td>
                                                     {candidate.photo_url ? (
                                                         <img
                                                             src={candidate.photo_url}
                                                             alt={`${candidate.student_name || 'Candidate'} photo`}
-                                                            className="h-10 w-10 rounded-md object-cover"
+                                                            className="h-10 w-10 rounded object-cover"
                                                         />
                                                     ) : (
                                                         <span className="text-xs text-gray-500">

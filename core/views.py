@@ -51,6 +51,7 @@ from .permissions import (
     IsStaffOrSuperUser,
     IsSuperUser,
 )
+from .pagination import TwentyPerPagePagination
 from .serializers import (
     BulkStudentUploadSerializer,
     CandidateSerializer,
@@ -159,9 +160,10 @@ class ElectionViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Election.objects.all()
     serializer_class = ElectionSerializer
     permission_classes = [IsManagementUser]
+    pagination_class = TwentyPerPagePagination
 
     def get_queryset(self):
-        queryset = scope_queryset(Election.objects.all(), self.request.user, "id")
+        queryset = scope_queryset(Election.objects.all(), self.request.user, "id").order_by("id")
         voting_enabled = self.request.query_params.get("voting_enabled")
         legacy_is_active = self.request.query_params.get("is_active")
         boolean = serializers.BooleanField()
@@ -185,9 +187,10 @@ class StudentViewSet(viewsets.ModelViewSet):
     queryset = Student.objects.all()
     serializer_class = StudentSerializer
     permission_classes = [CanAccessStudents]
+    pagination_class = TwentyPerPagePagination
 
     def get_queryset(self):
-        queryset = scope_queryset(Student.objects.all(), self.request.user)
+        queryset = scope_queryset(Student.objects.all(), self.request.user).order_by("id")
         election_id = self.request.query_params.get("election_id")
         if election_id:
             return queryset.filter(election_id=election_id)

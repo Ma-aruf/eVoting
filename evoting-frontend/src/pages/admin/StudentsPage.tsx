@@ -582,6 +582,7 @@ export default function StudentsPage() {
 
                                 <thead>
                                 <tr>
+                                    <th scope="col">S/N</th>
                                     <th scope="col">Voter ID</th>
                                     <th scope="col">Full name</th>
                                     <th scope="col">Class</th>
@@ -598,6 +599,7 @@ export default function StudentsPage() {
                                         student={student}
                                         onEdit={setEditing}
                                         onDelete={setDeleting}
+                                        index={filtered.map(s => s.id).indexOf(student.id)}
                                     />
                                 ))}
                                 </tbody>
@@ -676,7 +678,7 @@ export default function StudentsPage() {
                                 aria-label="Voter records pagination"
                             >
                                 <span>
-                                    Page {visiblePage} of {totalPages}
+                                    Page {visiblePage} of {totalPages} - <strong>{filtered.length} voters</strong>
                                 </span>
                                 <div>
                                     <Button
@@ -750,7 +752,11 @@ export default function StudentsPage() {
 
             <Modal
                 open={showImport}
-                onClose={() => { setShowImport(false); setImportPreview(null); upload.reset(); }}
+                onClose={() => {
+                    setShowImport(false);
+                    setImportPreview(null);
+                    upload.reset();
+                }}
                 title="Import voters"
                 description={
                     selected
@@ -842,13 +848,24 @@ export default function StudentsPage() {
 
                     {importPreview?.preview && (
                         <div className="student-import-preview" aria-live="polite">
-                                <Alert variant={importPreview.invalid_count ? 'warning' : 'success'} title="Import preview">
-                                {importPreview.valid_count} valid row(s); {importPreview.invalid_count} row(s) need attention. Invalid rows will be skipped; warnings do not prevent import.
+                            <Alert variant={importPreview.invalid_count ? 'warning' : 'success'} title="Import preview">
+                                {importPreview.valid_count} valid row(s); {importPreview.invalid_count} row(s) need
+                                attention. Invalid rows will be skipped; warnings do not prevent import.
                             </Alert>
                             <div className="management-table-wrap mt-3 max-h-72 overflow-auto">
                                 <table className="management-table">
-                                    <caption className="sr-only">Voter import preview and row validation results</caption>
-                                    <thead><tr><th scope="col">Row</th><th scope="col">Voter ID</th><th scope="col">Name</th><th scope="col">Class</th><th scope="col">Phone</th><th scope="col">Validation</th></tr></thead>
+                                    <caption className="sr-only">Voter import preview and row validation results
+                                    </caption>
+                                    <thead>
+                                    <tr>
+                                        <th scope="col">Row</th>
+                                        <th scope="col">Voter ID</th>
+                                        <th scope="col">Name</th>
+                                        <th scope="col">Class</th>
+                                        <th scope="col">Phone</th>
+                                        <th scope="col">Validation</th>
+                                    </tr>
+                                    </thead>
                                     <tbody>{importPreview.rows?.map(row => (
                                         <tr key={row.row_number}>
                                             <td data-label="Row">{row.row_number}</td>
@@ -868,17 +885,24 @@ export default function StudentsPage() {
                         <Button
                             type="button"
                             variant="quiet"
-                            onClick={() => { setShowImport(false); setImportPreview(null); upload.reset(); }}
+                            onClick={() => {
+                                setShowImport(false);
+                                setImportPreview(null);
+                                upload.reset();
+                            }}
                         >
                             Cancel
                         </Button>
 
                         {importPreview?.preview ? (
-                            <Button type="button" loading={upload.isPending} disabled={!importPreview.valid_count} className="voter-import-button" leadingIcon={<FiUploadCloud aria-hidden="true"/>} onClick={handleConfirmImport}>
+                            <Button type="button" loading={upload.isPending} disabled={!importPreview.valid_count}
+                                    className="voter-import-button" leadingIcon={<FiUploadCloud aria-hidden="true"/>}
+                                    onClick={handleConfirmImport}>
                                 Import {importPreview.valid_count} valid voters
                             </Button>
                         ) : (
-                            <Button type="submit" loading={upload.isPending} disabled={!file || !effectiveElectionId} className="voter-import-button" leadingIcon={<FiUploadCloud aria-hidden="true"/>}>
+                            <Button type="submit" loading={upload.isPending} disabled={!file || !effectiveElectionId}
+                                    className="voter-import-button" leadingIcon={<FiUploadCloud aria-hidden="true"/>}>
                                 Preview file
                             </Button>
                         )}

@@ -279,6 +279,7 @@ export default function ElectionsPage() {
 
                             <thead>
                             <tr>
+                                <th scope="col">S/N</th>
                                 <th scope="col">Name</th>
                                 <th scope="col">Year</th>
                                 <th scope="col">Voting opens</th>
@@ -290,8 +291,11 @@ export default function ElectionsPage() {
                             </thead>
 
                             <tbody>
-                            {elections.map(election => (
-                                <tr key={election.id}>
+                            {elections.map((election, index) => (
+                                <tr key={index}>
+                                    <td className="management-table-cell--primary" data-label="S/N">
+                                        {index + 1}
+                                    </td>
                                     <td className="management-table-cell--primary" data-label="Name">
                                         {election.name}
                                     </td>
@@ -338,7 +342,7 @@ export default function ElectionsPage() {
                                         {election.status === 'scheduled' && !election.candidate_changes_locked ? (
                                             <Button
                                                 type="button"
-                                                variant="secondary"
+                                                variant="success"
                                                 size="compact"
                                                 leadingIcon={<FiEdit2 aria-hidden="true"/>}
                                                 aria-label={`Edit schedule for ${election.name}`}

@@ -193,69 +193,74 @@ export default function UsersPage() {
 
             <section className="management-panel users-table-section" aria-label="User records">
                 {usersLoading ? (
-                    <LoadingState title="Loading users" message="Fetching managed user accounts." />
+                    <LoadingState title="Loading users" message="Fetching managed user accounts."/>
                 ) : filteredUsers.length === 0 ? (
                     <EmptyState
                         title={searchTerm ? 'No users match your search' : 'No users found'}
                         message={searchTerm ? 'Try a different username.' : 'Add a user to get started.'}
-                        icon={<FiUsers aria-hidden="true" />}
+                        icon={<FiUsers aria-hidden="true"/>}
                     />
                 ) : (
                     <>
-                <div className="management-table-wrap">
-                    <table className="management-table audit-logs-table users-table">
-                        <caption className="sr-only">Managed users</caption>
-                        <thead>
-                        <tr>
-                            <th scope="col">Username</th>
-                            <th scope="col">Role</th>
-                            <th scope="col">Status</th>
-                            <th scope="col">Election</th>
-                            <th scope="col">Actions</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        {visibleUsers.map(user => (
-                            <tr key={user.id}>
-                                <td className="users-table-identity" data-label="Username">
-                                    <div className="users-identity">
-                                        <span>{user.username}</span>
-                                    </div>
-                                </td>
-                                <td data-label="Role"><span
-                                    className={`users-status-text users-status-text--${roleVariant(user.role)}`}>{user.role}</span>
-                                </td>
-                                <td data-label="Status"><span
-                                    className={`users-status-text users-status-text--${user.is_active ? 'success' : 'neutral'}`}>{user.is_active ? 'Active' : 'Inactive'}</span>
-                                </td>
-                                <td data-label="Election">
-                                    {user.assigned_election ? (() => {
-                                        const assigned = elections.find(item => item.id === user.assigned_election?.id) ?? user.assigned_election;
-                                        return <div className="flex flex-col items-start gap-1">
-                                            <span>{assigned.name} ({assigned.year})</span>
-                                        </div>;
-                                    })() : 'All elections'}
-                                </td>
-                                <td data-label="Actions">
-                                    <div className="users-actions">
-                                        <button type="button" className="users-icon-button users-icon-button--edit"
-                                                onClick={() => handleEdit(user)} aria-label={`Edit ${user.username}`}
-                                                title="Edit user">
-                                            <FiEdit2 aria-hidden="true"/>
-                                        </button>
-                                        <button type="button" className="users-icon-button users-icon-button--delete"
-                                                onClick={() => setUserToDelete(user)}
-                                                aria-label={`Delete ${user.username}`} title="Delete user"
-                                                disabled={loading}>
-                                            <FiTrash2 aria-hidden="true"/>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
-                        </tbody>
-                    </table>
-                </div>
+                        <div className="management-table-wrap">
+                            <table className="management-table users-table">
+                                <caption className="sr-only">Managed users</caption>
+                                <thead>
+                                <tr>
+                                    <th scope="col">S/N</th>
+                                    <th scope="col">Username</th>
+                                    <th scope="col">Role</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col">Election</th>
+                                    <th scope="col">Actions</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                {visibleUsers.map((user, index) => (
+                                    <tr key={index}>
+                                        <td data-label="S/N">{index + 1}</td>
+                                        <td className="users-table-identity" data-label="Username">
+                                            <div className="users-identity">
+                                                <span>{user.username}</span>
+                                            </div>
+                                        </td>
+                                        <td data-label="Role"><span
+                                            className={`users-status-text users-status-text--${roleVariant(user.role)}`}>{user.role}</span>
+                                        </td>
+                                        <td data-label="Status"><span
+                                            className={`users-status-text users-status-text--${user.is_active ? 'success' : 'neutral'}`}>{user.is_active ? 'Active' : 'Inactive'}</span>
+                                        </td>
+                                        <td data-label="Election">
+                                            {user.assigned_election ? (() => {
+                                                const assigned = elections.find(item => item.id === user.assigned_election?.id) ?? user.assigned_election;
+                                                return <div className="flex flex-col items-start gap-1">
+                                                    <span>{assigned.name} ({assigned.year})</span>
+                                                </div>;
+                                            })() : 'All elections'}
+                                        </td>
+                                        <td data-label="Actions">
+                                            <div className="users-actions">
+                                                <button type="button"
+                                                        className="users-icon-button users-icon-button--edit"
+                                                        onClick={() => handleEdit(user)}
+                                                        aria-label={`Edit ${user.username}`}
+                                                        title="Edit user">
+                                                    <FiEdit2 aria-hidden="true"/>
+                                                </button>
+                                                <button type="button"
+                                                        className="users-icon-button users-icon-button--delete"
+                                                        onClick={() => setUserToDelete(user)}
+                                                        aria-label={`Delete ${user.username}`} title="Delete user"
+                                                        disabled={loading}>
+                                                    <FiTrash2 aria-hidden="true"/>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                                </tbody>
+                            </table>
+                        </div>
                         {totalPages > 1 && (
                             <nav className="audit-logs-pagination" aria-label="Users pagination">
                                 <span>Page {visiblePage} of {totalPages}</span>

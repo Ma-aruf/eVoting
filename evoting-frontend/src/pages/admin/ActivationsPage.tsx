@@ -139,7 +139,7 @@ export default function ActivationsPage() {
     const [smsStatusSearch, setSmsStatusSearch] = useState('');
     const [smsStatusPage, setSmsStatusPage] = useState(1);
     const [recoveryStatusPage, setRecoveryStatusPage] = useState(1);
-    const [isVoterTableVisible, setIsVoterTableVisible] = useState(true);
+    const [isVoterTableVisible, setIsVoterTableVisible] = useState(false);
     const [resendingStudentId, setResendingStudentId] = useState<number | null>(null);
     const [generatingStudentId, setGeneratingStudentId] = useState<number | null>(null);
     const [smsConfirmAction, setSmsConfirmAction] = useState<SmsConfirmAction | null>(null);
@@ -757,6 +757,7 @@ export default function ActivationsPage() {
                                                     <caption className="sr-only">SMS delivery status by voter</caption>
                                                     <thead>
                                                     <tr>
+                                                        <th scope="col">S/N</th>
                                                         <th scope="col">Voter</th>
                                                         <th scope="col">Phone</th>
                                                         <th scope="col">SMS status</th>
@@ -766,8 +767,9 @@ export default function ActivationsPage() {
                                                     </tr>
                                                     </thead>
                                                     <tbody>
-                                                    {smsVoters.map(row => (
-                                                        <tr key={row.id}>
+                                                    {smsVoters.map((row, index) => (
+                                                        <tr key={index}>
+                                                            <td data-label="S/N">{index + 1}</td>
                                                             <td data-label="Voter">
                                                                 <div
                                                                     className="management-table-cell--primary">{row.full_name}</div>
@@ -1137,6 +1139,7 @@ export default function ActivationsPage() {
                                                 </caption>
                                                 <thead>
                                                 <tr>
+                                                    <th scope="col">S/N</th>
                                                     <th scope="col">ID</th>
                                                     <th scope="col">Voter</th>
                                                     <th scope="col">Access status</th>
@@ -1144,8 +1147,9 @@ export default function ActivationsPage() {
                                                     <th scope="col">Actions</th>
                                                 </tr>
                                                 </thead>
-                                                <tbody>{recoveryVoters.map(row => (
-                                                    <tr key={row.id}>
+                                                <tbody>{recoveryVoters.map((row, index) => (
+                                                    <tr key={index}>
+                                                        <td data-label="S/N">{index + 1}</td>
                                                         <td data-label="Voter ID">{row.student_id}</td>
                                                         <td data-label="Voter">{row.full_name}</td>
                                                         <td data-label="Access status">{recoveryStateLabel(row)}</td>

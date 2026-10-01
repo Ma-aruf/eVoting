@@ -1,4 +1,3 @@
-
 import {memo} from 'react';
 import {FiEdit2, FiTrash2} from 'react-icons/fi';
 
@@ -11,15 +10,22 @@ interface StudentRowProps {
     onEdit: (student: Student) => void;
     onDelete: (student: Student) => void;
     isModalOpening?: boolean;
+    index: number;
 }
 
 const StudentRow = memo(({
-    student,
-    onEdit,
-    onDelete,
-    isModalOpening = false,
-}: StudentRowProps) => (
+                             student,
+                             onEdit,
+                             onDelete,
+                             isModalOpening = false,
+                             index,
+                         }: StudentRowProps) => (
     <tr className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+        <td className="px-1 py-0">
+            <div className="text-sm font-medium text-gray-900">
+                {index + 1}
+            </div>
+        </td>
         <td className="px-1 py-0">
             <div className="text-sm font-medium text-gray-900">
                 {student.student_id}
@@ -39,18 +45,18 @@ const StudentRow = memo(({
         </td>
 
         <td className="px-1 py-0">
-                {student.is_active ? 'Active' : 'Inactive'}
+            {student.is_active ? 'Active' : 'Inactive'}
         </td>
 
         <td className="px-1 py-0">
-                {student.has_voted ? 'Voted' : 'Not voted'}
+            {student.has_voted ? 'Voted' : 'Not voted'}
         </td>
 
         <td className="px-1 py-0">
             <div className="flex justify-end gap-2">
                 <IconButton
                     label="Edit voter"
-                    icon={<FiEdit2 size={14} aria-hidden="true" />}
+                    icon={<FiEdit2 size={14} aria-hidden="true"/>}
                     size="compact"
                     onClick={() => onEdit(student)}
                     disabled={isModalOpening}
@@ -62,7 +68,7 @@ const StudentRow = memo(({
                             ? 'Cannot delete - voter has voted'
                             : 'Delete voter'
                     }
-                    icon={<FiTrash2 size={14} aria-hidden="true" />}
+                    icon={<FiTrash2 size={14} aria-hidden="true"/>}
                     size="compact"
                     variant="danger"
                     onClick={() => onDelete(student)}

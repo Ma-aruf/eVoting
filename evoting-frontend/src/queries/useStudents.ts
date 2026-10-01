@@ -19,6 +19,11 @@ export interface Student {
     };
 }
 
+type StudentsPage = {
+    results?: Student[];
+    next?: string | null;
+};
+
 export const getStudentElectionId = (student: Student) =>
     typeof student.election === 'number' ? student.election : student.election?.id;
 
@@ -29,16 +34,28 @@ export const useStudents = (
     useQuery({
         queryKey: queryKeys.students(electionId),
         queryFn: async (): Promise<Student[]> => {
-            const response = await api.get('api/students/', {
-                params: electionId ? {election_id: electionId} : {},
-            });
-            const data = response.data;
+            const students: Student[] = [];
+            let nextUrl: string | null = 'api/students/';
+            let isFirstPage = true;
 
-            if (Array.isArray(data)) {
-                return data;
+            while (nextUrl) {
+                const response = await api.get<StudentsPage | Student[]>(nextUrl, {
+                    ...(isFirstPage && electionId ? {params: {election_id: electionId}} : {}),
+                });
+                const data = response.data;
+
+                if (Array.isArray(data)) {
+                    students.push(...data);
+                    break;
+                }
+
+                const page = data as StudentsPage;
+                students.push(...(Array.isArray(page.results) ? page.results : []));
+                nextUrl = page.next ?? null;
+                isFirstPage = false;
             }
 
-            return Array.isArray(data.results) ? data.results : [];
+            return students;
         },
         enabled: electionId !== null,
         staleTime: 30 * 1000,

@@ -351,3 +351,45 @@ class SmsVoterFlowTests(TestCase):
         )
         self.assertEqual(recovery_search.data["count"], 1)
         self.assertEqual(recovery_search.data["results"][0]["student_id"], "PAGE010")
+
+    def test_student_and_election_lists_return_twenty_row_pages(self):
+        Student.objects.bulk_create([
+            Student(
+                student_id=f"LIST{i:03}",
+                full_name=f"List Voter {i:03}",
+                class_name="Form 1",
+                election=self.election,
+            )
+            for i in range(20)
+        ])
+        first_students_page = self.client.get(
+            "/api/students/",
+            {"election_id": self.election.id, "page": 1},
+        )
+        second_students_page = self.client.get(
+            "/api/students/",
+            {"election_id": self.election.id, "page": 2},
+        )
+        self.assertEqual(first_students_page.status_code, 200)
+        self.assertEqual(first_students_page.data["count"], 21)
+        self.assertEqual(len(first_students_page.data["results"]), 20)
+        self.assertIsNotNone(first_students_page.data["next"])
+        self.assertEqual(len(second_students_page.data["results"]), 1)
+
+        now = timezone.now()
+        Election.objects.bulk_create([
+            Election(
+                name=f"List Election {i}",
+                year=2030 + i,
+                start_time=now - timedelta(minutes=5),
+                end_time=now + timedelta(hours=1),
+            )
+            for i in range(20)
+        ])
+        first_elections_page = self.client.get("/api/elections/", {"page": 1})
+        second_elections_page = self.client.get("/api/elections/", {"page": 2})
+        self.assertEqual(first_elections_page.status_code, 200)
+        self.assertEqual(first_elections_page.data["count"], 21)
+        self.assertEqual(len(first_elections_page.data["results"]), 20)
+        self.assertIsNotNone(first_elections_page.data["next"])
+        self.assertEqual(len(second_elections_page.data["results"]), 1)

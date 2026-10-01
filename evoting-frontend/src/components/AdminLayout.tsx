@@ -99,8 +99,8 @@ function Drawer({open, items, onClose, onLogout}: {
                aria-label="Admin navigation">
             <div className="admin-drawer-header">
                 <div className="admin-brand">
-                    <span
-                        className="admin-brand-subtitle">Admin Panel</span></div>
+                    <img className="admin-sidebar-logo admin-sidebar-logo--drawer" src="/logosq.png" alt="eVoting"/>
+                </div>
                 <button type="button" className="admin-icon-button" onClick={onClose}
                         aria-label="Close navigation menu"><FiX aria-hidden="true"/></button>
             </div>
@@ -142,7 +142,8 @@ export default function AdminLayout() {
     };
     return <div className="admin-shell">
         <aside className="admin-sidebar" aria-label="Admin navigation">
-            <div className="admin-sidebar-brand"><span className="admin-brand-mark">eVoting</span>
+            <div className="admin-sidebar-brand">
+                <img className="admin-sidebar-logo" src="/logosq.png" alt="eVoting"/>
             </div>
             <Navigation items={visibleNav}/>
             <div className="admin-sidebar-footer"><LogoutButton onLogout={handleLogout}/></div>
