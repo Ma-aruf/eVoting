@@ -1,16 +1,17 @@
 # python
 import logging
+import time
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from django.utils.translation import gettext as _
 from django.utils import timezone
+from django.db import transaction
 from .models import Student, Election
 from .audit import record_audit_event
 from .models import AuditLog
 from .utils import (
     deactivate_expired_voter_session,
     verify_voter_token,
-    voter_session_expired,
 )
 from .election_lifecycle import election_lifecycle
 
@@ -45,8 +46,7 @@ class VoterAuthentication(BaseAuthentication):
         student_id = request.META.get("HTTP_X_STUDENT_ID")
         election_id = request.META.get("HTTP_X_ELECTION_ID")
         token = request.META.get("HTTP_X_VOTER_TOKEN")
-        
-        client_ip = request.META.get('REMOTE_ADDR')
+        client_ip = request.META.get("REMOTE_ADDR")
         
         if not student_id or not token or not election_id:
             return None  # allow other authenticators to run or cause IsAuthenticated to fail
@@ -114,7 +114,18 @@ class VoterAuthentication(BaseAuthentication):
 
         # Use composite lookup: student_id + election_id
         try:
-            student = Student.objects.get(student_id=student_id, election=election)
+            with transaction.atomic():
+                student = Student.objects.select_for_update().get(
+                    student_id=student_id, election=election
+                )
+                expiry = student.voter_session_expires_at
+                session_reason = (
+                    "missing_session" if expiry is None
+                    else "session_expired" if now >= expiry
+                    else None
+                )
+                if session_reason == "session_expired" and not student.has_voted:
+                    deactivate_expired_voter_session(student)
         except Student.DoesNotExist:
             self.security_logger.warning(
                 f"AUTH_FAILED_STUDENT: student_id={student_id}, election_id={election_id}, ip={client_ip}"
@@ -129,13 +140,17 @@ class VoterAuthentication(BaseAuthentication):
             )
             raise AuthenticationFailed(_("Invalid student identifier for this election."))
 
-        if not student.has_voted and voter_session_expired(
-            student.voter_session_expires_at, now
-        ):
-            deactivate_expired_voter_session(student)
+        if not student.has_voted and session_reason:
+            remaining_seconds = (
+                (expiry - now).total_seconds() if expiry is not None else None
+            )
+            request_id = getattr(request, "correlation_id", "unknown")
+            started_at = getattr(request, "started_at", None)
+            elapsed_ms = round((time.monotonic() - started_at) * 1000) if started_at else None
             self.security_logger.warning(
-                f"AUTH_FAILED_SESSION_EXPIRED: student_id={student_id}, "
-                f"election_id={election_id}, ip={client_ip}"
+                "VOTER_SESSION_REJECTED request_id=%s reason=%s election_id=%s "
+                "session_remaining_seconds=%s request_elapsed_ms=%s",
+                request_id, session_reason, election_id, remaining_seconds, elapsed_ms,
             )
             record_audit_event(
                 action="VOTER_AUTH_FAILED",
@@ -144,10 +159,19 @@ class VoterAuthentication(BaseAuthentication):
                 election=election,
                 student=student,
                 student_id=student_id,
-                metadata={"reason": "session_expired"},
+                metadata={
+                    "reason": session_reason,
+                    "session_remaining_seconds": remaining_seconds,
+                    "request_id": request_id,
+                },
+            )
+            detail = (
+                _("Your voting session has expired. Please ask an election official to reactivate you.")
+                if session_reason == "session_expired"
+                else _("No active voting session is recorded. Please sign in again.")
             )
             raise AuthenticationFailed(
-                _("Your voting session has expired. Please ask an election official to reactivate you.")
+                detail
             )
         # Verify token using election-scoped key (student_id_electionId)
         if not verify_voter_token(f"{student.student_id}_{election.id}", token):

@@ -8,6 +8,7 @@ export const queryKeys = {
   students: (electionId: number | null) => ['students', electionId] as const,
   studentPage: (electionId: number | null, params: {page: number; search: string; active: string; voted: string; className: string}) =>
     ['students', electionId, 'page', params.page, params.search, params.active, params.voted, params.className] as const,
+  activationOptions: (electionId: number | null, search: string) => ['students', electionId, 'activation-options', search] as const,
   student: (id: number) => ['students', id] as const,
   
   // Dashboard stats (scoped by election)

@@ -17,6 +17,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from openpyxl import load_workbook
 from rest_framework import serializers, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import ParseError
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -241,6 +242,39 @@ class StudentViewSet(viewsets.ModelViewSet):
         elif voted_filter == "not-voted":
             queryset = queryset.filter(has_voted=False)
         return queryset
+
+    @action(detail=False, methods=["get"], url_path="activation-options")
+    def activation_options(self, request):
+        """Return summary counts and a small, server-searched activation list."""
+        election_id = request.query_params.get("election_id")
+        if not election_id:
+            return Response({"detail": "election_id is required."}, status=400)
+
+        base = self.get_base_queryset()
+        now = timezone.now()
+        active_access = _current_voter_access_filter(now)
+        summary = base.aggregate(
+            total=Count("id"),
+            activated=Count("id", filter=active_access),
+            voted=Count("id", filter=Q(has_voted=True)),
+            available=Count("id", filter=Q(has_voted=False) & ~active_access),
+        )
+        search = request.query_params.get("search", "").strip()
+        available = base.filter(has_voted=False).exclude(active_access)
+        if search:
+            search_filter = Q(full_name__icontains=search) | Q(student_id__icontains=search)
+            if "(" in search and search.rstrip().endswith(")"):
+                display_name, identifier = search.rsplit("(", 1)
+                identifier = identifier.rstrip(") ").strip()
+                search_filter |= Q(full_name__icontains=display_name.strip())
+                if identifier:
+                    search_filter |= Q(student_id__icontains=identifier)
+            available = available.filter(search_filter)
+        students = available.order_by("full_name", "id")[:25]
+        return Response({
+            "summary": summary,
+            "results": StudentSerializer(students, many=True).data,
+        })
 
     def list(self, request, *args, **kwargs):
         response = super().list(request, *args, **kwargs)
@@ -1054,21 +1088,19 @@ class MultiVoteView(APIView):
         if student_user is None or token is None:
             raise ParseError("Student authentication required via headers.")
 
-        # Get client IP for logging
-        client_ip = request.META.get('REMOTE_ADDR')
-
         # Log vote attempt
         record_audit_event(
             action="VOTE_ATTEMPT",
             outcome=AuditLog.Outcome.INFO,
             request=request,
             election=student_user.election,
-            student=student_user,
             metadata={"submitted_items": len(data["votes"])},
         )
         self.security_logger.info(
-            f"VOTE_ATTEMPT: student_id={student_user.student_id if student_user else 'unknown'}, "
-            f"ip={client_ip}, election_ids={[v['election'] for v in data['votes']]}"
+            "VOTE_ATTEMPT request_id=%s election_id=%s submitted_items=%s",
+            getattr(request, "correlation_id", "unknown"),
+            student_user.election_id,
+            len(data["votes"]),
         )
 
         try:
@@ -1089,7 +1121,9 @@ class MultiVoteView(APIView):
 
                 if not getattr(student, "is_active", False):
                     self.security_logger.warning(
-                        f"VOTE_DENIED_INACTIVE: student_id={student.student_id}, ip={client_ip}"
+                        "VOTE_DENIED_INACTIVE request_id=%s election_id=%s",
+                        getattr(request, "correlation_id", "unknown"),
+                        student.election_id,
                     )
                     return Response(
                         {"detail": "Student is not activated to vote."},
@@ -1098,7 +1132,9 @@ class MultiVoteView(APIView):
 
                 if getattr(student, "has_voted", False):
                     self.security_logger.warning(
-                        f"VOTE_DENIED_ALREADY_VOTED: student_id={student.student_id}, ip={client_ip}"
+                        "VOTE_DENIED_ALREADY_VOTED request_id=%s election_id=%s",
+                        getattr(request, "correlation_id", "unknown"),
+                        student.election_id,
                     )
                     return Response(
                         {"detail": "Student has already voted."},
@@ -1312,15 +1348,16 @@ class MultiVoteView(APIView):
 
                 # Log successful vote
                 self.security_logger.info(
-                    f"VOTE_SUCCESS: student_id={student.student_id}, ip={client_ip}, "
-                    f"votes_count={len(votes_to_create)}, election_ids={[v.election_id for v in votes_to_create]}"
+                    "VOTE_SUCCESS request_id=%s election_id=%s votes_count=%s",
+                    getattr(request, "correlation_id", "unknown"),
+                    student.election_id,
+                    len(votes_to_create),
                 )
                 record_audit_event(
                     action="VOTE_SUBMITTED",
                     outcome=AuditLog.Outcome.SUCCESS,
                     request=request,
                     election=student.election,
-                    student=student,
                     metadata={"votes_count": len(votes_to_create)},
                 )
 
@@ -1331,9 +1368,9 @@ class MultiVoteView(APIView):
             )
         except Exception:
             self.security_logger.exception(
-                "VOTE_SUBMISSION_FAILED: student_id=%s, ip=%s",
-                getattr(student_user, "student_id", "unknown"),
-                client_ip,
+                "VOTE_SUBMISSION_FAILED request_id=%s election_id=%s",
+                getattr(request, "correlation_id", "unknown"),
+                getattr(student_user, "election_id", "unknown"),
             )
             return Response(
                 {"detail": "Vote submission could not be completed."},
@@ -1387,6 +1424,7 @@ class StudentActivationView(APIView):
 
         return self._actual_post(request)
 
+    @transaction.atomic
     def _actual_post(self, request):
         client_ip = request.META.get("REMOTE_ADDR")
         user = request.user
@@ -1439,7 +1477,7 @@ class StudentActivationView(APIView):
             )
 
         try:
-            student = Student.objects.get(
+            student = Student.objects.select_for_update().get(
                 student_id=student_id,
                 election_id=election_id,
             )
@@ -2039,10 +2077,10 @@ class StudentVoterLoginView(APIView):
 
         token = create_voter_token(f"{student.student_id}_{active_election.id}")
         self.security_logger.info(
-            "LOGIN_SUCCESS: student_id=%s, election_id=%s, ip=%s",
-            student.student_id,
+            "VOTER_LOGIN_SUCCESS request_id=%s election_id=%s session_ttl_seconds=%s",
+            getattr(request, "correlation_id", "unknown"),
             active_election.id,
-            client_ip,
+            max(0, round((student.voter_session_expires_at - timezone.now()).total_seconds())),
         )
         record_audit_event(
             action="VOTER_LOGIN_SUCCESS",

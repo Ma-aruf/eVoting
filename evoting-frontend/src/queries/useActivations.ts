@@ -67,6 +67,9 @@ export const useActivateStudent = () => {
 
         onSuccess: (_data, {election_id}) => {
             queryClient.invalidateQueries({
+                queryKey: ['students', election_id, 'activation-options'],
+            });
+            queryClient.invalidateQueries({
                 queryKey: queryKeys.voterRecoveryStatus(election_id),
             });
             queryClient.invalidateQueries({

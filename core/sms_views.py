@@ -47,7 +47,7 @@ class VoterRecoveryStatusView(APIView):
         now = timezone.now()
         lifecycle_status = election_lifecycle(election, now, include_candidate_lock=False)["status"]
         ballot_ready = election_ballot_ready(election)
-        voters = Student.objects.filter(election=election).order_by("full_name", "id")
+        voters = Student.objects.filter(election=election).select_related("election").order_by("full_name", "id")
         search = request.query_params.get("search", "").strip()
         if search:
             from django.db.models import Q

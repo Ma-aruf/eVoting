@@ -114,6 +114,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'core.middleware.RequestCorrelationMiddleware',
     'core.middleware.HealthCheckSSLRedirectMiddleware',
     'core.middleware.CustomSecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -245,7 +246,9 @@ CORS_ALLOW_HEADERS = [
     'x-student-id',
     'x-election-id',
     'x-voter-token',
+    'x-request-id',
 ]
+CORS_EXPOSE_HEADERS = ['X-Request-ID']
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5175",

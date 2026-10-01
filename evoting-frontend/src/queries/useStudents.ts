@@ -25,6 +25,30 @@ type StudentsPage = {
     next?: string | null;
 };
 
+export type ActivationOptionsResponse = {
+    summary: {total: number; activated: number; voted: number; available: number};
+    results: Student[];
+};
+
+export const useActivationStudentOptions = (
+    electionId: number | null,
+    search: string,
+    options: {refetchInterval?: number | false; placeholderData?: any} = {},
+) =>
+    useQuery({
+        queryKey: queryKeys.activationOptions(electionId, search),
+        queryFn: async (): Promise<ActivationOptionsResponse> => {
+            const response = await api.get<ActivationOptionsResponse>('api/students/activation-options/', {
+                params: {election_id: electionId, search: search.trim() || undefined},
+            });
+            return response.data;
+        },
+        enabled: electionId !== null,
+        staleTime: 5_000,
+        refetchInterval: options.refetchInterval,
+        placeholderData: options.placeholderData,
+    });
+
 export type StudentListResponse = {
     count: number;
     results: Student[];

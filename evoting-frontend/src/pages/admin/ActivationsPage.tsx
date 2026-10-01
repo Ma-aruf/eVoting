@@ -16,7 +16,7 @@ import {
 import {useElections} from '../../queries/useElections';
 import {electionStatusPresentation} from '../../utils/electionLifecycle';
 import {useAuth} from '../../hooks/useAuth';
-import {type Student, useStudents} from '../../queries/useStudents';
+import {type Student, useActivationStudentOptions} from '../../queries/useStudents';
 import {useActivateStudent} from '../../queries/useActivations';
 import {
     type SmsPinSendResponse,
@@ -46,6 +46,7 @@ import ErrorState from '../../components/ui/ErrorState';
 import ConfirmModal from '../../components/ConfirmModal';
 import {BsFillGearFill, BsSendFill} from "react-icons/bs";
 import {MdPersonOff} from "react-icons/md";
+import {keepPreviousData} from "@tanstack/react-query";
 
 type ApiError = {
     response?: {
@@ -129,6 +130,7 @@ export default function ActivationsPage() {
     const [selectedElectionId, setSelectedElectionId] = useState<number | null>(null);
 
     const [studentQuery, setStudentQuery] = useState('');
+    const [debouncedStudentQuery, setDebouncedStudentQuery] = useState('');
     const [selectedStudentId, setSelectedStudentId] = useState('');
     const [isOpen, setIsOpen] = useState(false);
     const [activeOption, setActiveOption] = useState(0);
@@ -152,7 +154,20 @@ export default function ActivationsPage() {
     const effectiveElectionId = isScopedRole
         ? user?.assignedElection?.id ?? null
         : selectedElectionId;
-    const studentsQuery = useStudents(effectiveElectionId, {refetchInterval: 10_000});
+
+    useEffect(() => {
+        const timeout = window.setTimeout(() => setDebouncedStudentQuery(studentQuery), 500);
+        return () => window.clearTimeout(timeout);
+    }, [studentQuery]);
+
+    const studentsQuery = useActivationStudentOptions(
+        effectiveElectionId,
+        debouncedStudentQuery,
+        {
+            refetchInterval: 10_000,
+            placeholderData: keepPreviousData,
+        },
+    );
     const activateStudent = useActivateStudent();
     const sendSmsPins = useSendSmsPins();
     const resendSmsPin = useResendSmsPin();
@@ -217,10 +232,7 @@ export default function ActivationsPage() {
         [electionsQuery.data]
     );
 
-    const students = useMemo(
-        () => studentsQuery.data ?? [],
-        [studentsQuery.data]
-    );
+    const students = studentsQuery.data?.results ?? [];
 
     const electionChoices = elections;
 
@@ -245,36 +257,12 @@ export default function ActivationsPage() {
                             ? 'Add at least one position and at least one candidate to every position before activating voters.'
                             : '';
 
-    const availableStudents = useMemo(
-        () =>
-            students.filter(
-                student => !student.is_active && !student.has_voted
-            ),
-        [students]
-    );
-    const activeStudentCount = useMemo(
-        () => students.filter(student => student.is_active).length,
-        [students]
-    );
-
-    const votedStudentCount = useMemo(
-        () => students.filter(student => student.has_voted).length,
-        [students]
-    );
+    const summary = studentsQuery.data?.summary;
+    const availableStudentCount = summary?.available ?? 0;
+    const activeStudentCount = summary?.activated ?? 0;
+    const votedStudentCount = summary?.voted ?? 0;
     const totalActivatedStudentCount = activeStudentCount + votedStudentCount;
-
-    const options = useMemo(() => {
-        const query = studentQuery.trim().toLowerCase();
-
-        return availableStudents
-            .filter(
-                student =>
-                    !query ||
-                    student.full_name.toLowerCase().includes(query) ||
-                    student.student_id.toLowerCase().includes(query)
-            )
-            .slice(0, 25);
-    }, [availableStudents, studentQuery]);
+    const options = students;
 
     const selectedStudent =
         students.find(
@@ -463,7 +451,7 @@ export default function ActivationsPage() {
                     <div className="activation-metrics grid gap-3">
                         <StatisticCard
                             label="Total voters"
-                            value={studentsQuery.isError ? '—' : students.length}
+                            value={studentsQuery.isError ? '—' : summary?.total ?? 0}
                             icon={<FiUsers aria-hidden="true"/>}
                             status="primary"
                             layout="split"
@@ -502,7 +490,7 @@ export default function ActivationsPage() {
                         />
                         <StatisticCard
                             label="Yet to Activate"
-                            value={studentsQuery.isError ? '—' : availableStudents.length}
+                            value={studentsQuery.isError ? '—' : availableStudentCount}
                             icon={<FiUserPlus aria-hidden="true"/>}
                             status="info"
                             layout="split"
@@ -922,7 +910,7 @@ export default function ActivationsPage() {
                                                                 : undefined
                                                         }
                                                         disabled={
-                                                            !availableStudents.length || !canActivateVoters
+                                                            !availableStudentCount || !canActivateVoters
                                                         }
                                                     />
                                                 </div>
@@ -1220,7 +1208,7 @@ export default function ActivationsPage() {
 
                     {/* Empty and loading states */}
 
-                    {!isLoading && !availableStudents.length && (
+                    {!isLoading && !availableStudentCount && (
                         <EmptyState
                             title="No voters available"
                             message="All voters are active, have voted, or are not present in this election."

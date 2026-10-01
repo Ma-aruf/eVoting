@@ -1,3 +1,27 @@
+import re
+import time
+import uuid
+
+
+class RequestCorrelationMiddleware:
+    """Attach a safe request identifier and start time to every request."""
+
+    _SAFE_ID = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        supplied_id = request.headers.get("X-Request-ID", "")
+        request.correlation_id = (
+            supplied_id if self._SAFE_ID.fullmatch(supplied_id) else str(uuid.uuid4())
+        )
+        request.started_at = time.monotonic()
+        response = self.get_response(request)
+        response["X-Request-ID"] = request.correlation_id
+        return response
+
+
 class HealthCheckSSLRedirectMiddleware:
     """
     Middleware to exclude health check paths from SSL redirect.

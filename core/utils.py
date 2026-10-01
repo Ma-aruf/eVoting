@@ -4,24 +4,29 @@ import secrets
 from datetime import timedelta
 
 from django.conf import settings
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
 VOTER_PIN_LENGTH = 8
 VOTER_PIN_MAX_ATTEMPTS = 5
 VOTER_PIN_TTL = timedelta(minutes=10)
-VOTER_ACTIVATION_TTL = timedelta(minutes=10)
+VOTER_ACTIVATION_TTL = timedelta(seconds=30)
 VOTER_SMS_PIN_TTL = timedelta(hours=1)
 VOTER_SESSION_TTL = timedelta(minutes=10)
 VOTER_PIN_HASH_VERSION = "v1"
+
+
 def election_uses_pin_login(election) -> bool:
     return getattr(election, "voter_login_mode", None) in {
         "activator_pin",
         "sms_pin",
     }
 
+
 def voter_pin_ttl_for_election(election):
     return VOTER_SMS_PIN_TTL if getattr(election, "voter_login_mode", None) == "sms_pin" else VOTER_PIN_TTL
+
 
 VOTER_PIN_HASH_SEPARATOR = ":"
 
@@ -126,9 +131,9 @@ def deactivate_expired_voter(student, reason=None) -> None:
         elif student.voter_activation_expires_at and student.voter_activation_expires_at <= current_time:
             reason = "activation_expired"
         elif student.voting_pin_created_at and voter_access_expired(
-            student.voting_pin_created_at,
-            current_time,
-            voter_pin_ttl_for_election(student.election),
+                student.voting_pin_created_at,
+                current_time,
+                voter_pin_ttl_for_election(student.election),
         ):
             reason = "pin_expired"
         else:
@@ -175,11 +180,11 @@ def deactivate_expired_voters(now=None) -> int:
         voting_pin_created_at__lte=current_time - VOTER_SMS_PIN_TTL,
     )
     pin_expired = (
-        ~Q(election__voter_login_mode=Election.VOTER_LOGIN_MODE_SMS)
-        & Q(
-            voting_pin_created_at__isnull=False,
-            voting_pin_created_at__lte=current_time - VOTER_PIN_TTL,
-        )
+            ~Q(election__voter_login_mode=Election.VOTER_LOGIN_MODE_SMS)
+            & Q(
+        voting_pin_created_at__isnull=False,
+        voting_pin_created_at__lte=current_time - VOTER_PIN_TTL,
+    )
     )
     session_expired = Q(
         voter_session_expires_at__isnull=False,
@@ -189,42 +194,59 @@ def deactivate_expired_voters(now=None) -> int:
         voter_activation_expires_at__isnull=False,
         voter_activation_expires_at__lte=current_time,
     )
+    # ID login clears the activation deadline after login; a live session must
+    # not be mistaken for a legacy activation that never had a deadline.
     legacy_id_activation = Q(
         election__voter_login_mode=Election.VOTER_LOGIN_MODE_ID,
         voter_activation_expires_at__isnull=True,
+        voter_session_expires_at__isnull=True,
     )
-    expired_students = list(Student.objects.filter(
-        is_active=True,
-        has_voted=False,
-    ).filter(pin_expired | sms_pin_expired | session_expired | activation_expired | legacy_id_activation).select_related("election"))
-    for student in expired_students:
-        if student.voter_session_expires_at and student.voter_session_expires_at <= current_time:
-            reason = "session_expired"
-        elif student.voter_activation_expires_at and student.voter_activation_expires_at <= current_time:
-            reason = "activation_expired"
-        else:
-            reason = "pin_expired"
-        record_audit_event(
-            action="VOTER_ACCESS_EXPIRED",
-            outcome=AuditLog.Outcome.SUCCESS,
-            election=student.election,
-            student=student,
-            metadata={"reason": reason},
+    expired_access = pin_expired | sms_pin_expired | session_expired | activation_expired | legacy_id_activation
+
+    with transaction.atomic():
+        expired_students = list(
+            Student.objects.select_for_update()
+            .filter(is_active=True, has_voted=False)
+            .filter(expired_access)
+            .select_related("election")
         )
-    if not expired_students:
-        return 0
-    return Student.objects.filter(
-        pk__in=[student.pk for student in expired_students],
-        is_active=True,
-        has_voted=False,
-    ).update(
-        is_active=False,
-        voting_pin_hash="",
-        voting_pin_created_at=None,
-        voting_pin_attempts=0,
-        voter_session_expires_at=None,
-        voter_activation_expires_at=None,
-    )
+        if not expired_students:
+            return 0
+
+        for student in expired_students:
+            if student.voter_session_expires_at and student.voter_session_expires_at <= current_time:
+                reason = "session_expired"
+            elif student.voter_activation_expires_at and student.voter_activation_expires_at <= current_time:
+                reason = "activation_expired"
+            elif (
+                    student.election.voter_login_mode == Election.VOTER_LOGIN_MODE_ID
+                    and student.voter_activation_expires_at is None
+                    and student.voter_session_expires_at is None
+            ):
+                reason = "activation_expired"
+            else:
+                reason = "pin_expired"
+            record_audit_event(
+                action="VOTER_ACCESS_EXPIRED",
+                outcome=AuditLog.Outcome.SUCCESS,
+                election=student.election,
+                student=student,
+                metadata={"reason": reason},
+            )
+
+        # Reapply expiry predicates so a stale scan cannot clear renewed access.
+        return Student.objects.filter(
+            pk__in=[student.pk for student in expired_students],
+            is_active=True,
+            has_voted=False,
+        ).filter(expired_access).update(
+            is_active=False,
+            voting_pin_hash="",
+            voting_pin_created_at=None,
+            voting_pin_attempts=0,
+            voter_session_expires_at=None,
+            voter_activation_expires_at=None,
+        )
 
 
 def create_voter_token(student_id: str) -> str:
