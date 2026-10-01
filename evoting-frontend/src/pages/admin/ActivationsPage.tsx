@@ -293,11 +293,12 @@ export default function ActivationsPage() {
         selectedElection.ballot_ready
     );
     const canViewSmsStatus = user?.role === 'staff' || user?.role === 'superuser';
+    const canViewVoterRecovery = canViewSmsStatus;
     const recoveryStatusQuery = useVoterRecoveryStatus(
         effectiveElectionId,
         recoveryStatusPage,
         smsStatusSearch.trim(),
-        selectedElection?.voter_login_mode !== 'sms_pin'
+        canViewVoterRecovery && selectedElection?.voter_login_mode !== 'sms_pin'
     );
     const smsStatusQuery = useSmsVoterStatus(
         effectiveElectionId,
@@ -1076,7 +1077,7 @@ export default function ActivationsPage() {
                         )}
                     </>
 
-                    {selectedElection.voter_login_mode !== 'sms_pin' && (
+                    {canViewVoterRecovery && selectedElection.voter_login_mode !== 'sms_pin' && (
                         <>
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-10">
                                 <Button
@@ -1114,7 +1115,7 @@ export default function ActivationsPage() {
                                     </div>
                                 }
                             </div>
-                            {isVoterTableVisible &&
+                            {isVoterTableVisible && (
                                 <section className="ui-section" aria-labelledby="voter-recovery-title"
                                          id="voter-recovery-table-content">
                                     <div className="ui-section-heading">
@@ -1213,7 +1214,7 @@ export default function ActivationsPage() {
                                         </div>
                                     )}
                                 </section>
-                            }
+                            )}
                         </>
                     )}
 

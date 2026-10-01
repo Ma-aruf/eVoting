@@ -137,7 +137,7 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only, election-scoped audit history for management users."""
 
     serializer_class = AuditLogSerializer
-    permission_classes = [IsManagementUser]
+    permission_classes = [IsStaffOrSuperUser]
 
     def get_queryset(self):
         queryset = scope_queryset(

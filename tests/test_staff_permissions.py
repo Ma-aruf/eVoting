@@ -380,6 +380,18 @@ class StaffPermissionTestCase(TestCase):
         self.student1_election2.refresh_from_db()
         self.assertFalse(self.student1_election2.is_active)
 
+    def test_only_staff_and_superusers_can_view_recovery_and_audit_logs(self):
+        recovery_url = f'/api/students/recovery-status/?election_id={self.election1.id}'
+        audit_url = '/api/audit-logs/'
+
+        for client in (self.superuser_client, self.staff1_client):
+            with self.subTest(client=client):
+                self.assertEqual(client.get(recovery_url).status_code, 200)
+                self.assertEqual(client.get(audit_url).status_code, 200)
+
+        self.assertEqual(self.activator1_client.get(recovery_url).status_code, 403)
+        self.assertEqual(self.activator1_client.get(audit_url).status_code, 403)
+
     def test_staff_can_view_results_for_assigned_election(self):
         """Staff users should be able to view results for their assigned election."""
         # Create some votes for testing

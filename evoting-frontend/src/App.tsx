@@ -144,7 +144,7 @@ function App() {
                             <Route
                                 path="audit-logs"
                                 element={
-                                    <ProtectedRoute allowedRoles={['activator', 'superuser', 'staff']}>
+                                    <ProtectedRoute allowedRoles={['superuser', 'staff']}>
                                         <AuditLogsPage/>
                                     </ProtectedRoute>
                                 }

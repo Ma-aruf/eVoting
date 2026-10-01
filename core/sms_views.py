@@ -33,7 +33,7 @@ CONFIGURATION_MESSAGES = {
 
 
 class VoterRecoveryStatusView(APIView):
-    permission_classes = [CanActivateVoters]
+    permission_classes = [IsStaffOrSuperUser]
 
     def get(self, request):
         election_id = request.query_params.get("election_id")

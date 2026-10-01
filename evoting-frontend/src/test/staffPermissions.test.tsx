@@ -484,6 +484,13 @@ describe('staff election workflows', () => {
         openPage('/admin/activations', role);
         const input = await screen.findByRole('combobox');
         expect(screen.queryByRole('combobox', {name: 'Election'})).not.toBeInTheDocument();
+        if (role === 'activator') {
+            expect(screen.queryByRole('button', {name: 'View voter status & recovery'})).not.toBeInTheDocument();
+            expect(screen.queryByLabelText('Search voters')).not.toBeInTheDocument();
+            expect(screen.queryByRole('link', {name: 'Audit Trail'})).not.toBeInTheDocument();
+        } else {
+            expect(screen.getByRole('button', {name: 'View voter status & recovery'})).toBeInTheDocument();
+        }
         await user.type(input, 'Voter');
         await user.click(await screen.findByRole('option', {name: /Assigned Voter/}));
         expect(screen.queryByText('Other Voter')).not.toBeInTheDocument();
@@ -525,7 +532,7 @@ describe('staff election workflows', () => {
 });
 
 describe('activator and superuser restrictions', () => {
-    it.each(['/admin/positions', '/admin/manage-elections', '/admin/results', '/admin/students', '/admin/candidates', '/admin/users'])('redirects activators away from %s', async path => {
+    it.each(['/admin/positions', '/admin/manage-elections', '/admin/results', '/admin/students', '/admin/candidates', '/admin/audit-logs', '/admin/users'])('redirects activators away from %s', async path => {
         openPage(path, 'activator');
         await waitFor(() => expect(window.location.pathname).toBe('/admin/activations'));
         expect(screen.queryByRole('link', {name: 'Manage Elections'})).not.toBeInTheDocument();
