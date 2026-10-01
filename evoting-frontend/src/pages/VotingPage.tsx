@@ -20,10 +20,7 @@ import {
     voterApi,
 } from '../api/voterApi';
 import {type Candidate, useVotingData} from '../hooks/useVotingData';
-import {
-    voterLifecycleMessage,
-    voterLifecycleMessageFromDetail
-} from '../utils/electionLifecycle';
+import {voterLifecycleMessage, voterLifecycleMessageFromDetail} from '../utils/electionLifecycle';
 
 type BallotChoice = 'candidate' | 'yes' | 'no' | 'skip';
 
@@ -70,8 +67,8 @@ function getCandidateCardSizing(candidateCount: number): CandidateCardSizing {
             };
         default:
             return {
-                card: 'w-[220px] h-[300px] sm:w-[190px] sm:h-[255px] lg:w-[220px] lg:h-[275px]',
-                photo: 'w-50 h-50 mt-2 mb-6 sm:w-44 sm:h-44 lg:w-48 lg:h-48',
+                card: 'w-full min-w-0 min-h-[280px]',
+                photo: 'w-32 h-32 mt-2 mb-4 sm:w-40 sm:h-40',
                 name: 'mb-2 min-h-10 text-sm',
             };
     }
@@ -82,14 +79,19 @@ function getCandidateLayoutClass(candidateCount: number): string {
         case 1:
             return 'flex justify-center';
         case 2:
-            return 'grid grid-cols-1 sm:flex sm:flex-wrap max-w-6xl items-start justify-center gap-6 sm:gap-8 mx-auto';
+            return 'grid grid-cols-1 sm:flex sm:flex-wrap max-w-6xl items-start ' +
+                'justify-center gap-6 sm:gap-8 mx-auto';
         case 3:
-            return 'grid grid-cols-1 sm:flex sm:flex-wrap max-w-6xl items-start justify-center gap-4 sm:gap-5 mx-auto';
+            return 'grid grid-cols-1 sm:flex sm:flex-wrap max-w-6xl items-start justify-center ' +
+                'gap-4 sm:gap-5 mx-auto';
         case 4:
-            return 'grid grid-cols-1 sm:flex sm:flex-wrap max-w-6xl items-start justify-center gap-3 sm:gap-4 mx-auto';
+            return 'grid grid-cols-1 sm:flex sm:flex-wrap max-w-6xl items-start justify-center ' +
+                'gap-3 sm:gap-4 mx-auto';
         default:
-            return 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 max-w-6xl items-start justify-center gap-2 sm:gap-3 mx-auto';
+            return 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 ' +
+                'max-w-6xl items-start justify-center gap-2 sm:gap-3 mx-auto';
     }
+
 }
 
 export default function VotingPage() {
