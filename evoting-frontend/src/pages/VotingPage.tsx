@@ -44,31 +44,31 @@ function getCandidateCardSizing(candidateCount: number): CandidateCardSizing {
         case 1:
             return {
                 card: 'w-[280px] h-[380px] sm:w-[320px] sm:h-[420px] lg:w-[360px] lg:h-[430px]',
-                photo: 'w-50 h-50 mt-2 mb-6 sm:w-60 sm:h-60 sm:mt-3 sm:mb-7 lg:w-60 lg:h-60',
+                photo: 'w-44 h-44 shrink-0 mt-2 mb-6 sm:w-60 sm:h-60 sm:mt-3 sm:mb-7 lg:w-60 lg:h-60',
                 name: 'mb-3 min-h-12 text-xl',
             };
         case 2:
             return {
                 card: 'w-[240px] h-[340px] sm:w-[280px] sm:h-[380px] lg:w-[320px] lg:h-[420px]',
-                photo: 'w-50 h-50 mt-2 mb-6 sm:w-56 sm:h-56 lg:w-64 lg:h-64',
+                photo: 'w-40 h-40 shrink-0 mt-2 mb-6 sm:w-56 sm:h-56 lg:w-64 lg:h-64',
                 name: 'mb-2 min-h-12',
             };
         case 3:
             return {
                 card: 'w-[220px] h-[320px] sm:w-[260px] sm:h-[360px] lg:w-[300px] lg:h-[400px]',
-                photo: 'w-50 h-50 mt-2 mb-6 sm:w-52 sm:h-52 lg:w-60 lg:h-60',
+                photo: 'w-36 h-36 shrink-0 mt-2 mb-6 sm:w-52 sm:h-52 lg:w-60 lg:h-60',
                 name: 'mb-2 min-h-12',
             };
         case 4:
             return {
                 card: 'w-[200px] h-[300px] sm:w-[230px] sm:h-[330px] lg:w-[260px] lg:h-[360px]',
-                photo: 'w-50 h-50 mt-2 mb-6',
+                photo: 'w-32 h-32 shrink-0 mt-2 mb-6 sm:w-50 sm:h-50',
                 name: 'mb-2 min-h-12',
             };
         default:
             return {
                 card: 'w-full min-w-0 min-h-[280px]',
-                photo: 'w-32 h-32 mt-2 mb-4 sm:w-40 sm:h-40',
+                photo: 'w-32 h-32 shrink-0 mt-2 mb-4 sm:w-40 sm:h-40',
                 name: 'mb-2 min-h-10 text-sm',
             };
     }
@@ -615,7 +615,7 @@ export default function VotingPage() {
                                                                             <img
                                                                                 src={candidate.photo_url}
                                                                                 alt={candidate.student_name}
-                                                                                className="w-full h-full object-cover"
+                                                                                className="h-full w-full rounded-full object-cover"
                                                                             />
                                                                         ) : (
                                                                             <span
