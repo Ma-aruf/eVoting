@@ -1,10 +1,20 @@
+[build]
+builder = "NIXPACKS"
+watchPatterns = [
+    "/core/**",
+    "/evoting/**",
+    "/tests/**",
+    "/manage.py",
+    "/requirements.txt",
+    "/build.sh",
+    "/start.sh",
+    "/Procfile",
+    "/railway.toml"
+]
+
 [deploy]
 startCommand = "bash start.sh"
 healthcheckPath = "/api/health/"
 healthcheckTimeout = 30
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
-
-[build]
-builder = "NIXPACKS"
-
