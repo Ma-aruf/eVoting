@@ -106,7 +106,20 @@ beforeEach(() => {
             return {data: {totals, elections: rows}};
         }
         if (parsed.pathname === '/api/elections/') return {data: electionData};
-        if (parsed.pathname === '/api/students/') return {data: voterRecords.filter(voter => voter.election === electionId)};
+        if (parsed.pathname === '/api/students/') {
+            const students = voterRecords.filter(voter => voter.election === electionId);
+            return {data: {
+                count: students.length,
+                results: students,
+                next: null,
+                summary: {
+                    total: students.length,
+                    activated: students.filter(voter => voter.is_active && !voter.has_voted).length,
+                    voted: students.filter(voter => voter.has_voted).length,
+                },
+                classes: [...new Set(students.map(voter => voter.class_name))],
+            }};
+        }
         if (parsed.pathname === '/api/positions/') return {data: positions.filter(position => position.election === electionId)};
         if (parsed.pathname === '/api/candidates/') return {data: []};
         const result = parsed.pathname.match(/^\/api\/elections\/(\d+)\/results\/$/);

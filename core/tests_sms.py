@@ -393,3 +393,55 @@ class SmsVoterFlowTests(TestCase):
         self.assertEqual(len(first_elections_page.data["results"]), 20)
         self.assertIsNotNone(first_elections_page.data["next"])
         self.assertEqual(len(second_elections_page.data["results"]), 1)
+
+    def test_student_list_filters_on_backend_and_returns_election_summary(self):
+        now = timezone.now()
+        active_student = Student.objects.create(
+            student_id="FILTER001",
+            full_name="Needle Voter",
+            class_name="Form 2",
+            election=self.election,
+            is_active=True,
+            voting_pin_created_at=now,
+        )
+        Student.objects.create(
+            student_id="FILTER002",
+            full_name="Other Voter",
+            class_name="Form 3",
+            election=self.election,
+        )
+        Student.objects.create(
+            student_id="FILTER003",
+            full_name="Voted Voter",
+            class_name="Form 2",
+            election=self.election,
+            has_voted=True,
+        )
+
+        search_response = self.client.get("/api/students/", {
+            "election_id": self.election.id,
+            "search": "needle",
+        })
+        self.assertEqual(search_response.status_code, 200)
+        self.assertEqual(search_response.data["count"], 1)
+        self.assertEqual(search_response.data["results"][0]["id"], active_student.id)
+        self.assertEqual(search_response.data["summary"], {
+            "total": 4,
+            "activated": 1,
+            "voted": 1,
+        })
+        self.assertEqual(search_response.data["classes"], ["Form 1", "Form 2", "Form 3"])
+
+        active_response = self.client.get("/api/students/", {
+            "election_id": self.election.id,
+            "active": "active",
+        })
+        self.assertEqual(active_response.data["count"], 1)
+        self.assertEqual(active_response.data["results"][0]["id"], active_student.id)
+
+        voted_response = self.client.get("/api/students/", {
+            "election_id": self.election.id,
+            "voted": "voted",
+        })
+        self.assertEqual(voted_response.data["count"], 1)
+        self.assertEqual(voted_response.data["results"][0]["student_id"], "FILTER003")

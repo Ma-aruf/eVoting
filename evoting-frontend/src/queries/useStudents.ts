@@ -1,4 +1,5 @@
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import type {AxiosResponse} from 'axios';
 import api from '../apiClient';
 import {getApiErrorDetail} from '../utils/apiErrors';
 import {queryKeys} from './queryKeys';
@@ -24,8 +25,67 @@ type StudentsPage = {
     next?: string | null;
 };
 
+export type StudentListResponse = {
+    count: number;
+    results: Student[];
+    summary: {total: number; activated: number; voted: number};
+    classes: string[];
+};
+
+export type StudentListParams = {
+    page: number;
+    search: string;
+    active: 'all' | 'active' | 'inactive';
+    voted: 'all' | 'voted' | 'not-voted';
+    className: string;
+};
+
 export const getStudentElectionId = (student: Student) =>
     typeof student.election === 'number' ? student.election : student.election?.id;
+
+export const fetchAllStudentsForElection = async (electionId: number): Promise<Student[]> => {
+    const students: Student[] = [];
+    let nextUrl: string | null = 'api/students/';
+    let isFirstPage = true;
+
+    while (nextUrl) {
+        const response: AxiosResponse<StudentsPage | Student[]> = await api.get<StudentsPage | Student[]>(nextUrl, {
+            ...(isFirstPage ? {params: {election_id: electionId}} : {}),
+        });
+        const data = response.data;
+        if (Array.isArray(data)) {
+            students.push(...data);
+            break;
+        }
+        students.push(...(data.results ?? []));
+        nextUrl = data.next ?? null;
+        isFirstPage = false;
+    }
+
+    return students;
+};
+
+export const useStudentsPage = (electionId: number | null, params: StudentListParams) =>
+    useQuery({
+        queryKey: queryKeys.studentPage(electionId, params),
+        queryFn: async (): Promise<StudentListResponse> => {
+            const response = await api.get<StudentListResponse>('api/students/', {
+                params: {
+                    election_id: electionId,
+                    page: params.page,
+                    search: params.search.trim() || undefined,
+                    active: params.active === 'all' ? undefined : params.active,
+                    voted: params.voted === 'all' ? undefined : params.voted,
+                    class_name: params.className || undefined,
+                },
+            });
+            return response.data;
+        },
+        enabled: electionId !== null,
+        placeholderData: (previousData, previousQuery) =>
+            previousQuery?.queryKey[1] === electionId ? previousData : undefined,
+        staleTime: 30 * 1000,
+    });
 
 export const useStudents = (
     electionId: number | null,
@@ -33,30 +93,7 @@ export const useStudents = (
 ) =>
     useQuery({
         queryKey: queryKeys.students(electionId),
-        queryFn: async (): Promise<Student[]> => {
-            const students: Student[] = [];
-            let nextUrl: string | null = 'api/students/';
-            let isFirstPage = true;
-
-            while (nextUrl) {
-                const response = await api.get<StudentsPage | Student[]>(nextUrl, {
-                    ...(isFirstPage && electionId ? {params: {election_id: electionId}} : {}),
-                });
-                const data = response.data;
-
-                if (Array.isArray(data)) {
-                    students.push(...data);
-                    break;
-                }
-
-                const page = data as StudentsPage;
-                students.push(...(Array.isArray(page.results) ? page.results : []));
-                nextUrl = page.next ?? null;
-                isFirstPage = false;
-            }
-
-            return students;
-        },
+        queryFn: () => electionId === null ? Promise.resolve([]) : fetchAllStudentsForElection(electionId),
         enabled: electionId !== null,
         staleTime: 30 * 1000,
         refetchInterval: options.refetchInterval,

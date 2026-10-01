@@ -10,6 +10,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
+from django.db.models import Count, Q
 from django.db.models import ProtectedError
 from django.http import Http404
 from django.shortcuts import get_object_or_404
@@ -68,6 +69,8 @@ from .serializers import (
 from .sms.mnotify import normalize_ghana_phone_number
 from .utils import (
     VOTER_PIN_MAX_ATTEMPTS,
+    VOTER_PIN_TTL,
+    VOTER_SMS_PIN_TTL,
     create_voter_token,
     deactivate_expired_voter,
     election_uses_pin_login,
@@ -178,6 +181,25 @@ class ElectionViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset
 
 
+def _current_voter_access_filter(now):
+    return Q(is_active=True, has_voted=False) & (
+        Q(voter_session_expires_at__gt=now)
+        | Q(voter_session_expires_at__isnull=True, voter_activation_expires_at__gt=now)
+        | Q(
+            voter_session_expires_at__isnull=True,
+            voter_activation_expires_at__isnull=True,
+            election__voter_login_mode=Election.VOTER_LOGIN_MODE_PIN,
+            voting_pin_created_at__gt=now - VOTER_PIN_TTL,
+        )
+        | Q(
+            voter_session_expires_at__isnull=True,
+            voter_activation_expires_at__isnull=True,
+            election__voter_login_mode=Election.VOTER_LOGIN_MODE_SMS,
+            voting_pin_created_at__gt=now - VOTER_SMS_PIN_TTL,
+        )
+    )
+
+
 class StudentViewSet(viewsets.ModelViewSet):
     """
     Staff or superuser can manage students (CRUD).
@@ -189,12 +211,51 @@ class StudentViewSet(viewsets.ModelViewSet):
     permission_classes = [CanAccessStudents]
     pagination_class = TwentyPerPagePagination
 
-    def get_queryset(self):
-        queryset = scope_queryset(Student.objects.all(), self.request.user).order_by("id")
+    def get_base_queryset(self):
+        queryset = scope_queryset(Student.objects.all(), self.request.user).select_related("election").order_by("id")
         election_id = self.request.query_params.get("election_id")
         if election_id:
-            return queryset.filter(election_id=election_id)
+            queryset = queryset.filter(election_id=election_id)
         return queryset
+
+    def get_queryset(self):
+        queryset = self.get_base_queryset()
+        search = self.request.query_params.get("search", "").strip()
+        if search:
+            queryset = queryset.filter(Q(full_name__icontains=search) | Q(student_id__icontains=search))
+
+        class_name = self.request.query_params.get("class_name", "").strip()
+        if class_name:
+            queryset = queryset.filter(class_name=class_name)
+
+        active_filter = self.request.query_params.get("active", "all")
+        voted_filter = self.request.query_params.get("voted", "all")
+        active_access = _current_voter_access_filter(timezone.now())
+        if active_filter == "active":
+            queryset = queryset.filter(active_access)
+        elif active_filter == "inactive":
+            queryset = queryset.exclude(active_access)
+
+        if voted_filter == "voted":
+            queryset = queryset.filter(has_voted=True)
+        elif voted_filter == "not-voted":
+            queryset = queryset.filter(has_voted=False)
+        return queryset
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        if isinstance(response.data, dict) and "results" in response.data:
+            queryset = self.get_base_queryset()
+            active_access = _current_voter_access_filter(timezone.now())
+            response.data["summary"] = queryset.aggregate(
+                total=Count("id"),
+                activated=Count("id", filter=active_access),
+                voted=Count("id", filter=Q(has_voted=True)),
+            )
+            response.data["classes"] = list(
+                queryset.order_by().values_list("class_name", flat=True).distinct().order_by("class_name")
+            )
+        return response
 
     def perform_create(self, serializer):
         """Ensure election is set when creating a student."""

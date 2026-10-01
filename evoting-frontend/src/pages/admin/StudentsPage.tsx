@@ -1,4 +1,4 @@
-import {type FormEvent, useMemo, useState} from 'react';
+import {type FormEvent, useEffect, useMemo, useState} from 'react';
 import {
     FiCheckCircle,
     FiChevronLeft,
@@ -30,15 +30,16 @@ import Modal from '../../components/ui/Modal';
 
 import {useElections} from '../../queries/useElections';
 import {useAuth} from '../../hooks/useAuth';
-import {type ActiveFilter, type VotedFilter, useStudentFilters} from '../../hooks/useStudentFilters';
+import {type ActiveFilter, type VotedFilter} from '../../hooks/useStudentFilters';
 import {
     type Student,
     getStudentElectionId,
     useBulkUploadStudents,
     useCreateStudent,
     useDeleteStudent,
-    useStudents,
+    useStudentsPage,
     useUpdateStudent,
+    fetchAllStudentsForElection,
 } from '../../queries/useStudents';
 
 import {getApiErrorDetail} from '../../utils/apiErrors';
@@ -174,6 +175,13 @@ export default function StudentsPage() {
 
     const [editing, setEditing] = useState<Student | null>(null);
     const [deleting, setDeleting] = useState<Student | null>(null);
+    const [search, setSearch] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const [activeFilter, setActiveFilter] = useState<ActiveFilter>('all');
+    const [votedFilter, setVotedFilter] = useState<VotedFilter>('all');
+    const [classFilter, setClassFilter] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [isExporting, setIsExporting] = useState(false);
 
 
     // Queries and mutations
@@ -182,7 +190,13 @@ export default function StudentsPage() {
     const effectiveElectionId = isScopedRole
         ? user?.assignedElection?.id ?? null
         : selectedElectionId;
-    const studentsQuery = useStudents(effectiveElectionId);
+    const studentsQuery = useStudentsPage(effectiveElectionId, {
+        page: currentPage,
+        search: debouncedSearch,
+        active: activeFilter,
+        voted: votedFilter,
+        className: classFilter,
+    });
 
     const create = useCreateStudent();
     const update = useUpdateStudent();
@@ -194,35 +208,58 @@ export default function StudentsPage() {
         [electionsQuery.data]
     );
 
-    const students = useMemo(
-        () => studentsQuery.data ?? [],
-        [studentsQuery.data]
-    );
+    const students = studentsQuery.data?.results ?? [];
+    const totalStudents = studentsQuery.data?.count ?? 0;
+    const totalPages = Math.ceil(totalStudents / 20);
+    const classes = studentsQuery.data?.classes ?? [];
+    const hasFilters = Boolean(search || activeFilter !== 'all' || votedFilter !== 'all' || classFilter);
 
     const selected =
         elections.find(election => election.id === effectiveElectionId) ?? null;
 
-    const {
-        search,
-        setSearch,
-        activeFilter,
-        setActiveFilter,
-        votedFilter,
-        setVotedFilter,
-        classFilter,
-        setClassFilter,
-        setCurrentPage,
-        classes,
-        filtered,
-        hasFilters,
-        totalPages,
-        visiblePage,
-        paginatedStudents,
-        clearFilters,
-    } = useStudentFilters(students);
     const queryError = electionsQuery.error || studentsQuery.error;
     const loading = electionsQuery.isLoading || studentsQuery.isLoading;
     const uploadResult = upload.data as UploadResult | undefined;
+
+    useEffect(() => {
+        const timer = window.setTimeout(() => {
+            setDebouncedSearch(search.trim());
+            setCurrentPage(1);
+        }, 300);
+        return () => window.clearTimeout(timer);
+    }, [search]);
+
+    useEffect(() => {
+        if (totalPages > 0 && currentPage > totalPages) setCurrentPage(totalPages);
+    }, [currentPage, totalPages]);
+
+    const clearFilters = () => {
+        setSearch('');
+        setDebouncedSearch('');
+        setActiveFilter('all');
+        setVotedFilter('all');
+        setClassFilter('');
+        setCurrentPage(1);
+    };
+
+    const handleExport = async () => {
+        if (!selected || !effectiveElectionId || isExporting) return;
+        setIsExporting(true);
+        try {
+            const allStudents = await fetchAllStudentsForElection(effectiveElectionId);
+            downloadCsv(
+                `voters-${selected.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-${selected.year}.csv`,
+                [
+                    ['Election', 'Year', 'Voter ID', 'Full name', 'Class', 'Phone', 'Access active', 'Voted'],
+                    ...allStudents.map(student => [selected.name, selected.year, student.student_id, student.full_name, student.class_name, student.phone_number ?? '', student.is_active, student.has_voted]),
+                ],
+            );
+        } catch (error) {
+            showError(message(error, 'Failed to export voters. Please try again.'));
+        } finally {
+            setIsExporting(false);
+        }
+    };
 
     // Form handlers
 
@@ -289,6 +326,11 @@ export default function StudentsPage() {
     const handleDelete = () => {
         if (deleting && !deleting.has_voted) {
             remove.mutate(deleting, {
+                onSuccess: () => {
+                    if (students.length === 1 && currentPage > 1) {
+                        setCurrentPage(page => page - 1);
+                    }
+                },
                 onSettled: () => setDeleting(null),
             });
         }
@@ -305,7 +347,7 @@ export default function StudentsPage() {
                 >
                     <StatisticCard
                         label="Total voters"
-                        value={students.length}
+                        value={studentsQuery.data?.summary?.total ?? '—'}
                         icon={<FiUsers aria-hidden="true"/>}
                         status="primary"
                         layout="split"
@@ -313,9 +355,7 @@ export default function StudentsPage() {
 
                     <StatisticCard
                         label="Activated voters"
-                        value={
-                            students.filter(student => student.is_active).length
-                        }
+                        value={studentsQuery.data?.summary?.activated ?? '—'}
                         icon={<FiCheckCircle aria-hidden="true"/>}
                         status="success"
                         layout="split"
@@ -323,9 +363,7 @@ export default function StudentsPage() {
 
                     <StatisticCard
                         label="Already voted"
-                        value={
-                            students.filter(student => student.has_voted).length
-                        }
+                        value={studentsQuery.data?.summary?.voted ?? '—'}
                         icon={<FiFileText aria-hidden="true"/>}
                         status="strong"
                         layout="split"
@@ -376,15 +414,9 @@ export default function StudentsPage() {
                         type="button"
                         variant="secondary"
                         leadingIcon={<FiDownloadCloud aria-hidden="true"/>}
-                        disabled={!selected || students.length === 0}
-                        onClick={() => selected && downloadCsv(
-                            `voters-${selected.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-${selected.year}.csv`,
-                            [
-                                ['Election', 'Year', 'Voter ID', 'Full name', 'Class', 'Phone', 'Access active', 'Voted'],
-                                ...students.map(student => [selected.name, selected.year, student.student_id, student.full_name, student.class_name, student.phone_number ?? '', student.is_active, student.has_voted]),
-                            ],
-                        )}
-                    >Export voters</Button>
+                        disabled={!selected || (studentsQuery.data?.summary?.total ?? 0) === 0 || isExporting}
+                        onClick={() => void handleExport()}
+                    >{isExporting ? 'Preparing export…' : 'Export voters'}</Button>
                     <Button
                         leadingIcon={<FiPlus aria-hidden="true"/>}
                         onClick={() => setShowAdd(true)}
@@ -447,12 +479,9 @@ export default function StudentsPage() {
 
                             <TextInput
                                 value={search}
-                                onChange={event =>
-                                    (() => {
-                                        setSearch(event.target.value);
-                                        setCurrentPage(1);
-                                    })()
-                                }
+                                onChange={event => {
+                                    setSearch(event.target.value);
+                                }}
                                 placeholder="Name or voter ID"
                             />
                         </div>
@@ -552,7 +581,7 @@ export default function StudentsPage() {
                 {!loading &&
                     !queryError &&
                     effectiveElectionId &&
-                    !students.length && (
+                    (studentsQuery.data?.summary?.total ?? 0) === 0 && (
                         <EmptyState
                             title="No voters yet"
                             message="Add a voter or import an Excel workbook."
@@ -562,8 +591,8 @@ export default function StudentsPage() {
                 {!loading &&
                     !queryError &&
                     effectiveElectionId &&
-                    students.length > 0 &&
-                    !filtered.length && (
+                    (studentsQuery.data?.summary?.total ?? 0) > 0 &&
+                    totalStudents === 0 && (
                         <EmptyState
                             title="No matching voters"
                             message="Try clearing a filter or changing your search."
@@ -572,7 +601,7 @@ export default function StudentsPage() {
 
                 {/* Desktop table and mobile cards */}
 
-                {!loading && !queryError && filtered.length > 0 && (
+                {!loading && !queryError && students.length > 0 && (
                     <>
                         <div className="students-table-wrap">
                             <table className="ui-table students-table">
@@ -593,13 +622,13 @@ export default function StudentsPage() {
                                 </thead>
 
                                 <tbody>
-                                {paginatedStudents.map(student => (
+                                {students.map((student, index) => (
                                     <StudentRow
                                         key={student.id}
                                         student={student}
                                         onEdit={setEditing}
                                         onDelete={setDeleting}
-                                        index={filtered.map(s => s.id).indexOf(student.id)}
+                                        index={(currentPage - 1) * 20 + index}
                                     />
                                 ))}
                                 </tbody>
@@ -607,7 +636,7 @@ export default function StudentsPage() {
                         </div>
 
                         <div className="students-mobile-list">
-                            {paginatedStudents.map(student => (
+                            {students.map(student => (
                                 <article
                                     key={student.id}
                                     className="student-mobile-card"
@@ -678,7 +707,7 @@ export default function StudentsPage() {
                                 aria-label="Voter records pagination"
                             >
                                 <span>
-                                    Page {visiblePage} of {totalPages} - <strong>{filtered.length} voters</strong>
+                                    Page {currentPage} of {totalPages} - <strong>{totalStudents} voters</strong>
                                 </span>
                                 <div>
                                     <Button
@@ -688,7 +717,7 @@ export default function StudentsPage() {
                                         leadingIcon={
                                             <FiChevronLeft aria-hidden="true"/>
                                         }
-                                        disabled={visiblePage === 1}
+                                        disabled={currentPage === 1 || studentsQuery.isPlaceholderData}
                                         onClick={() =>
                                             setCurrentPage(page =>
                                                 Math.max(page - 1, 1)
@@ -704,7 +733,7 @@ export default function StudentsPage() {
                                         trailingIcon={
                                             <FiChevronRight aria-hidden="true"/>
                                         }
-                                        disabled={visiblePage === totalPages}
+                                        disabled={currentPage >= totalPages || studentsQuery.isPlaceholderData}
                                         onClick={() =>
                                             setCurrentPage(page =>
                                                 Math.min(page + 1, totalPages)
