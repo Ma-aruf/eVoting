@@ -106,6 +106,34 @@ beforeEach(() => {
             return {data: {totals, elections: rows}};
         }
         if (parsed.pathname === '/api/elections/') return {data: electionData};
+        if (parsed.pathname === '/api/students/activation-options/') {
+            const electionStudents = voterRecords.filter(voter => voter.election === electionId);
+            const eligibleStudents = electionStudents.filter(voter => !voter.is_active && !voter.has_voted);
+            const search = String(config?.params?.search ?? '').toLowerCase();
+            const results = eligibleStudents.filter(voter =>
+                !search || voter.student_id.toLowerCase().includes(search) || voter.full_name.toLowerCase().includes(search)
+            );
+            return {data: {
+                summary: {
+                    total: electionStudents.length,
+                    activated: electionStudents.filter(voter => voter.is_active && !voter.has_voted).length,
+                    voted: electionStudents.filter(voter => voter.has_voted).length,
+                    available: eligibleStudents.length,
+                },
+                results,
+            }};
+        }
+        if (parsed.pathname === '/api/students/sms-status/') {
+            return {data: {count: 0, next: null, previous: null, results: []}};
+        }
+        if (parsed.pathname === '/api/students/recovery-status/') {
+            return {data: {
+                count: 1,
+                next: null,
+                previous: null,
+                results: [{id: 11, student_id: 'V1', full_name: 'Assigned Voter', phone_number: '', has_voted: false, is_active: false, state: 'inactive', reason: 'Not activated', can_invalidate: false, last_attempt_at: null, last_error_category: ''}],
+            }};
+        }
         if (parsed.pathname === '/api/students/') {
             const students = voterRecords.filter(voter => voter.election === electionId);
             return {data: {
@@ -498,6 +526,68 @@ describe('staff election workflows', () => {
         await waitFor(() => expect(api.post).toHaveBeenCalledWith('api/students/activate/', {
             student_id: 'V1', election_id: 1, is_active: true,
         }));
+    });
+
+    it('keeps keyboard selection working in the activation combobox', async () => {
+        const user = userEvent.setup();
+        electionData[0] = {...electionData[0], status: 'open', voting_open: true};
+        openPage('/admin/activations', 'staff');
+        const input = await screen.findByRole('combobox');
+        await user.type(input, 'Voter');
+        await user.keyboard('{ArrowDown}{Enter}');
+
+        await waitFor(() => expect(screen.getByText('Assigned Voter', {exact: true})).toBeInTheDocument());
+        await user.click(screen.getByRole('button', {name: 'Activate voter'}));
+        await waitFor(() => expect(api.post).toHaveBeenCalledWith('api/students/activate/', {
+            student_id: 'V1', election_id: 1, is_active: true,
+        }));
+    });
+
+    it('preserves SMS panel visibility and search state, with status controls limited to staff', async () => {
+        const user = userEvent.setup();
+        electionData[0] = {...electionData[0], voter_login_mode: 'sms_pin'};
+        openPage('/admin/activations', 'staff');
+
+        expect(await screen.findByRole('heading', {name: 'Send voter PINs by SMS'})).toBeInTheDocument();
+        await user.click(screen.getByRole('button', {name: 'View voter status & recovery'}));
+        const search = await screen.findByRole('textbox', {name: 'Search voters'});
+        await user.type(search, 'V1');
+        await user.click(screen.getByRole('button', {name: 'Hide voter status & recovery'}));
+        expect(screen.queryByRole('textbox', {name: 'Search voters'})).not.toBeInTheDocument();
+        await user.click(screen.getByRole('button', {name: 'View voter status & recovery'}));
+        expect(await screen.findByRole('textbox', {name: 'Search voters'})).toHaveValue('V1');
+
+        cleanup();
+        client.clear();
+        openPage('/admin/activations', 'activator');
+        expect(await screen.findByRole('heading', {name: 'Send voter PINs by SMS'})).toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: 'View voter status & recovery'})).not.toBeInTheDocument();
+        expect(screen.queryByRole('textbox', {name: 'Search voters'})).not.toBeInTheDocument();
+    });
+
+    it('keeps SMS delivery behind its existing confirmation action', async () => {
+        const user = userEvent.setup();
+        electionData[0] = {...electionData[0], status: 'open', voting_open: true, voter_login_mode: 'sms_pin'};
+        openPage('/admin/activations', 'staff');
+        await user.click(await screen.findByRole('button', {name: 'Send PINs by SMS'}));
+        expect(screen.getByText('Send a fresh PIN by SMS to all eligible voters in this election?')).toBeInTheDocument();
+        expect(api.post).not.toHaveBeenCalledWith('api/students/send-sms-pins/', expect.anything());
+
+        await user.click(screen.getByRole('button', {name: 'Send PINs'}));
+        await waitFor(() => expect(api.post).toHaveBeenCalledWith('api/students/send-sms-pins/', {election_id: 1}));
+    });
+
+    it('preserves recovery-row activation callbacks and its success banner', async () => {
+        const user = userEvent.setup();
+        electionData[0] = {...electionData[0], status: 'open', voting_open: true, voter_login_mode: 'activator_pin'};
+        openPage('/admin/activations', 'staff');
+        await user.click(await screen.findByRole('button', {name: 'View voter status & recovery'}));
+        await user.click(await screen.findByRole('button', {name: 'Activate'}));
+
+        await waitFor(() => expect(api.post).toHaveBeenCalledWith('api/students/activate/', {
+            student_id: 'V1', election_id: 1, is_active: true,
+        }));
+        expect(await screen.findByText('Assigned Voter can now log in with their student ID.')).toBeInTheDocument();
     });
 
     it.each([
