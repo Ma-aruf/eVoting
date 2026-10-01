@@ -31,8 +31,8 @@ export const queryKeys = {
   
   // Activation status (scoped by election)
   activations: (electionId: number | null) => ['activations', electionId] as const,
-  smsStatus: (electionId: number | null) => ['sms-status', electionId] as const,
-  voterRecoveryStatus: (electionId: number | null) => ['voter-recovery-status', electionId] as const,
+  smsStatus: (electionId: number | null, page?: number, search?: string) => page === undefined ? ['sms-status', electionId] as const : ['sms-status', electionId, page, search ?? ''] as const,
+  voterRecoveryStatus: (electionId: number | null, page?: number, search?: string) => page === undefined ? ['voter-recovery-status', electionId] as const : ['voter-recovery-status', electionId, page, search ?? ''] as const,
   voterData: ['votingData'] as const,
   voterDataForSession: (electionId: number | string | null, studentId: string | null) => ['votingData', electionId, studentId] as const,
   voterElectionEntry: (electionCode: string | undefined) => ['voter-election-entry', electionCode] as const,

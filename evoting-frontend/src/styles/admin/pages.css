@@ -1252,14 +1252,15 @@
 .management-table th {
     padding: .625rem .75rem;
     border-bottom: 1px solid var(--color-border);
-    color: var(--color-text-secondary);
-    background: var(--color-background);
+    color: var(--color-surface);
+    background: var(--color-primary);
     font-size: var(--font-size-xs);
     font-weight: 500;
     letter-spacing: .04em;
     text-align: left;
-    text-transform: uppercase;
+    text-transform: none;
 }
+
 
 .management-table td {
     padding: 6px 8px;
@@ -1280,26 +1281,9 @@
 .audit-logs-table {
 }
 
-.audit-logs-table thead th {
-    background: var(--color-primary);
-    text-transform: none;
-    color: white;
-}
-
-
 .sms-delivery-table {
 }
 
-.sms-delivery-table thead th {
-    background: var(--color-primary);
-    text-transform: none;
-    color: white;
-}
-
-.sms-delivery-table thead th:last-child {
-    display: flex;
-    align-self: flex-end;
-}
 
 .table-secondary {
     display: block;

@@ -239,7 +239,7 @@ class SmsVoterFlowTests(TestCase):
             "/api/students/sms-status/",
             {"election_id": self.election.id},
         )
-        row = status_response.data["students"][0]
+        row = status_response.data["results"][0]
         self.assertEqual(status_response.status_code, 200)
         self.assertEqual(row["status"], "sent")
         self.assertFalse(row["can_resend"])
@@ -259,7 +259,7 @@ class SmsVoterFlowTests(TestCase):
             "/api/students/sms-status/",
             {"election_id": self.election.id},
         )
-        expired_row = expired_status.data["students"][0]
+        expired_row = expired_status.data["results"][0]
         self.assertEqual(expired_row["status"], "expired")
         self.assertTrue(expired_row["can_resend"])
 
@@ -298,7 +298,56 @@ class SmsVoterFlowTests(TestCase):
             {'election_id': self.election.id},
         )
         self.assertEqual(status_response.status_code, 200)
-        row = status_response.data['students'][0]
+        row = status_response.data['results'][0]
         self.assertEqual(row['status'], 'generated')
         self.assertFalse(row['can_resend'])
         self.assertIsNotNone(row['pin_expires_at'])
+    def test_status_tables_are_database_paginated_and_searchable(self):
+        Student.objects.bulk_create([
+            Student(
+                student_id=f"PAGE{i:03}",
+                full_name=f"Paginated Voter {i:03}",
+                class_name="Form 1",
+                phone_number=f"+2332412345{i:02}",
+                election=self.election,
+            )
+            for i in range(11)
+        ])
+
+        first_page = self.client.get(
+            "/api/students/sms-status/",
+            {"election_id": self.election.id, "page": 1},
+        )
+        second_page = self.client.get(
+            "/api/students/sms-status/",
+            {"election_id": self.election.id, "page": 2},
+        )
+        self.assertEqual(first_page.status_code, 200)
+        self.assertEqual(first_page.data["count"], 12)
+        self.assertEqual(len(first_page.data["results"]), 10)
+        self.assertIsNotNone(first_page.data["next"])
+        self.assertEqual(len(second_page.data["results"]), 2)
+        self.assertIsNone(second_page.data["next"])
+        self.assertIsNotNone(second_page.data["previous"])
+
+        searched = self.client.get(
+            "/api/students/sms-status/",
+            {"election_id": self.election.id, "search": "PAGE010"},
+        )
+        self.assertEqual(searched.data["count"], 1)
+        self.assertEqual(searched.data["results"][0]["student_id"], "PAGE010")
+
+        recovery_page = self.client.get(
+            "/api/students/recovery-status/",
+            {"election_id": self.election.id, "page": 2},
+        )
+        self.assertEqual(recovery_page.status_code, 200)
+        self.assertEqual(recovery_page.data["count"], 12)
+        self.assertEqual(len(recovery_page.data["results"]), 2)
+
+        recovery_search = self.client.get(
+            "/api/students/recovery-status/",
+            {"election_id": self.election.id, "search": "PAGE010"},
+        )
+        self.assertEqual(recovery_search.data["count"], 1)
+        self.assertEqual(recovery_search.data["results"][0]["student_id"], "PAGE010")

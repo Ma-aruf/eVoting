@@ -103,6 +103,24 @@ type SmsConfirmAction =
     | { kind: 'generate'; row: SmsVoterStatusRow }
     | { kind: 'invalidate'; student_id: string; full_name: string };
 
+function TablePagination({count, page, onChange}: { count: number; page: number; onChange: (page: number) => void }) {
+    const pageCount = Math.ceil(count / 10);
+    if (pageCount <= 1) return null;
+    return (
+        <nav className="mt-3 flex items-center justify-between gap-3" aria-label="Table pagination">
+            <span className="text-xs text-gray-600">
+                Page {page} of {pageCount} - <strong>{count} voters</strong>
+            </span>
+            <div className="flex gap-2">
+                <Button type="button" variant="secondary" size="compact" disabled={page <= 1}
+                        onClick={() => onChange(page - 1)}>Previous</Button>
+                <Button type="button" variant="secondary" size="compact" disabled={page >= pageCount}
+                        onClick={() => onChange(page + 1)}>Next</Button>
+            </div>
+        </nav>
+    );
+}
+
 export default function ActivationsPage() {
     const {user} = useAuth();
     const isScopedRole = user?.role === 'activator' || user?.role === 'staff';
@@ -119,6 +137,8 @@ export default function ActivationsPage() {
     const [activationSuccessStudent, setActivationSuccessStudent] = useState('');
     const [smsSendResult, setSmsSendResult] = useState<SmsPinSendResponse | null>(null);
     const [smsStatusSearch, setSmsStatusSearch] = useState('');
+    const [smsStatusPage, setSmsStatusPage] = useState(1);
+    const [recoveryStatusPage, setRecoveryStatusPage] = useState(1);
     const [isVoterTableVisible, setIsVoterTableVisible] = useState(true);
     const [resendingStudentId, setResendingStudentId] = useState<number | null>(null);
     const [generatingStudentId, setGeneratingStudentId] = useState<number | null>(null);
@@ -275,34 +295,23 @@ export default function ActivationsPage() {
     const canViewSmsStatus = user?.role === 'staff' || user?.role === 'superuser';
     const recoveryStatusQuery = useVoterRecoveryStatus(
         effectiveElectionId,
+        recoveryStatusPage,
+        smsStatusSearch.trim(),
         selectedElection?.voter_login_mode !== 'sms_pin'
     );
     const smsStatusQuery = useSmsVoterStatus(
         effectiveElectionId,
+        smsStatusPage,
+        smsStatusSearch.trim(),
         canViewSmsStatus && selectedElection?.voter_login_mode === 'sms_pin'
     );
-    const filteredSmsVoters = useMemo(() => {
-        const query = smsStatusSearch.trim().toLowerCase();
-        const rows = smsStatusQuery.data ?? [];
-        if (!query) return rows;
-        return rows.filter(row =>
-            row.student_id.toLowerCase().includes(query) ||
-            row.full_name.toLowerCase().includes(query) ||
-            row.phone_number.toLowerCase().includes(query)
-        );
-    }, [smsStatusQuery.data, smsStatusSearch]);
+    const smsVoters = smsStatusQuery.data?.results ?? [];
+    const recoveryVoters = recoveryStatusQuery.data?.results ?? [];
 
-    const filteredRecoveryVoters = useMemo(() => {
-        const query = smsStatusSearch.trim().toLowerCase();
-        const rows = recoveryStatusQuery.data ?? [];
-        if (!query) return rows;
-        return rows.filter(row =>
-            row.student_id.toLowerCase().includes(query) ||
-            row.full_name.toLowerCase().includes(query) ||
-            row.reason.toLowerCase().includes(query)
-        );
-    }, [recoveryStatusQuery.data, smsStatusSearch]);
-
+    useEffect(() => {
+        setSmsStatusPage(1);
+        setRecoveryStatusPage(1);
+    }, [effectiveElectionId]);
     // Select the election automatically
 
     useEffect(() => {
@@ -697,8 +706,8 @@ export default function ActivationsPage() {
                                         >
                                             <span className="flex items-center justify-center gap-2">
                                                 {isVoterTableVisible
-                                                    ? <FiEyeOff size={20} className="shrink-0"/>
-                                                    : <FiEye size={20} className="shrink-0"/>}
+                                                    ? <FiEyeOff size={18} className="shrink-0"/>
+                                                    : <FiEye size={18} className="shrink-0"/>}
                                                 {isVoterTableVisible
                                                     ? 'Hide voter status & recovery'
                                                     : 'View voter status & recovery'}
@@ -710,7 +719,11 @@ export default function ActivationsPage() {
                                                     <TextInput
                                                         className="w-full"
                                                         value={smsStatusSearch}
-                                                        onChange={event => setSmsStatusSearch(event.target.value)}
+                                                        onChange={event => {
+                                                            setSmsStatusSearch(event.target.value);
+                                                            setSmsStatusPage(1);
+                                                            setRecoveryStatusPage(1);
+                                                        }}
                                                         placeholder="Search by voter ID, name, or phone"
                                                     />
                                                 </FormField>
@@ -733,7 +746,7 @@ export default function ActivationsPage() {
                                             <Alert variant="error" title="SMS status unavailable">
                                                 We could not load the voter SMS records.
                                             </Alert>
-                                        ) : filteredSmsVoters.length === 0 ? (
+                                        ) : smsVoters.length === 0 ? (
                                             <EmptyState
                                                 title={smsStatusSearch ? 'No matching voters' : 'No voters to display'}
                                                 message={smsStatusSearch ? 'Try a different search term.' : 'Add voters to this election to track SMS delivery.'}
@@ -753,7 +766,7 @@ export default function ActivationsPage() {
                                                     </tr>
                                                     </thead>
                                                     <tbody>
-                                                    {filteredSmsVoters.map(row => (
+                                                    {smsVoters.map(row => (
                                                         <tr key={row.id}>
                                                             <td data-label="Voter">
                                                                 <div
@@ -845,7 +858,12 @@ export default function ActivationsPage() {
                                                     ))}
                                                     </tbody>
                                                 </table>
+
+                                                <TablePagination count={smsStatusQuery.data?.count ?? 0}
+                                                                 page={smsStatusPage} onChange={setSmsStatusPage}/>
+
                                             </div>
+
                                         )}
                                     </section>
                                 )}
@@ -1058,22 +1076,48 @@ export default function ActivationsPage() {
 
                     {selectedElection.voter_login_mode !== 'sms_pin' && (
                         <>
-                            <div className="mb-3 flex justify-end">
-                                <Button type="button" variant="secondary" size="compact"
-                                        aria-expanded={isVoterTableVisible} aria-controls="voter-recovery-table-content"
-                                        onClick={() => setIsVoterTableVisible(visible => !visible)}>
-                                    {isVoterTableVisible ? 'Hide voter access and recovery' : 'View voter access and recovery'}
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-10">
+                                <Button
+                                    type="button"
+                                    variant="primary"
+                                    size="compact"
+                                    style={{minHeight: "44px"}}
+                                    aria-expanded={isVoterTableVisible} aria-controls="voter-recovery-table-content"
+                                    onClick={() => setIsVoterTableVisible(visible => !visible)}>
+
+                                    <span className="flex items-center justify-center gap-2">
+                                                {isVoterTableVisible
+                                                    ? <FiEyeOff size={20} className="shrink-0"/>
+                                                    : <FiEye size={20} className="shrink-0"/>}
+                                        {isVoterTableVisible
+                                            ? 'Hide voter status & recovery'
+                                            : 'View voter status & recovery'}
+                                    </span>
                                 </Button>
+                                {isVoterTableVisible &&
+
+                                    <div className="w-full min-w-0 sm:flex-1">
+                                        <FormField id="recovery-voter-search" label="Search voters">
+                                            <TextInput
+                                                type="search"
+                                                value={smsStatusSearch}
+                                                onChange={event => {
+                                                    setSmsStatusSearch(event.target.value);
+                                                    setSmsStatusPage(1);
+                                                    setRecoveryStatusPage(1);
+                                                }}
+                                                placeholder="Search by student ID, name or phone number"
+                                            />
+                                        </FormField>
+                                    </div>
+                                }
                             </div>
                             {isVoterTableVisible &&
                                 <section className="ui-section" aria-labelledby="voter-recovery-title"
                                          id="voter-recovery-table-content">
                                     <div className="ui-section-heading">
-                                        <div>
-                                            <h2 id="voter-recovery-title">Voter access and recovery</h2>
-                                            <p>Review each voter’s login eligibility and invalidate active access when
-                                                needed.</p>
-                                        </div>
+                                        <h2 id="voter-recovery-title">Voter access and recovery</h2>
+
                                     </div>
                                     {recoveryStatusQuery.isLoading ? (
                                         <LoadingState title="Loading voter access"
@@ -1081,7 +1125,7 @@ export default function ActivationsPage() {
                                     ) : recoveryStatusQuery.isError ? (
                                         <Alert variant="error" title="Voter access status unavailable">We could not load
                                             current login eligibility.</Alert>
-                                    ) : filteredRecoveryVoters.length === 0 ? (
+                                    ) : recoveryVoters.length === 0 ? (
                                         <EmptyState
                                             title={smsStatusSearch ? 'No matching voters' : 'No voters to display'}
                                             message={smsStatusSearch ? 'Try a different search term.' : 'Add voters to this election to review access.'}/>
@@ -1100,7 +1144,7 @@ export default function ActivationsPage() {
                                                     <th scope="col">Actions</th>
                                                 </tr>
                                                 </thead>
-                                                <tbody>{filteredRecoveryVoters.map(row => (
+                                                <tbody>{recoveryVoters.map(row => (
                                                     <tr key={row.id}>
                                                         <td data-label="Voter ID">{row.student_id}</td>
                                                         <td data-label="Voter">{row.full_name}</td>
@@ -1159,6 +1203,9 @@ export default function ActivationsPage() {
                                                     </tr>
                                                 ))}</tbody>
                                             </table>
+                                            <TablePagination count={recoveryStatusQuery.data?.count ?? 0}
+                                                             page={recoveryStatusPage}
+                                                             onChange={setRecoveryStatusPage}/>
                                         </div>
                                     )}
                                 </section>

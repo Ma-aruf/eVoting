@@ -3,6 +3,7 @@ from django.db import transaction
 from django.http import Http404
 from django.utils import timezone
 from rest_framework import status
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -46,15 +47,29 @@ class VoterRecoveryStatusView(APIView):
         now = timezone.now()
         lifecycle_status = election_lifecycle(election, now, include_candidate_lock=False)["status"]
         ballot_ready = election_ballot_ready(election)
-        latest_attempts = {}
-        for attempt in VoterSMSAttempt.objects.filter(election=election).order_by("-attempted_at", "-id"):
-            latest_attempts.setdefault(attempt.student_id, attempt)
+        voters = Student.objects.filter(election=election).order_by("full_name", "id")
+        search = request.query_params.get("search", "").strip()
+        if search:
+            from django.db.models import Q
+            voters = voters.filter(
+                Q(student_id__icontains=search)
+                | Q(full_name__icontains=search)
+                | Q(phone_number__icontains=search)
+            )
 
-        voter_records = list(Student.objects.filter(election=election).order_by("full_name", "id"))
+        paginator = PageNumberPagination()
+        paginator.page_size = 10
+        voter_records = list(paginator.paginate_queryset(voters, request, view=self))
+        page_ids = [student.id for student in voter_records]
+        latest_attempts = {}
+        for attempt in VoterSMSAttempt.objects.filter(
+            election=election, student_id__in=page_ids
+        ).order_by("-attempted_at", "-id"):
+            latest_attempts.setdefault(attempt.student_id, attempt)
         latest_events = {}
         for event in AuditLog.objects.filter(
             election=election,
-            student_id__in=[student.id for student in voter_records],
+            student_id__in=page_ids,
         ).order_by("-created_at", "-id"):
             latest_events.setdefault(event.student_id, event)
 
@@ -85,7 +100,7 @@ class VoterRecoveryStatusView(APIView):
                 reason = {
                     "session_expired": "The authenticated voting session expired.",
                     "activation_expired": "The voter activation expired.",
-                    "pin_expired": "The voter PIN expired.",
+                    "pin_expired": "The voter PIN has expired.",
                     "pin_missing": "No valid voter PIN is available.",
                     "pin_attempts_exhausted": "Access was disabled after too many incorrect PIN attempts.",
                 }.get(reason_code, "Voter access expired.")
@@ -117,6 +132,7 @@ class VoterRecoveryStatusView(APIView):
             else:
                 state, reason = "inactive", "This voter has not been activated."
 
+            attempt = latest_attempts.get(student.id) if election.voter_login_mode == Election.VOTER_LOGIN_MODE_SMS else None
             rows.append({
                 "id": student.id,
                 "student_id": student.student_id,
@@ -127,12 +143,13 @@ class VoterRecoveryStatusView(APIView):
                 "state": state,
                 "reason": reason,
                 "can_invalidate": access_valid and not student.has_voted,
-                "last_attempt_at": attempt.attempted_at.isoformat() if election.voter_login_mode == Election.VOTER_LOGIN_MODE_SMS and (attempt := latest_attempts.get(student.id)) else None,
-                "last_error_category": attempt.error_category if election.voter_login_mode == Election.VOTER_LOGIN_MODE_SMS and attempt else "",
+                "last_attempt_at": attempt.attempted_at.isoformat() if attempt else None,
+                "last_error_category": attempt.error_category if attempt else "",
             })
 
-        return Response({"election_id": election.id, "students": rows})
-
+        response = paginator.get_paginated_response(rows)
+        response.data["election_id"] = election.id
+        return response
 
 def _student_has_valid_sms_pin(student, election, now=None):
     current_time = now or timezone.now()
@@ -377,36 +394,41 @@ class VoterSMSSendView(APIView):
 
 
 class VoterSMSStatusView(APIView):
-    """Return per-voter SMS delivery and PIN status for an SMS election."""
+    """Return one database-paginated page of per-voter SMS/PIN status."""
 
     permission_classes = [IsStaffOrSuperUser]
 
     def get(self, request):
         election_id = request.query_params.get("election_id")
         if not election_id:
-            return Response(
-                {"detail": "election_id is required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
+            return Response({"detail": "election_id is required."}, status=status.HTTP_400_BAD_REQUEST)
         try:
             election = get_scoped_election_or_404(request.user, election_id)
         except (Election.DoesNotExist, Http404):
-            return Response(
-                {"detail": "Election not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
+            return Response({"detail": "Election not found."}, status=status.HTTP_404_NOT_FOUND)
         if election.voter_login_mode != Election.VOTER_LOGIN_MODE_SMS:
             return Response(
                 {"detail": "SMS status is only available for SMS PIN elections."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        voters = Student.objects.filter(election=election).order_by("id")
+        search = request.query_params.get("search", "").strip()
+        if search:
+            from django.db.models import Q
+            voters = voters.filter(
+                Q(student_id__icontains=search)
+                | Q(full_name__icontains=search)
+                | Q(phone_number__icontains=search)
+            )
+        paginator = PageNumberPagination()
+        paginator.page_size = 10
+        page_students = list(paginator.paginate_queryset(voters, request, view=self))
+        page_ids = [student.id for student in page_students]
         latest_attempts = {}
-        for attempt in VoterSMSAttempt.objects.filter(election=election).order_by(
-            "-attempted_at", "-id"
-        ):
+        for attempt in VoterSMSAttempt.objects.filter(
+            election=election, student_id__in=page_ids
+        ).order_by("-attempted_at", "-id"):
             latest_attempts.setdefault(attempt.student_id, attempt)
 
         now = timezone.now()
@@ -414,13 +436,13 @@ class VoterSMSStatusView(APIView):
             election_status(election) == "open" and election_ballot_ready(election)
         )
         rows = []
-        for student in Student.objects.filter(election=election).order_by("id"):
+        for student in page_students:
             latest_attempt = latest_attempts.get(student.id)
             has_valid_pin = _student_has_valid_sms_pin(student, election, now)
-            pin_expires_at = None
-            if student.voting_pin_created_at:
-                pin_expires_at = student.voting_pin_created_at + voter_pin_ttl_for_election(election)
-
+            pin_expires_at = (
+                student.voting_pin_created_at + voter_pin_ttl_for_election(election)
+                if student.voting_pin_created_at else None
+            )
             if student.has_voted:
                 voter_status = "voted"
             elif has_valid_pin and latest_attempt and latest_attempt.status == VoterSMSAttempt.Status.GENERATED:
@@ -430,8 +452,7 @@ class VoterSMSStatusView(APIView):
             elif not student.phone_number:
                 voter_status = "missing_phone"
             elif latest_attempt and latest_attempt.status in {
-                VoterSMSAttempt.Status.FAILED,
-                VoterSMSAttempt.Status.DISABLED,
+                VoterSMSAttempt.Status.FAILED, VoterSMSAttempt.Status.DISABLED,
             }:
                 voter_status = "failed"
             elif student.voting_pin_created_at:
@@ -439,44 +460,36 @@ class VoterSMSStatusView(APIView):
             else:
                 voter_status = "not_sent"
 
-            rows.append(
-                {
-                    "id": student.id,
-                    "student_id": student.student_id,
-                    "full_name": student.full_name,
-                    "phone_number": student.phone_number,
-                    "has_voted": student.has_voted,
-                    "status": voter_status,
-                    "can_resend": bool(
-                        delivery_window_open
-                        and not student.has_voted
-                        and bool(student.phone_number)
-                        and not has_valid_pin
-                    ),
-                    "last_attempt_status": latest_attempt.status if latest_attempt else None,
-                    "last_error_category": latest_attempt.error_category if latest_attempt else "",
-                    "last_attempt_at": (
-                        timezone.localtime(latest_attempt.attempted_at).isoformat()
-                        if latest_attempt
-                        else None
-                    ),
-                    "pin_created_at": (
-                        timezone.localtime(student.voting_pin_created_at).isoformat()
-                        if student.voting_pin_created_at
-                        else None
-                    ),
-                    "pin_expires_at": (
-                        timezone.localtime(pin_expires_at).isoformat()
-                        if pin_expires_at
-                        else None
-                    ),
-                }
-            )
+            rows.append({
+                "id": student.id,
+                "student_id": student.student_id,
+                "full_name": student.full_name,
+                "phone_number": student.phone_number,
+                "has_voted": student.has_voted,
+                "status": voter_status,
+                "can_resend": bool(
+                    delivery_window_open and not student.has_voted
+                    and bool(student.phone_number) and not has_valid_pin
+                ),
+                "last_attempt_status": latest_attempt.status if latest_attempt else None,
+                "last_error_category": latest_attempt.error_category if latest_attempt else "",
+                "last_attempt_at": (
+                    timezone.localtime(latest_attempt.attempted_at).isoformat()
+                    if latest_attempt else None
+                ),
+                "pin_created_at": (
+                    timezone.localtime(student.voting_pin_created_at).isoformat()
+                    if student.voting_pin_created_at else None
+                ),
+                "pin_expires_at": (
+                    timezone.localtime(pin_expires_at).isoformat()
+                    if pin_expires_at else None
+                ),
+            })
 
-        return Response(
-            {"election_id": election.id, "students": rows},
-            status=status.HTTP_200_OK,
-        )
+        response = paginator.get_paginated_response(rows)
+        response.data["election_id"] = election.id
+        return response
 
 class VoterSMSGenerateView(APIView):
     permission_classes = [IsStaffOrSuperUser]
