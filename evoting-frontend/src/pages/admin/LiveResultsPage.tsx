@@ -1,9 +1,9 @@
-import {useEffect, useMemo, useState, type CSSProperties} from 'react';
+import {type CSSProperties, useEffect, useMemo, useState} from 'react';
 import {FiClock, FiUsers, FiX} from 'react-icons/fi';
 import {useLocation, useNavigate} from 'react-router-dom';
 import {useAuth} from '../../hooks/useAuth';
 import {useElections} from '../../queries/useElections';
-import {useResults, type CandidateResult} from '../../queries/useResults';
+import {type CandidateResult, useResults} from '../../queries/useResults';
 import LoadingState from '../../components/ui/LoadingState';
 import ErrorState from '../../components/ui/ErrorState';
 import EmptyState from '../../components/ui/EmptyState';
@@ -29,7 +29,6 @@ type CandidateDisplay = {
     candidate: CandidateResult;
     positionName: string;
     accentColor: string;
-
     approval?: { yesVotes: number; noVotes: number; approved: boolean | null };
 };
 
@@ -185,7 +184,8 @@ export default function LiveResultsPage() {
             title="Results unavailable"
             message="Live results are available after voting starts. Scheduled elections do not have live results yet."
             icon={<FiClock aria-hidden="true"/>}
-            action={<button className="ui-button ui-button--secondary ui-button--compact" onClick={closePage}>Return to dashboard</button>}
+            action={<button className="ui-button ui-button--secondary ui-button--compact" onClick={closePage}>Return to
+                dashboard</button>}
         /></main>;
     }
 

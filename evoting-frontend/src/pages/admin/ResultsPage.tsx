@@ -117,7 +117,8 @@ export default function ResultsPage() {
                             [results.election_name, results.year, results.total_voters, results.voters_voted, Math.max(0, results.total_voters - results.voters_voted), results.voter_turnout.toFixed(2)],
                         ])}
                         className="ui-button ui-button--secondary"
-                    >Export turnout</button>}
+                    >Export turnout
+                    </button>}
                 </div>
             </div>
 
@@ -136,7 +137,8 @@ export default function ResultsPage() {
                     <ErrorState
                         title="Results unavailable"
                         message="We could not verify that this election is paused or has ended. Results are hidden until the status can be confirmed."
-                        action={<button className="ui-button ui-button--secondary ui-button--compact" onClick={() => void retryResults()}>Try again</button>}
+                        action={<button className="ui-button ui-button--secondary ui-button--compact"
+                                        onClick={() => void retryResults()}>Try again</button>}
                     />
                 ) : selectedElection && !resultsAvailable ? (
                     <div className="results-empty-state" role="status">

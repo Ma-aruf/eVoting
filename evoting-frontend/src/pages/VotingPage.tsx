@@ -21,6 +21,7 @@ import {
 } from '../api/voterApi';
 import {type Candidate, useVotingData} from '../hooks/useVotingData';
 import {voterLifecycleMessage, voterLifecycleMessageFromDetail} from '../utils/electionLifecycle';
+import Button from '../components/ui/Button';
 
 type BallotChoice = 'candidate' | 'yes' | 'no' | 'skip';
 
@@ -400,20 +401,34 @@ export default function VotingPage() {
     }
 
     if (error && !success) {
+        const sessionExpired = error.toLowerCase().includes('voting session has expired');
         return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-                <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-6">
-                    <div className="text-red-500 text-center mb-4">
-                        <FiAlertCircle className="w-12 h-12 mx-auto" aria-hidden="true"/>
+            <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+                <div className="w-full max-w-lg  border-red-300 border-1 bg-white shadow-sm">
+                    <div className="flex items-start gap-4 border-b border-red-100 p-5 sm:p-6">
+                        <div className="shrink-0 bg-red-50 p-2 text-red-700">
+                            <FiAlertCircle className="h-7 w-7" aria-hidden="true"/>
+                        </div>
+                        <div className="min-w-0">
+                            <h2 className="text-lg font-bold text-gray-900">
+                                {sessionExpired ? 'Voting session expired' : 'Voting error'}
+                            </h2>
+                            <p className="mt-2 text-sm leading-6 text-gray-700">
+                                {sessionExpired
+                                    ? 'You took too long on the voting screen. Your timed voting window has elapsed, ' +
+                                    'so your ballot was not submitted. Return to login and ask an election ' +
+                                    'official to reactivate you.'
+                                    : error}
+                            </p>
+                        </div>
                     </div>
-                    <h2 className="text-xl font-bold text-gray-800 text-center mb-2">Error</h2>
-                    <p className="text-gray-600 text-center mb-6">{error}</p>
-                    <button
-                        onClick={() => navigate(voterLoginPath)}
-                        className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                    >
-                        Return to Login
-                    </button>
+                    <div className="p-5 sm:p-6">
+                        <Button
+                            type="button"
+                            className="w-full"
+                            onClick={() => navigate(voterLoginPath)}
+                        >Return to Login</Button>
+                    </div>
                 </div>
             </div>
         );
@@ -573,7 +588,7 @@ export default function VotingPage() {
                                         <div
                                             className="flex flex-col sm:flex-row sm:items-center sm:justify-center gap-3">
                                             <div className="flex justify-center">
-                                                <h3 className="text-2xl  font-bold">{position?.name}</h3>
+                                                <h1 className="text-4xl  font-bold">{position?.name}</h1>
                                             </div>
                                             {isPositionSkipped && (
                                                 <p className="text-center text-sm font-semibold text-red-600">
