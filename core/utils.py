@@ -13,7 +13,7 @@ VOTER_PIN_MAX_ATTEMPTS = 5
 VOTER_PIN_TTL = timedelta(minutes=5)
 VOTER_ACTIVATION_TTL = timedelta(minutes=5)
 VOTER_SMS_PIN_TTL = timedelta(hours=1)
-VOTER_SESSION_TTL = timedelta(seconds=30)
+VOTER_SESSION_TTL = timedelta(minutes=10)
 VOTER_PIN_HASH_VERSION = "v1"
 
 

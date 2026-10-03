@@ -436,17 +436,26 @@ export default function VotingPage() {
 
     if (success) {
         return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-                <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-6">
-                    <div className="text-green-500 text-center mb-4">
-                        <FiCheckCircle className="w-12 h-12 mx-auto" aria-hidden="true"/>
+            <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+                <div className="w-full max-w-lg bg-emerald-600 shadow-sm">
+                    <div className="flex flex-col items-center gap-4 p-5 sm:p-6 text-center">
+                        <div className="shrink-0 bg-white p-4 rounded-full">
+                            <FiCheckCircle className="h-10 w-10 text-green-600" aria-hidden="true"/>
+                        </div>
+                        <div className="min-w-0">
+                            <h2 className="text-xl font-bold text-white">
+                                Votes Submitted Successfully!
+                            </h2>
+                            <p className="mt-2 text-sm leading-6 text-green-50">
+                                Thank you for participating in the election. You will be redirected shortly.
+                            </p>
+                        </div>
                     </div>
-                    <h2 className="text-xl font-bold text-gray-800 text-center mb-2">Votes Submitted Successfully!</h2>
-                    <p className="text-gray-600 text-center mb-6">
-                        Thank you for participating in the election. You will be redirected shortly.
-                    </p>
-                    <div className="text-center">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600 mx-auto"></div>
+                    <div className="flex items-center justify-center gap-3 p-5 text-sm text-white sm:p-6">
+                        <div
+                            className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent"
+                            aria-hidden="true"></div>
+                        <span>Finishing up and returning you to login...</span>
                     </div>
                 </div>
             </div>
@@ -510,25 +519,19 @@ export default function VotingPage() {
                                             <p className="text-gray-600 text-sm mb-6">Votes will be submitted
                                                 automatically when time runs out</p>
 
-                                            <button
-                                                onClick={handleSubmitVotes}
+                                            <Button
+                                                type="button"
+                                                variant="success"
                                                 disabled={submitting}
-                                                className="w-full sm:w-auto px-12 py-4 bg-emerald-600 text-white text-xl font-bold rounded-lg hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all shadow-lg submit-button-glow gentle-attention"
+                                                style={{width: "250px", height: "60px"}}
+                                                leadingIcon={submitting
+                                                    ? <FiLoader className="h-6 w-6 animate-spin" aria-hidden="true"/>
+                                                    : <FiCheckCircle className="h-6 w-6" aria-hidden="true"/>}
+                                                className="w-full px-12 py-4 text-xl font-bold shadow-lg sm:w-auto submit-button-glow gentle-attention"
+                                                onClick={handleSubmitVotes}
                                             >
-                                                {submitting ? (
-                                                    <>
-                                                        <FiLoader className="animate-spin h-6 w-6 inline mr-2"
-                                                                  aria-hidden="true"/>
-                                                        Submitting...
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <FiCheckCircle className="w-6 h-6 inline mr-2"
-                                                                       aria-hidden="true"/>
-                                                        Submit Now
-                                                    </>
-                                                )}
-                                            </button>
+                                                {submitting ? 'Submitting...' : 'Submit Now'}
+                                            </Button>
                                         </div>
                                     </div>
 
@@ -565,15 +568,19 @@ export default function VotingPage() {
                                                             </span>
                                                         </div>
                                                     )}
-                                                    <button
+                                                    <Button
+                                                        type="button"
+                                                        variant="primary"
+                                                        size="compact"
+                                                        style={{minHeight: '26px', minWidth: '28px'}}
+                                                        className="min-h-0 min-w-0 px-3 py-1 text-xs"
                                                         onClick={() => {
                                                             setIsChangingVote(true);
                                                             setCurrentPositionIndex(positionIndex);
                                                         }}
-                                                        className="px-3 py-1 bg-cyan-700 text-white text-xs rounded-sm hover:bg-cyan-800 transition"
                                                     >
                                                         Change
-                                                    </button>
+                                                    </Button>
                                                 </div>
                                             );
                                         })}
