@@ -89,7 +89,7 @@ function getCandidateLayoutClass(candidateCount: number): string {
             return 'grid grid-cols-1 sm:flex sm:flex-wrap max-w-6xl items-start justify-center ' +
                 'gap-3 sm:gap-4 mx-auto';
         default:
-            return 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 ' +
+            return 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-5 ' +
                 'max-w-6xl items-start justify-center gap-2 sm:gap-3 mx-auto overflow-y';
     }
 
